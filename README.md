@@ -1,18 +1,72 @@
 [ZeroBounce](https://www.zerobounce.net>) JavaScript API v2
 
-This is a JavaScript wrapper class example for the ZeroBounce API v2.
+This is a JavaScript wrapper class for the ZeroBounce API v2.
 
-##### Example usage:
-
-```javascript
-var ZeroBounceApi = new ZeroBounceApi(apiKey)
-ZeroBounceApi.apiKey
-ZeroBounceApi.getCredits()
-ZeroBounceApi.validate("some@email.com")
+## INSTALLATION
+```bash
+npm install zero-bounce-sdk
 ```
 
-**Properties and possible values returned by:**
-1. <b><i>validate</b></i> method
+## USAGE
+Import the sdk in your file:
+
+```javascript
+import { ZeroBounce } from 'zero-bounce-sdk'
+``` 
+Initialize the sdk with your api key:
+
+```javascript
+ZeroBounce.init("<YOUR_API_KEY>");
+```
+
+NOTE: all the methods are asynchronous they have to be used with async / await or .then.catch
+
+## Examples
+Then you can use any of the SDK methods, for example:
+
+* ##### Check how many credits you have left on your account
+```javascript
+import { ZeroBounce } from 'zero-bounce-sdk'
+ZeroBounce.init("<YOUR_API_KEY>")
+const get_credits = async () => {
+    try {
+        const response = await ZeroBounce.getCredits();
+        console.log(response);
+    } catch(error) {
+        console.error(error);
+    }
+}
+```
+**Properties and possible values returned by: <b><i>getCredits</b></i> method**
+  
+|<b>Property</b>|<b>Possible Values</b> 
+|:--- |:--- 
+Credits  | The number of credits left in account for email validation.
+
+  
+
+
+
+* ##### Validate an email address
+```javascript
+import { ZeroBounce } from 'zero-bounce-sdk'
+ZeroBounce.init("<YOUR_API_KEY>")
+
+const validate_email = async () => {
+
+    const email = "<EMAIL_ADDRESS>";   // The email address you want to validate
+    const ip_address = "127.0.0.1";    // The IP Address the email signed up from (Optional)
+
+    try {
+        const response = await ZeroBounce.validateEmail(email, ip_address);
+        console.log(response);
+    } catch(error) {
+        console.error(error);
+    }
+}
+```
+
+**Properties and possible values returned by: <b><i>validateEmail</b></i> method**
   
 |<b>Property</b>|<b>Possible Values</b> 
 |:--- |:--- 
@@ -35,12 +89,6 @@ region |The region the email signed up when ip address is provided or [null].
 city |The city the email signed up when ip address is provided or [null].
 zipcode |The zipcode the email signed up when ip address is provided or [null].
 processed_at |The UTC time the email was validated.
-
-2. <b><i>getCredit</b></i> method
-  
-|<b>Property</b>|<b>Possible Values</b> 
-|:--- |:--- 
-credits  | The number of credits left in account for email validation.
 
 **Any of the following email addresses can be used for testing the API, no credits are charged for these test email addresses:**
 + disposable@example.com
@@ -73,7 +121,7 @@ credits  | The number of credits left in account for email validation.
 + unroutable_ip_address@example.com
 + free_email@example.com
 
-**You can this IP to test the GEO Location in the API.**
+**You can use this IP to test the GEO Location in the API.**
 
 + 99.110.204.1
 
