@@ -1,0 +1,19 @@
+{
+  "name": "zero-bounce-sdk",
+  "version": "1.0.0",
+  "description": "This SDK contains methods for interacting easily with ZeroBounce API. More information about ZeroBounce you can find in the official documentation.",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zerobounce/zero-bounce-javascript.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/zerobounce/zero-bounce-javascript/issues"
+  },
+  "homepage": "https://github.com/zerobounce/zero-bounce-javascript#readme"
+}
