@@ -90,6 +90,31 @@ city |The city the email signed up when ip address is provided or [null].
 zipcode |The zipcode the email signed up when ip address is provided or [null].
 processed_at |The UTC time the email was validated.
 
+
+* ##### Get api usage from a start date to an end date
+```javascript
+import { ZeroBounce } from 'zero-bounce-sdk'
+ZeroBounce.init("<YOUR_API_KEY>")
+
+const get_api_usage = async () => {
+
+    const startDate = "2018-01-01";   // The start date of when you want to view API usage
+    const endDate = "2023-12-12";    // The end date of when you want to view API usage
+
+    try {
+        const response = await ZeroBounce.getApiUsage(startDate, endDate);
+        console.log(response);
+    } catch(error) {
+        console.error(error);
+    }
+}
+```
+
+
+
+
+
+
 **Any of the following email addresses can be used for testing the API, no credits are charged for these test email addresses:**
 + disposable@example.com
 + invalid@example.com
