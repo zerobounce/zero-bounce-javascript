@@ -7,17 +7,66 @@ export const HEADERS = {
   Connection: "keep-alive",
 };
 
-// Endpoints
-export function getCreditsEndpoint(apikey) {
-  return `${API_BASE_URL}/getcredits?api_key=${apikey}`;
+export async function createRequest({
+  requestType,
+  body = null,
+  params = null,
+  path,
+  batch = false,
+  returnText = false,
+  scoring = false,
+}) {
+  const url = `${
+    batch ? API_BULK_BASE_URL : API_BASE_URL
+  }${path}?${new URLSearchParams(params)}`;
+
+  try {
+    const response = await fetch(url, {
+      method: requestType,
+      headers: HEADERS,
+      body,
+    });
+    if (returnText) {
+      const finalResult = await response.text();
+      if (!finalResult.includes('"success":false')) {
+        const blob = new Blob([finalResult], { type: "application/json" });
+        return saveFile(blob, `result${scoring ? "-scoring" : ""}.csv`);
+      } else {
+        return JSON.parse(finalResult);
+      }
+    }
+    const finalResult = await response.json();
+    return finalResult;
+  } catch (error) {
+    throw new Error(error);
+  }
 }
 
-export function validateEndpoint(email, ip_address = null, apiKey) {
-  return `${API_BASE_URL}/validate?api_key=${apiKey}&email=${email}${
-    ip_address ? "&ip_address=" + ip_address : ""
-  }`;
+function saveFile(blob, filename) {
+  if (window.navigator.msSaveOrOpenBlob) {
+    // IE support
+    window.navigator.msSaveOrOpenBlob(blob, filename);
+  } else {
+    const a = document.createElement("a");
+    document.body.appendChild(a);
+    const url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    }, 0);
+    return filename;
+  }
 }
 
-export function apiUsageEndpoint(startDate, endDate, apiKey) {
-  return `${API_BASE_URL}/getapiusage?api_key=${apiKey}&start_date=${startDate}&end_date=${endDate}`;
+export function notInitialized() {
+  console.error("ZeroBounce: Call init function first with a valid api key.");
+}
+
+export function parameterIsMissing(parameter, aditionalInfo = "") {
+  console.error(
+    `ZeroBounce: ${parameter} parameter is missing. ${aditionalInfo}`
+  );
 }
