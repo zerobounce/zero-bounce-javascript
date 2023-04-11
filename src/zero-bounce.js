@@ -36,14 +36,13 @@ export class ZeroBounceSDK {
     } else if (!email) {
       parameterIsMissing("Email");
       return;
-    } else {
-      const params = {
-        api_key: this._api_key,
-        email: email,
-        ip_address,
-      };
-      return createRequest({ requestType: "GET", params, path: "/validate" });
     }
+    const params = {
+      api_key: this._api_key,
+      email: email,
+      ip_address,
+    };
+    return createRequest({ requestType: "GET", params, path: "/validate" });
   }
 
   getApiUsage(startDate, endDate) {
@@ -56,18 +55,18 @@ export class ZeroBounceSDK {
     } else if (!endDate) {
       parameterIsMissing("End date", "Format: YYYY-MM-DD");
       return;
-    } else {
-      const params = {
-        api_key: this._api_key,
-        start_date: startDate,
-        end_date: endDate,
-      };
-      return createRequest({
-        requestType: "GET",
-        params,
-        path: "/getapiusage",
-      });
     }
+
+    const params = {
+      api_key: this._api_key,
+      start_date: startDate,
+      end_date: endDate,
+    };
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/getapiusage",
+    });
   }
 
   // @param emailBatch: an array containing a list of email objects {email_address: "example@example.com"}
@@ -80,18 +79,17 @@ export class ZeroBounceSDK {
       parameterIsMissing("Email list");
       return;
     }
-    {
-      const body = {
-        api_key: this._api_key,
-        email_batch: emailBatch,
-      };
-      return createRequest({
-        requestType: "POST",
-        path: "/validatebatch",
-        body: JSON.stringify(body),
-        batch: true,
-      });
-    }
+
+    const body = {
+      api_key: this._api_key,
+      email_batch: emailBatch,
+    };
+    return createRequest({
+      requestType: "POST",
+      path: "/validatebatch",
+      body: JSON.stringify(body),
+      batch: true,
+    });
   }
 
   // @param email - a valid email address
@@ -103,17 +101,15 @@ export class ZeroBounceSDK {
       parameterIsMissing("Email");
       return;
     }
-    {
-      const params = {
-        api_key: this._api_key,
-        email,
-      };
-      return createRequest({
-        requestType: "GET",
-        params,
-        path: "/activity",
-      });
-    }
+    const params = {
+      api_key: this._api_key,
+      email,
+    };
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/activity",
+    });
   }
 
   // Parameters
@@ -138,14 +134,14 @@ export class ZeroBounceSDK {
   //     If you want the system to remove duplicate emails.
   sendFile({
     file,
-    return_url,
     email_address_column,
-    first_name_column,
-    last_name_column = "",
-    gender_column = "",
-    ip_address_column = "",
-    has_header_row = "",
-    remove_duplicate = "",
+    first_name_column = false,
+    return_url = false,
+    last_name_column = false,
+    gender_column = false,
+    ip_address_column = false,
+    has_header_row = false,
+    remove_duplicate = false,
   }) {
     if (!this._initialized) {
       notInitialized();
@@ -157,42 +153,36 @@ export class ZeroBounceSDK {
       parameterIsMissing("email_address_column");
       return;
     }
-    {
-      const body = new FormData();
-      if (return_url) {
-        body.append("return_url", return_url);
-      }
-      if (first_name_column) {
-        body.append("first_name_column", first_name_column);
-      }
-      if (last_name_column) {
-        body.append("last_name_column", last_name_column);
-      }
-      if (gender_column) {
-        body.append("gender_column", gender_column);
-      }
-      if (ip_address_column) {
-        body.append("ip_address_column", ip_address_column);
-      }
-      if (has_header_row) {
-        body.append("has_header_row", has_header_row);
-      }
-      if (remove_duplicate) {
-        body.append("remove_duplicate", remove_duplicate);
-      }
 
-      body.append("email_address_column", email_address_column);
-      body.append("file", file);
-
-      body.append("api_key", this._api_key);
-
-      return createRequest({
-        requestType: "POST",
-        path: "/sendfile",
-        body,
-        batch: true,
-      });
+    const body = new FormData();
+    if (return_url) {
+      body.append("return_url", return_url);
     }
+    if (first_name_column) {
+      body.append("first_name_column", first_name_column);
+    }
+    if (last_name_column) {
+      body.append("last_name_column", last_name_column);
+    }
+    if (gender_column) {
+      body.append("gender_column", gender_column);
+    }
+    if (ip_address_column) {
+      body.append("ip_address_column", ip_address_column);
+    }
+
+    body.append("email_address_column", email_address_column);
+    body.append("file", file);
+    body.append("has_header_row", has_header_row);
+    body.append("remove_duplicate", remove_duplicate);
+    body.append("api_key", this._api_key);
+
+    return createRequest({
+      requestType: "POST",
+      path: "/sendfile",
+      body,
+      batch: true,
+    });
   }
   // Parameters
   // ----------
@@ -208,10 +198,10 @@ export class ZeroBounceSDK {
   //     If you want the system to remove duplicate emails.
   sendScoringFile({
     file,
-    return_url,
+    return_url = false,
     email_address_column,
-    has_header_row = "",
-    remove_duplicate = "",
+    has_header_row = false,
+    remove_duplicate = false,
   }) {
     if (!this._initialized) {
       notInitialized();
@@ -219,35 +209,29 @@ export class ZeroBounceSDK {
     } else if (!file) {
       parameterIsMissing("file: File");
       return;
-    } else if (!has_header_row) {
-      parameterIsMissing("has_header_row: Boolean");
-      return;
     } else if (!email_address_column) {
       parameterIsMissing("email_address_column: number");
       return;
     }
-    {
-      const body = new FormData();
 
-      if (remove_duplicate) {
-        body.append("remove_duplicate", remove_duplicate);
-      } else if (return_url) {
-        body.append("return_url", return_url);
-      }
+    const body = new FormData();
 
-      body.append("file", file);
-      body.append("email_address_column", email_address_column);
-      body.append("has_header_row", has_header_row);
+    if (return_url) {
       body.append("return_url", return_url);
-      body.append("api_key", this._api_key);
-
-      return createRequest({
-        requestType: "POST",
-        path: "/scoring/sendfile",
-        body,
-        batch: true,
-      });
     }
+
+    body.append("file", file);
+    body.append("email_address_column", email_address_column);
+    body.append("has_header_row", has_header_row);
+    body.append("api_key", this._api_key);
+    body.append("remove_duplicate", remove_duplicate);
+
+    return createRequest({
+      requestType: "POST",
+      path: "/scoring/sendfile",
+      body,
+      batch: true,
+    });
   }
 
   _getStatusUtil(fileId, path) {
@@ -258,18 +242,17 @@ export class ZeroBounceSDK {
       parameterIsMissing("File id");
       return;
     }
-    {
-      const params = {
-        api_key: this._api_key,
-        file_id: fileId,
-      };
-      return createRequest({
-        requestType: "GET",
-        params,
-        path,
-        batch: true,
-      });
-    }
+
+    const params = {
+      api_key: this._api_key,
+      file_id: fileId,
+    };
+    return createRequest({
+      requestType: "GET",
+      params,
+      path,
+      batch: true,
+    });
   }
 
   // @param fileId - the id of a previously submmitted and accepted file
@@ -291,20 +274,18 @@ export class ZeroBounceSDK {
       parameterIsMissing("File id");
       return;
     }
-    {
-      const params = {
-        api_key: this._api_key,
-        file_id: fileId,
-      };
-      return createRequest({
-        requestType: "GET",
-        params,
-        path,
-        batch: true,
-        returnText: true,
-        scoring,
-      });
-    }
+    const params = {
+      api_key: this._api_key,
+      file_id: fileId,
+    };
+    return createRequest({
+      requestType: "GET",
+      params,
+      path,
+      batch: true,
+      returnText: true,
+      scoring,
+    });
   }
   getFile(fileId) {
     return this._getFileUtil(fileId, "/getfile");
@@ -323,17 +304,15 @@ export class ZeroBounceSDK {
       parameterIsMissing("File id");
       return;
     }
-    {
-      const params = {
-        api_key: this._api_key,
-        file_id: fileId,
-      };
-      return createRequest({
-        requestType: "GET",
-        params,
-        path: "/scoring/deletefile",
-        batch: true,
-      });
-    }
+    const params = {
+      api_key: this._api_key,
+      file_id: fileId,
+    };
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/scoring/deletefile",
+      batch: true,
+    });
   }
 }
