@@ -33,7 +33,6 @@ Then you can use any of the SDK methods, for example:
 ```javascript
 try {
   const response = await ZeroBounce.getCredits();
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -47,7 +46,6 @@ const ip_address = "127.0.0.1"; // The IP Address the email signed up from (Opti
 
 try {
   const response = await ZeroBounce.validateEmail(email, ip_address);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -61,7 +59,6 @@ const endDate = "2023-12-12"; // The end date of when you want to view API usage
 
 try {
   const response = await ZeroBounce.getApiUsage(startDate, endDate);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -77,7 +74,6 @@ const emailBatch = [
 
 try {
   const response = await ZeroBounce.validateBatch(emailBatch);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -90,7 +86,6 @@ const email = "<EMAIL_ADDRESS>"; // The email address you want to get the activi
 
 try {
   const response = await ZeroBounce.getEmailActivity(email);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -133,7 +128,6 @@ const payload = {
 
 try {
   const response = await ZeroBounce.sendFile(payload);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -163,7 +157,6 @@ const payload = {
 
 try {
   const response = await ZeroBounce.sendScoringFile(payload);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -176,7 +169,6 @@ const fileId = "<FILE_ID>"; // The id of a previously sent file
 
 try {
   const response = await ZeroBounce.getFileStatus(fileId);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -189,7 +181,6 @@ const fileId = "<FILE_ID>"; // The id of a previously sent file
 
 try {
   const response = await ZeroBounce.getScoringFileStatus(fileId);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -202,7 +193,6 @@ const fileId = "<FILE_ID>"; // The id of a previously sent file
 
 try {
   const response = await ZeroBounce.getFile(fileId);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -215,7 +205,6 @@ const fileId = "<FILE_ID>"; // The id of a previously sent file
 
 try {
   const response = await ZeroBounce.getScoringFile(fileId);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
@@ -228,7 +217,6 @@ const fileId = "<FILE_ID>"; // The id of a previously sent file
 
 try {
   const response = await ZeroBounce.deleteScoringFile(fileId);
-  console.log(response);
 } catch (error) {
   console.error(error);
 }
