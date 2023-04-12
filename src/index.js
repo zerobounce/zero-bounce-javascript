@@ -1,2 +1,2 @@
-import { ZeroBounceSDK as ZB } from "./zero-bounce";
-export const ZeroBounce = new ZB();
+import { ZeroBounceSDK } from "./zero-bounce.js";
+export default ZeroBounceSDK;

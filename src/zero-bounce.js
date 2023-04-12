@@ -1,14 +1,14 @@
-import { createRequest, notInitialized, parameterIsMissing } from "./utils";
+import { createRequest, notInitialized, parameterIsMissing } from "./utils.js";
 
 export class ZeroBounceSDK {
   constructor() {
     this._initialized = false;
-    /**
-     * @param apiKey - your private API key
-     * */
     this._api_key = null;
   }
 
+  /**
+   * @param apiKey - your private API key
+   * */
   init(apiKey) {
     if (!apiKey) {
       parameterIsMissing("Api key", "Please provide a valid API key.");
@@ -29,6 +29,10 @@ export class ZeroBounceSDK {
     return createRequest({ requestType: "GET", params, path: "/getcredits" });
   }
 
+  /**
+   * @param email - email to be validated
+   * @param ip_address
+   * */
   validateEmail(email, ip_address = null) {
     if (!this._initialized) {
       notInitialized();
@@ -45,6 +49,10 @@ export class ZeroBounceSDK {
     return createRequest({ requestType: "GET", params, path: "/validate" });
   }
 
+  /**
+   * @param startDate - The start date
+   * @param endDate - The end date
+   * */
   getApiUsage(startDate, endDate) {
     if (!this._initialized) {
       notInitialized();
@@ -69,7 +77,9 @@ export class ZeroBounceSDK {
     });
   }
 
-  // @param emailBatch: an array containing a list of email objects {email_address: "example@example.com"}
+  /**
+   * @param emailBatch: an array containing a list of email objects {email_address: "example@example.com"}
+   * */
 
   validateBatch(emailBatch) {
     if (!this._initialized) {
@@ -92,7 +102,9 @@ export class ZeroBounceSDK {
     });
   }
 
-  // @param email - a valid email address
+  /**
+   * @param email - a valid email address
+   * */
   getEmailActivity(email) {
     if (!this._initialized) {
       notInitialized();
@@ -112,26 +124,17 @@ export class ZeroBounceSDK {
     });
   }
 
-  // Parameters
-  // ----------
-  // file: File
-  //     The csv or txt file to be submitted.
-  // email_address_column: number
-  //     The column index of the email address in the file. Index starts from 1.
-  // return_url: str or null
-  //     The URL will be used to call back when the validation is completed.
-  // first_name_column: number or null
-  //     The column index of the first name column.
-  // last_name_column: number or null
-  //     The column index of the last name column.
-  // gender_column: number or null
-  //     The column index of the gender column.
-  // ip_address_column: number or null
-  //     The IP Address the email signed up from.
-  // has_header_row: Boolean
-  //     If the first row from the submitted file is a header row.
-  // remove_duplicate: Boolean
-  //     If you want the system to remove duplicate emails.
+  /**
+   * @param file: File - The csv or txt file to be submitted.
+   * @param email_address_column: number - The column index of the email address in the file. Index starts from 1.
+   * @param return_url: str or null - The URL will be used to call back when the validation is completed.
+   * @param first_name_column: number or null - The column index of the first name column.
+   * @param last_name_column: number or null - The column index of the last name column.
+   * @param gender_column: number or null - The column index of the gender column.
+   * @param ip_address_column: number or null - The IP Address the email signed up from.
+   * @param has_header_row: Boolean - If the first row from the submitted file is a header row.
+   * @param remove_duplicate: Boolean - If you want the system to remove duplicate emails.
+   * */
   sendFile({
     file,
     email_address_column,
@@ -184,18 +187,14 @@ export class ZeroBounceSDK {
       batch: true,
     });
   }
-  // Parameters
-  // ----------
-  // file: File
-  //     The csv or txt file to be submitted.
-  // email_address_column: number
-  //     The column index of the email address in the file. Index starts from 1.
-  // return_url: str
-  //     The URL will be used to call back when the validation is completed.
-  // has_header_row: Boolean
-  //     If the first row from the submitted file is a header row.
-  // remove_duplicate: Boolean
-  //     If you want the system to remove duplicate emails.
+
+  /**
+   * @param file: File - The csv or txt file to be submitted.
+   * @param email_address_column: number - The column index of the email address in the file. Index starts from 1.
+   * @param return_url: str or null - The URL will be used to call back when the validation is completed.
+   * @param has_header_row: Boolean - If the first row from the submitted file is a header row.
+   * @param remove_duplicate: Boolean - If you want the system to remove duplicate emails.
+   * */
   sendScoringFile({
     file,
     return_url = false,
@@ -255,17 +254,20 @@ export class ZeroBounceSDK {
     });
   }
 
-  // @param fileId - the id of a previously submmitted and accepted file
+  /**
+   * @param fileId - the id of a previously submmitted and accepted file
+   * */
   getFileStatus(fileId) {
     return this._getStatusUtil(fileId, "/filestatus");
   }
 
-  // @param fileId - the id of a previously submmitted and accepted file
+  /**
+   * @param fileId - the id of a previously submmitted and accepted file
+   * */
   getScoringFileStatus(fileId) {
     return this._getStatusUtil(fileId, "/scoring/filestatus");
   }
 
-  // @param fileId - the id of a previously submmitted and accepted file
   _getFileUtil(fileId, path, scoring = false) {
     if (!this._initialized) {
       notInitialized();
@@ -287,15 +289,24 @@ export class ZeroBounceSDK {
       scoring,
     });
   }
+
+  /**
+   * @param fileId - the id of a previously submmitted and accepted file
+   * */
   getFile(fileId) {
     return this._getFileUtil(fileId, "/getfile");
   }
-  // @param fileId - the id of a previously submmitted and accepted file
+
+  /**
+   * @param fileId - the id of a previously submmitted and accepted file
+   * */
   getScoringFile(fileId) {
     return this._getFileUtil(fileId, "/scoring/getfile", true);
   }
 
-  // @param fileId - the id of a previously submmitted and accepted file
+  /**
+   * @param fileId - the id of a previously submmitted and accepted file
+   * */
   deleteScoringFile(fileId) {
     if (!this._initialized) {
       notInitialized();
