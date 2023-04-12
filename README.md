@@ -38,7 +38,7 @@ Then you can use any of the SDK methods, for example:
 
 ```javascript
 try {
-  const response = await ZeroBounce.getCredits();
+  const response = await zeroBounce.getCredits();
 } catch (error) {
   console.error(error);
 }
@@ -51,7 +51,7 @@ const email = "<EMAIL_ADDRESS>"; // The email address you want to validate
 const ip_address = "127.0.0.1"; // The IP Address the email signed up from (Optional)
 
 try {
-  const response = await ZeroBounce.validateEmail(email, ip_address);
+  const response = await zeroBounce.validateEmail(email, ip_address);
 } catch (error) {
   console.error(error);
 }
@@ -64,7 +64,7 @@ const startDate = "2018-01-01"; // The start date of when you want to view API u
 const endDate = "2023-12-12"; // The end date of when you want to view API usage
 
 try {
-  const response = await ZeroBounce.getApiUsage(startDate, endDate);
+  const response = await zeroBounce.getApiUsage(startDate, endDate);
 } catch (error) {
   console.error(error);
 }
@@ -79,7 +79,7 @@ const emailBatch = [
 ]; // an array containing a list of email objects {email_address: "example@example.com"}
 
 try {
-  const response = await ZeroBounce.validateBatch(emailBatch);
+  const response = await zeroBounce.validateBatch(emailBatch);
 } catch (error) {
   console.error(error);
 }
@@ -91,7 +91,7 @@ try {
 const email = "<EMAIL_ADDRESS>"; // The email address you want to get the activity for
 
 try {
-  const response = await ZeroBounce.getEmailActivity(email);
+  const response = await zeroBounce.getEmailActivity(email);
 } catch (error) {
   console.error(error);
 }
@@ -133,7 +133,7 @@ const payload = {
 };
 
 try {
-  const response = await ZeroBounce.sendFile(payload);
+  const response = await zeroBounce.sendFile(payload);
 } catch (error) {
   console.error(error);
 }
@@ -163,7 +163,7 @@ const payload = {
 };
 
 try {
-  const response = await ZeroBounce.sendScoringFile(payload);
+  const response = await zeroBounce.sendScoringFile(payload);
 } catch (error) {
   console.error(error);
 }
@@ -175,7 +175,7 @@ try {
 const fileId = "<FILE_ID>"; // The id of a previously sent file
 
 try {
-  const response = await ZeroBounce.getFileStatus(fileId);
+  const response = await zeroBounce.getFileStatus(fileId);
 } catch (error) {
   console.error(error);
 }
@@ -187,7 +187,7 @@ try {
 const fileId = "<FILE_ID>"; // The id of a previously sent file
 
 try {
-  const response = await ZeroBounce.getScoringFileStatus(fileId);
+  const response = await zeroBounce.getScoringFileStatus(fileId);
 } catch (error) {
   console.error(error);
 }
@@ -199,7 +199,7 @@ try {
 const fileId = "<FILE_ID>"; // The id of a previously sent file
 
 try {
-  const response = await ZeroBounce.getFile(fileId);
+  const response = await zeroBounce.getFile(fileId);
 } catch (error) {
   console.error(error);
 }
@@ -211,7 +211,7 @@ try {
 const fileId = "<FILE_ID>"; // The id of a previously sent file
 
 try {
-  const response = await ZeroBounce.getScoringFile(fileId);
+  const response = await zeroBounce.getScoringFile(fileId);
 } catch (error) {
   console.error(error);
 }
@@ -223,7 +223,7 @@ try {
 const fileId = "<FILE_ID>"; // The id of a previously sent file
 
 try {
-  const response = await ZeroBounce.deleteScoringFile(fileId);
+  const response = await zeroBounce.deleteScoringFile(fileId);
 } catch (error) {
   console.error(error);
 }
