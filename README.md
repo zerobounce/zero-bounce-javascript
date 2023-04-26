@@ -217,6 +217,18 @@ try {
 }
 ```
 
+- ##### Delete the file with the validated data
+
+```javascript
+const fileId = "<FILE_ID>"; // The id of a previously sent file
+
+try {
+  const response = await zeroBounce.deleteFile(fileId);
+} catch (error) {
+  console.error(error);
+}
+```
+
 - ##### Delete the file with the scoring data
 
 ```javascript
