@@ -28,7 +28,7 @@ export async function createRequest({
     });
     if (returnText) {
       const finalResult = await response.text();
-      if (!finalResult.includes('"success":false')) {
+      if (!finalResult.includes('"success":"False"')) {
         const blob = new Blob([finalResult], { type: "application/json" });
         return saveFile(blob, `result${scoring ? "-scoring" : ""}.csv`);
       } else {

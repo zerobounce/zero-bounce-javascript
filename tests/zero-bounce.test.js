@@ -7,7 +7,7 @@ describe("ZeroBounceSDK", () => {
   const missingParamMessage = "parameter is missing";
 
   beforeAll(() => {
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, "error").mockImplementation(() => {});
   });
 
   beforeEach(() => {
@@ -40,9 +40,10 @@ describe("ZeroBounceSDK", () => {
         "Credits": "100"
       }
 
-      jest.spyOn(utils, "createRequest").mockImplementationOnce(() => {
-        return Promise.resolve(expectedResponse);
-      });
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
 
       zeroBounceSDK.init("valid-api-key");
       const response = await zeroBounceSDK.getCredits();
@@ -120,9 +121,10 @@ describe("ZeroBounceSDK", () => {
         "end_date": "12/12/2023"
       }
 
-      jest.spyOn(utils, "createRequest").mockImplementationOnce(() => {
-        return Promise.resolve(expectedResponse);
-      });
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
 
       zeroBounceSDK.init("valid-api-key");
       const response = await zeroBounceSDK.getApiUsage(startDate, endDate);
@@ -179,9 +181,10 @@ describe("ZeroBounceSDK", () => {
         "processed_at": "2023-04-27 13:47:23.980"
       }
 
-      jest.spyOn(utils, "createRequest").mockImplementationOnce(() => {
-        return Promise.resolve(expectedResponse);
-      });
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
 
       zeroBounceSDK.init("valid-api-key");
       const response = await zeroBounceSDK.validateEmail(email, ip_address);
@@ -272,9 +275,10 @@ describe("ZeroBounceSDK", () => {
         "errors": []
       }
 
-      jest.spyOn(utils, "createRequest").mockImplementationOnce(() => {
-        return Promise.resolve(expectedResponse);
-      });
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
 
       zeroBounceSDK.init("valid-api-key");
       const response = await zeroBounceSDK.validateBatch(emailBatch);
@@ -313,12 +317,438 @@ describe("ZeroBounceSDK", () => {
         "active_in_days": "180"
       }
 
-      jest.spyOn(utils, "createRequest").mockImplementationOnce(() => {
-        return Promise.resolve(expectedResponse);
-      });
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
 
       zeroBounceSDK.init("valid-api-key");
       const response = await zeroBounceSDK.getEmailActivity(email);
+      expect(response).toEqual(expectedResponse);
+    });
+  });
+
+
+  describe("sendFile", () => {
+    class File {}
+    var file = new File();
+
+    const payload = {
+      file: file,
+      email_address_column: 1,
+    };
+
+    it("should throw an error if not initialized", async () => {
+      await zeroBounceSDK.sendFile(payload);
+      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+    });
+
+    it("should throw an error if file is missing", async () => {
+      const payload = {
+        email_address_column: 1,
+      };
+
+      zeroBounceSDK.init("invalid-api-key");
+      await zeroBounceSDK.sendFile(payload);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should throw an error if email address column is missing", async () => {
+      const payload = {
+        file: file,
+      };
+
+      zeroBounceSDK.init("invalid-api-key");
+      await zeroBounceSDK.sendFile(payload);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should return error response with invalid API key", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      const response = await zeroBounceSDK.sendFile(payload);
+      expect(response).toEqual({
+        "success": "False",
+        "message": [
+            "api_key is invalid"
+        ]
+      });
+    });
+
+    it("should return the data regarding sent file", async () => {
+      const expectedResponse = {
+        "success": true,
+        "message": "File Accepted",
+        "file_name": "Your file name.csv",
+        "file_id": "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff"
+      }
+
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key");
+      const response = await zeroBounceSDK.sendFile(payload);
+      expect(response).toEqual(expectedResponse);
+    });
+  });
+
+
+  describe("sendScoringFile", () => {
+    class File {}
+    var file = new File();
+
+    const payload = {
+      file: file,
+      email_address_column: 1,
+    };
+
+    it("should throw an error if not initialized", async () => {
+      await zeroBounceSDK.sendScoringFile(payload);
+      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+    });
+
+    it("should throw an error if file is missing", async () => {
+      const payload = {
+        email_address_column: 1,
+      };
+
+      zeroBounceSDK.init("invalid-api-key");
+      await zeroBounceSDK.sendScoringFile(payload);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should throw an error if email address column is missing", async () => {
+      const payload = {
+        file: file,
+      };
+
+      zeroBounceSDK.init("invalid-api-key");
+      await zeroBounceSDK.sendScoringFile(payload);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should return error response with invalid API key", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      const response = await zeroBounceSDK.sendScoringFile(payload);
+      expect(response).toEqual({
+        "success": "False",
+        "message": [
+            "api_key is invalid"
+        ]
+      });
+    });
+
+    it("should return the data regarding sent scoring file", async () => {
+      const expectedResponse = {
+        "success": true,
+        "message": "File Accepted",
+        "file_name": "Your file name.csv",
+        "file_id": "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff"
+      }
+
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key");
+      const response = await zeroBounceSDK.sendScoringFile(payload);
+      expect(response).toEqual(expectedResponse);
+    });
+  });
+
+
+  describe("getFileStatus", () => {
+    const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
+
+    it("should throw an error if not initialized", async () => {
+      await zeroBounceSDK.getFileStatus(fileId);
+      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+    });
+
+    it("should throw an error if file id is missing", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      await zeroBounceSDK.getFileStatus(null);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should return error response with invalid API key", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      const response = await zeroBounceSDK.getFileStatus(fileId);
+      expect(response).toEqual({
+        "success": "False",
+        "message": [
+            "api_key is invalid"
+        ]
+      });
+    });
+
+    it("should return the completion status of a previously sent file", async () => {
+      const expectedResponse = {
+        "success": true,
+        "file_id": "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff",
+        "file_name": "email_file.csv",
+        "upload_date": "2023-04-21T06:50:18Z",
+        "file_status": "Complete",
+        "complete_percentage": "100%",
+        "error_reason": null,
+        "return_url": "Your return URL if provided when calling sendfile API"
+      }
+
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key");
+      const response = await zeroBounceSDK.getFileStatus(fileId);
+      expect(response).toEqual(expectedResponse);
+    });
+  });
+
+
+  describe("getScoringFileStatus", () => {
+    const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
+
+    it("should throw an error if not initialized", async () => {
+      await zeroBounceSDK.getScoringFileStatus(fileId);
+      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+    });
+
+    it("should throw an error if file id is missing", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      await zeroBounceSDK.getScoringFileStatus(null);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should return error response with invalid API key", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      const response = await zeroBounceSDK.getScoringFileStatus(fileId);
+      expect(response).toEqual({
+        "success": "False",
+        "message": [
+            "api_key is invalid"
+        ]
+      });
+    });
+
+    it("should return the completion status of a previously sent scoring file", async () => {
+      const expectedResponse = {
+        "success": true,
+        "file_id": "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff",
+        "file_name": "email_file.csv",
+        "upload_date": "2023-04-21T06:50:18Z",
+        "file_status": "Complete",
+        "complete_percentage": "100%",
+        "return_url": "Your return URL if provided when calling sendfile API"
+      }
+
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key");
+      const response = await zeroBounceSDK.getScoringFileStatus(fileId);
+      expect(response).toEqual(expectedResponse);
+    });
+  });
+
+
+  describe("getFile", () => {
+    const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
+
+    it("should throw an error if not initialized", async () => {
+      await zeroBounceSDK.getFile(fileId);
+      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+    });
+
+    it("should throw an error if file id is missing", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      await zeroBounceSDK.getFile(null);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should return error response with invalid API key", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      const response = await zeroBounceSDK.getFile(fileId);
+      expect(response).toEqual({
+        "success": "False",
+        "message": [
+            "api_key is invalid"
+        ]
+      });
+    });
+
+    // it("should return the previously sent file", async () => {
+    //   const expectedResponse = "\"Email Address\"\n\"valid@example.com\"\n";
+    //   const expectedFilename = "result.csv";
+    //   const saveFileSpy = jest.spyOn(utils, "saveFile").mockImplementationOnce(() => {
+    //     return Promise.resolve(expectedResponse);
+    //   });
+
+    //   jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+    //     text: () => Promise.resolve(expectedResponse)
+    //   }));
+
+    //   zeroBounceSDK.init("valid-api-key");
+    //   const response = await zeroBounceSDK.getFile(fileId);
+    //   expect(response).toEqual(expectedResponse);
+    //   expect(saveFileSpy.mock.calls[0][1]).toEqual(expectedFilename);
+    // });
+  });
+
+
+  describe("getScoringFile", () => {
+    const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
+
+    it("should throw an error if not initialized", async () => {
+      await zeroBounceSDK.getScoringFile(fileId);
+      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+    });
+
+    it("should throw an error if file id is missing", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      await zeroBounceSDK.getScoringFile(null);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should return error response with invalid API key", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      const response = await zeroBounceSDK.getScoringFile(fileId);
+      expect(response).toEqual({
+        "success": "False",
+        "message": [
+            "api_key is invalid"
+        ]
+      });
+    });
+
+    // it("should return the previously sent scoring file", async () => {
+    //   const expectedResponse = "\"Score\"\n\"100\"\n";
+    //   const expectedFilename = "result-scoring.csv";
+    //   const saveFileSpy = jest.spyOn(utils, "saveFile").mockImplementationOnce(() => {
+    //     return Promise.resolve(expectedResponse);
+    //   });
+
+    //   jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+    //     text: () => Promise.resolve(expectedResponse)
+    //   }));
+
+    //   zeroBounceSDK.init("valid-api-key");
+    //   const response = await zeroBounceSDK.getScoringFile(fileId);
+    //   expect(response).toEqual(expectedResponse);
+    //   expect(saveFileSpy.mock.calls[0][1]).toEqual(expectedFilename);
+    // });
+  });
+
+
+  describe("deleteFile", () => {
+    const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
+
+    it("should throw an error if not initialized", async () => {
+      await zeroBounceSDK.deleteFile(fileId);
+      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+    });
+
+    it("should throw an error if file id is missing", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      await zeroBounceSDK.deleteFile(null);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should return error response with invalid API key", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      const response = await zeroBounceSDK.deleteFile(fileId);
+      expect(response).toEqual({
+        "success": "False",
+        "message": [
+            "api_key is invalid"
+        ]
+      });
+    });
+
+    it("should delete previously sent file", async () => {
+      const expectedResponse = {
+        "success":true,
+        "message":"File Deleted",
+        "file_name":"email_file.csv",
+        "file_id":"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff"
+      }
+
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key");
+      const response = await zeroBounceSDK.deleteFile(fileId);
+      expect(response).toEqual(expectedResponse);
+    });
+  });
+
+
+  describe("deleteScoringFile", () => {
+    const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
+
+    it("should throw an error if not initialized", async () => {
+      await zeroBounceSDK.deleteScoringFile(fileId);
+      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+    });
+
+    it("should throw an error if file id is missing", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      await zeroBounceSDK.deleteScoringFile(null);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should return error response with invalid API key", async () => {
+      zeroBounceSDK.init("invalid-api-key");
+      const response = await zeroBounceSDK.deleteScoringFile(fileId);
+      expect(response).toEqual({
+        "success": "False",
+        "message": [
+            "api_key is invalid"
+        ]
+      });
+    });
+
+    it("should delete previously sent file", async () => {
+      const expectedResponse = {
+        "success":true,
+        "message":"File Deleted",
+        "file_name":"email_file.csv",
+        "file_id":"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff"
+      }
+
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key");
+      const response = await zeroBounceSDK.deleteScoringFile(fileId);
       expect(response).toEqual(expectedResponse);
     });
   });

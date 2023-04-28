@@ -197,8 +197,8 @@ export class ZeroBounceSDK {
    * */
   sendScoringFile({
     file,
-    return_url = false,
     email_address_column,
+    return_url = false,
     has_header_row = false,
     remove_duplicate = false,
   }) {
