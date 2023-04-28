@@ -726,7 +726,7 @@ describe("ZeroBounceSDK", () => {
       });
     });
 
-    it("should delete previously sent file", async () => {
+    it("should delete previously sent scoring file", async () => {
       const expectedResponse = {
         "success":true,
         "message":"File Deleted",
