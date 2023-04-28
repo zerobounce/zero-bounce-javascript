@@ -595,22 +595,18 @@ describe("ZeroBounceSDK", () => {
       });
     });
 
-    // it("should return the previously sent file", async () => {
-    //   const expectedResponse = "\"Email Address\"\n\"valid@example.com\"\n";
-    //   const expectedFilename = "result.csv";
-    //   const saveFileSpy = jest.spyOn(utils, "saveFile").mockImplementationOnce(() => {
-    //     return Promise.resolve(expectedResponse);
-    //   });
+    it("should return the previously sent file", async () => {
+      const expectedResponse = "\"Email Address\"\n\"valid@example.com\"\n";
 
-    //   jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
-    //     text: () => Promise.resolve(expectedResponse)
-    //   }));
+      const createRequestSpy = jest.spyOn(utils, "createRequest").mockImplementationOnce(() => {
+        return Promise.resolve(expectedResponse);
+      });
 
-    //   zeroBounceSDK.init("valid-api-key");
-    //   const response = await zeroBounceSDK.getFile(fileId);
-    //   expect(response).toEqual(expectedResponse);
-    //   expect(saveFileSpy.mock.calls[0][1]).toEqual(expectedFilename);
-    // });
+      zeroBounceSDK.init("valid-api-key");
+      const response = await zeroBounceSDK.getFile(fileId);
+      expect(createRequestSpy.mock.calls[0][0]["returnText"]).toEqual(true);
+      expect(response).toEqual(expectedResponse);
+    });
   });
 
 
@@ -641,22 +637,18 @@ describe("ZeroBounceSDK", () => {
       });
     });
 
-    // it("should return the previously sent scoring file", async () => {
-    //   const expectedResponse = "\"Score\"\n\"100\"\n";
-    //   const expectedFilename = "result-scoring.csv";
-    //   const saveFileSpy = jest.spyOn(utils, "saveFile").mockImplementationOnce(() => {
-    //     return Promise.resolve(expectedResponse);
-    //   });
+    it("should return the previously sent scoring file", async () => {
+      const expectedResponse = "\"Score\"\n\"100\"\n";
 
-    //   jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
-    //     text: () => Promise.resolve(expectedResponse)
-    //   }));
+      const createRequestSpy = jest.spyOn(utils, "createRequest").mockImplementationOnce(() => {
+        return Promise.resolve(expectedResponse);
+      });
 
-    //   zeroBounceSDK.init("valid-api-key");
-    //   const response = await zeroBounceSDK.getScoringFile(fileId);
-    //   expect(response).toEqual(expectedResponse);
-    //   expect(saveFileSpy.mock.calls[0][1]).toEqual(expectedFilename);
-    // });
+      zeroBounceSDK.init("valid-api-key");
+      const response = await zeroBounceSDK.getScoringFile(fileId);
+      expect(createRequestSpy.mock.calls[0][0]["returnText"]).toEqual(true);
+      expect(response).toEqual(expectedResponse);
+    });
   });
 
 
