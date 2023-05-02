@@ -22,6 +22,16 @@ const zeroBounce = new ZeroBounceSDK();
 </script>
 ```
 
+OR
+
+Add npm module
+
+```javascript
+const ZeroBounceSDK = require('zero-bounce-sdk')
+
+const zeroBounce = new ZeroBounceSDK();
+```
+
 Initialize the sdk with your api key:
 
 ```javascript
