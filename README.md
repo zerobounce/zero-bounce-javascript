@@ -286,3 +286,21 @@ try {
 **You can use this IP to test the GEO Location in the API.**
 
 - 99.110.204.1
+
+## Development
+
+After checking out the repo run tests
+
+```bash
+npm test
+```
+
+You should see an output like this
+
+```bash
+Test Suites: 1 passed, 1 total
+Tests:       54 passed, 54 total
+Snapshots:   0 total
+Time:        2.596 s, estimated 3 s
+Ran all test suites.
+```
