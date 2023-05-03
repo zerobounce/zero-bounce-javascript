@@ -22,6 +22,16 @@ const zeroBounce = new ZeroBounceSDK();
 </script>
 ```
 
+OR
+
+Add npm module
+
+```javascript
+const ZeroBounceSDK = require('zero-bounce-sdk')
+
+const zeroBounce = new ZeroBounceSDK();
+```
+
 Initialize the sdk with your api key:
 
 ```javascript
@@ -217,6 +227,18 @@ try {
 }
 ```
 
+- ##### Delete the file with the validated data
+
+```javascript
+const fileId = "<FILE_ID>"; // The id of a previously sent file
+
+try {
+  const response = await zeroBounce.deleteFile(fileId);
+} catch (error) {
+  console.error(error);
+}
+```
+
 - ##### Delete the file with the scoring data
 
 ```javascript
@@ -264,3 +286,21 @@ try {
 **You can use this IP to test the GEO Location in the API.**
 
 - 99.110.204.1
+
+## Development
+
+After checking out the repo run tests
+
+```bash
+npm test
+```
+
+You should see an output like this
+
+```bash
+Test Suites: 1 passed, 1 total
+Tests:       54 passed, 54 total
+Snapshots:   0 total
+Time:        2.596 s, estimated 3 s
+Ran all test suites.
+```

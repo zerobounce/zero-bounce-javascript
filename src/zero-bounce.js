@@ -197,8 +197,8 @@ export class ZeroBounceSDK {
    * */
   sendScoringFile({
     file,
-    return_url = false,
     email_address_column,
+    return_url = false,
     has_header_row = false,
     remove_duplicate = false,
   }) {
@@ -304,10 +304,7 @@ export class ZeroBounceSDK {
     return this._getFileUtil(fileId, "/scoring/getfile", true);
   }
 
-  /**
-   * @param fileId - the id of a previously submmitted and accepted file
-   * */
-  deleteScoringFile(fileId) {
+  _deleteFileUtil(fileId, path, scoring = false) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -322,8 +319,23 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "GET",
       params,
-      path: "/scoring/deletefile",
+      path,
       batch: true,
+      scoring,
     });
+  }
+
+  /**
+   * @param fileId - the id of a previously submmitted and accepted file
+   * */
+  deleteFile(fileId) {
+    return this._deleteFileUtil(fileId, "/deletefile");
+  }
+
+  /**
+   * @param fileId - the id of a previously submmitted and accepted file
+   * */
+  deleteScoringFile(fileId) {
+    return this._deleteFileUtil(fileId, "/scoring/deletefile", true);
   }
 }
