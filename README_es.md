@@ -12,7 +12,7 @@ Esta es una clase envoltorio en JavaScript para la API v2 de ZeroBounce.\
 ## INSTALACI\'d3N\
 \
 ```bash\
-npm install zero-bounce-sdk\
+npm install @zerobounce/zero-bounce-sdk\
 ```\
 \
 ## USO\
@@ -34,7 +34,7 @@ O\
 Agregue el m\'f3dulo npm\
 \
 ```javascript\
-const ZeroBounceSDK = require('zero-bounce-sdk')\
+const ZeroBounceSDK = require('@zerobounce/zero-bounce-sdk')\
 \
 const zeroBounce = new ZeroBounceSDK();\
 ```\

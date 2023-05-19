@@ -5,7 +5,7 @@ This is a JavaScript wrapper class for the ZeroBounce API v2.
 ## INSTALLATION
 
 ```bash
-npm install zero-bounce-sdk
+npm install @zerobounce/zero-bounce-sdk
 ```
 
 ## USAGE
@@ -27,7 +27,7 @@ OR
 Add npm module
 
 ```javascript
-const ZeroBounceSDK = require('zero-bounce-sdk')
+const ZeroBounceSDK = require('@zerobounce/zero-bounce-sdk')
 
 const zeroBounce = new ZeroBounceSDK();
 ```
