@@ -1,14 +1,10 @@
-[ZeroBounce](https://www.zerobounce.net>) India JavaScript API v2
-
-This is a JavaScript wrapper class for the ZeroBounce API v2.
-
-## INSTALLATION
+#### INSTALLATION
 
 ```bash
 npm install @zerobounce/zero-bounce-india-sdk
 ```
 
-## USAGE
+#### USAGE
 
 Add the script
 
@@ -40,11 +36,11 @@ zeroBounce.init("<YOUR_API_KEY>");
 
 NOTE: all the methods are asynchronous they have to be used with async / await or .then.catch
 
-## Examples
+#### Examples
 
 Then you can use any of the SDK methods, for example:
 
-- ##### Check how many credits you have left on your account
+- ####### Check how many credits you have left on your account
 
 ```javascript
 try {
@@ -54,7 +50,7 @@ try {
 }
 ```
 
-- ##### Validate an email address
+- ####### Validate an email address
 
 ```javascript
 const email = "<EMAIL_ADDRESS>"; // The email address you want to validate
@@ -67,7 +63,7 @@ try {
 }
 ```
 
-- ##### Get api usage from a start date to an end date
+- ####### Get api usage from a start date to an end date
 
 ```javascript
 const startDate = "2018-01-01"; // The start date of when you want to view API usage
@@ -80,7 +76,7 @@ try {
 }
 ```
 
-- ##### Validate a list of emails
+- ####### Validate a list of emails
 
 ```javascript
 const emailBatch = [
@@ -95,7 +91,7 @@ try {
 }
 ```
 
-- ##### Get data about an email activity
+- ####### Get data about an email activity
 
 ```javascript
 const email = "<EMAIL_ADDRESS>"; // The email address you want to get the activity for
@@ -107,7 +103,7 @@ try {
 }
 ```
 
-- ##### Send a csv file containing email addresses to be validated
+- ####### Send a csv file containing email addresses to be validated
 
 ```javascript
 // Parameters
@@ -149,7 +145,7 @@ try {
 }
 ```
 
-- ##### Send a csv file containing email addresses to get the scoring of the emails
+- ####### Send a csv file containing email addresses to get the scoring of the emails
 
 ```javascript
 // Parameters
@@ -179,7 +175,7 @@ try {
 }
 ```
 
-- ##### The completion status of a previously sent file
+- ####### The completion status of a previously sent file
 
 ```javascript
 const fileId = "<FILE_ID>"; // The id of a previously sent file
@@ -191,7 +187,7 @@ try {
 }
 ```
 
-- ##### The completion status of a previously sent scoring file
+- ####### The completion status of a previously sent scoring file
 
 ```javascript
 const fileId = "<FILE_ID>"; // The id of a previously sent file
@@ -203,7 +199,7 @@ try {
 }
 ```
 
-- ##### Get the file with the validated data
+- ####### Get the file with the validated data
 
 ```javascript
 const fileId = "<FILE_ID>"; // The id of a previously sent file
@@ -215,7 +211,7 @@ try {
 }
 ```
 
-- ##### Get the file with the scoring data
+- ####### Get the file with the scoring data
 
 ```javascript
 const fileId = "<FILE_ID>"; // The id of a previously sent file
@@ -227,7 +223,7 @@ try {
 }
 ```
 
-- ##### Delete the file with the validated data
+- ####### Delete the file with the validated data
 
 ```javascript
 const fileId = "<FILE_ID>"; // The id of a previously sent file
@@ -239,7 +235,7 @@ try {
 }
 ```
 
-- ##### Delete the file with the scoring data
+- ####### Delete the file with the scoring data
 
 ```javascript
 const fileId = "<FILE_ID>"; // The id of a previously sent file
@@ -287,7 +283,7 @@ try {
 
 - 99.110.204.1
 
-## Development
+#### Development
 
 After checking out the repo run tests
 

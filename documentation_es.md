@@ -1,14 +1,10 @@
-## ZeroBounce API de JavaScript v2
-
-Esta es una clase envoltorio en JavaScript para la API v2 de ZeroBounce.
-
-## INSTALACIÓN
+#### INSTALACIÓN
 
 ```bash
 npm install zero-bounce-sdk
 ```
 
-## USO
+#### USO
 
 Agregue el script
 
@@ -40,11 +36,11 @@ zeroBounce.init("<SU_CLAVE_DE_API>");
 
 NOTA: todos los métodos son asíncronos y deben usarse con async / await o .then.catch.
 
-## Ejemplos
+#### Ejemplos
 
 Luego puede utilizar cualquiera de los métodos del SDK, por ejemplo:
 
-- ##### Verificar cuántos créditos le quedan en su cuenta
+- ####### Verificar cuántos créditos le quedan en su cuenta
 
 ```javascript
 try {
@@ -54,7 +50,7 @@ try {
 }
 ```
 
-- ##### Validar una dirección de correo electrónico
+- ####### Validar una dirección de correo electrónico
 
 ```javascript
 const email = "<DIRECCIÓN_DE_CORREO_ELECTRÓNICO>"; // La dirección de correo electrónico que desea validar
@@ -67,7 +63,7 @@ try {
 }
 ```
 
-- ##### Obtener el uso de la API desde una fecha de inicio hasta una fecha de finalización
+- ####### Obtener el uso de la API desde una fecha de inicio hasta una fecha de finalización
 
 ```javascript
 const startDate = "2018-01-01"; // La fecha de inicio de cuando desea ver el uso de la API
@@ -80,7 +76,7 @@ try {
 }
 ```
 
-- ##### Validar una lista de direcciones de correo electrónico
+- ####### Validar una lista de direcciones de correo electrónico
 
 ```javascript
 const emailBatch = [
@@ -95,7 +91,7 @@ try {
 }
 ```
 
-- ##### Obtener datos sobre la actividad de un correo electrónico
+- ####### Obtener datos sobre la actividad de un correo electrónico
 
 ```javascript
 const email = "<DIRECCIÓN_DE_CORREO_ELECTRÓNICO>"; // La dirección de correo electrónico de la que desea obtener la actividad
@@ -107,7 +103,7 @@ try {
 }
 ```
 
-- ##### Enviar un archivo CSV que contenga direcciones de correo electrónico para validar
+- ####### Enviar un archivo CSV que contenga direcciones de correo electrónico para validar
 
 ```javascript
 // Parámetros
@@ -151,7 +147,7 @@ try {
 }
 ```
 
-- ##### Enviar un archivo CSV que contenga direcciones de correo electrónico para obtener la puntuación de los correos electrónicos
+- ####### Enviar un archivo CSV que contenga direcciones de correo electrónico para obtener la puntuación de los correos electrónicos
 
 ```javascript
 // Parámetros
@@ -181,7 +177,7 @@ try {
 }
 ```
 
-- ##### El estado de finalización de un archivo enviado anteriormente
+- ####### El estado de finalización de un archivo enviado anteriormente
 
 ```javascript
 const fileId = "<ID_DE_ARCHIVO>"; // El ID de un archivo enviado anteriormente
@@ -193,7 +189,7 @@ try {
 }
 ```
 
-- ##### El estado de finalización de un archivo de puntuación enviado anteriormente
+- ####### El estado de finalización de un archivo de puntuación enviado anteriormente
 
 ```javascript
 const fileId = "<ID_DE_ARCHIVO>"; // El ID de un archivo enviado anteriormente
@@ -207,7 +203,7 @@ try {
 }
 ```
 
-- ##### Obtener el archivo con los datos validados
+- ####### Obtener el archivo con los datos validados
 
 ```javascript
 const fileId = "<ID_DE_ARCHIVO>"; // El ID de un archivo enviado anteriormente
@@ -219,7 +215,7 @@ try {
 }
 ```
 
-- ##### Obtener el archivo con los datos de puntuación
+- ####### Obtener el archivo con los datos de puntuación
 
 ```javascript
 const fileId = "<ID_DE_ARCHIVO>"; // El ID de un archivo enviado anteriormente
@@ -231,7 +227,7 @@ try {
 }
 ```
 
-- ##### Eliminar el archivo con los datos validados
+- ####### Eliminar el archivo con los datos validados
 
 ```javascript
 const fileId = "<ID_DE_ARCHIVO>"; // El ID de un archivo enviado anteriormente
@@ -243,7 +239,7 @@ try {
 }
 ```
 
-- ##### Eliminar el archivo con los datos de puntuación
+- ####### Eliminar el archivo con los datos de puntuación
 
 ```javascript
 const fileId = "<ID_DE_ARCHIVO>"; // El ID de un archivo enviado anteriormente
@@ -291,7 +287,7 @@ try {
 
 - 99.110.204.1
 
-## Desarrollo
+#### Desarrollo
 
 Después de verificar el repositorio, ejecute las pruebas
 
