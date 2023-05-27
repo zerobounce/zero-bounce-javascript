@@ -1,7 +1,7 @@
 #### INSTALLATION
 
 ```bash
-npm install @zerobounce/zero-bounce-india-sdk
+npm install @zerobounce/zero-bounce-sdk
 ```
 
 #### USAGE
@@ -9,7 +9,7 @@ npm install @zerobounce/zero-bounce-india-sdk
 Add the script
 
 ```HTML
-<script src="<PATH_TO_SCRIPT/zeroBounceIndiaSDK.js"></script>
+<script src="<PATH_TO_SCRIPT/zeroBounceSDK.js"></script>
 ```
 
 ```HTML
@@ -23,7 +23,7 @@ OR
 Add npm module
 
 ```javascript
-const ZeroBounceSDK = require('@zerobounce/zero-bounce-india-sdk')
+const ZeroBounceSDK = require('@zerobounce/zero-bounce-sdk')
 
 const zeroBounce = new ZeroBounceSDK();
 ```
