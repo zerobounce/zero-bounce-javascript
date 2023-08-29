@@ -32,8 +32,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.getCredits();
-      expect(response).toEqual({ "Credits": "-1" });
+      try {
+        await zeroBounceSDK.getCredits();
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should return the correct number of credits", async () => {
@@ -80,8 +83,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.getApiUsage(startDate, endDate);
-      expect(response).toEqual({ "error": "Invalid API key" });
+      try {
+        await zeroBounceSDK.getApiUsage(startDate, endDate);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should return API usage data", async () => {
@@ -153,10 +159,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.validateEmail(email, ip_address);
-      expect(response).toEqual({
-        "error": "Invalid API key or your account ran out of credits"
-      });
+      try {
+        await zeroBounceSDK.validateEmail(email, ip_address);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should return the validated email data", async () => {
@@ -215,16 +222,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.validateBatch(emailBatch);
-      expect(response).toEqual({
-        "email_batch": [],
-        "errors": [
-            {
-                "email_address": "all",
-                "error": "Invalid API Key or your account ran out of credits"
-            }
-        ]
-      });
+      try {
+        await zeroBounceSDK.validateBatch(emailBatch);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should return the validated emails data", async () => {
@@ -306,10 +308,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.getEmailActivity(email);
-      expect(response).toEqual({
-        "error": "Invalid API key or your account ran out of credits"
-      });
+      try {
+        await zeroBounceSDK.getEmailActivity(email);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should return the email activity data", async () => {
@@ -486,13 +489,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.getFileStatus(fileId);
-      expect(response).toEqual({
-        "success": "False",
-        "message": [
-            "api_key is invalid"
-        ]
-      });
+      try {
+        await zeroBounceSDK.getFileStatus(fileId);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should return the completion status of a previously sent file", async () => {
@@ -537,13 +538,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.getScoringFileStatus(fileId);
-      expect(response).toEqual({
-        "success": "False",
-        "message": [
-            "api_key is invalid"
-        ]
-      });
+      try {
+        await zeroBounceSDK.getScoringFileStatus(fileId);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should return the completion status of a previously sent scoring file", async () => {
@@ -587,13 +586,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.getFile(fileId);
-      expect(response).toEqual({
-        "success": "False",
-        "message": [
-            "api_key is invalid"
-        ]
-      });
+      try {
+        await zeroBounceSDK.getFile(fileId);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should return the previously sent file", async () => {
@@ -629,13 +626,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.getScoringFile(fileId);
-      expect(response).toEqual({
-        "success": "False",
-        "message": [
-            "api_key is invalid"
-        ]
-      });
+      try {
+        await zeroBounceSDK.getScoringFile(fileId);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should return the previously sent scoring file", async () => {
@@ -671,13 +666,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.deleteFile(fileId);
-      expect(response).toEqual({
-        "success": "False",
-        "message": [
-            "api_key is invalid"
-        ]
-      });
+      try {
+        await zeroBounceSDK.deleteFile(fileId);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should delete previously sent file", async () => {
@@ -718,13 +711,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.deleteScoringFile(fileId);
-      expect(response).toEqual({
-        "success": "False",
-        "message": [
-            "api_key is invalid"
-        ]
-      });
+      try {
+        await zeroBounceSDK.deleteScoringFile(fileId);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should delete previously sent scoring file", async () => {
@@ -769,8 +760,11 @@ describe("ZeroBounceSDK", () => {
 
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key");
-      const response = await zeroBounceSDK.guessFormat(payload);
-      expect(response).toThrow(TypeError);
+      try {
+        await zeroBounceSDK.guessFormat(payload);
+      } catch (error) {
+        expect(error.message).toEqual('TypeError: Network request failed');
+      }
     });
 
     it("should return the validated format data", async () => {

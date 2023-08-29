@@ -35,8 +35,12 @@ export async function createRequest({
         return JSON.parse(finalResult);
       }
     }
-    const finalResult = await response.json();
-    return finalResult;
+    if (response.status === 403) {  
+      throw new Error('[Error]: api_key is invalid');
+    } else {
+      const finalResult = await response.json();
+      return finalResult;
+    }
   } catch (error) {
     throw new Error(error);
   }
