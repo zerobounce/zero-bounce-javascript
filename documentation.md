@@ -247,6 +247,34 @@ try {
 }
 ```
 
+- ####### Email finder - Test a variety of patterns and combinations in real time until it identifies a valid business email.
+
+```javascript
+// Parameters
+// ----------
+// domain: String
+//     The email domain for which to find the email format. 
+// first_name: String or null (Optional)
+//     The first name of the person whose email format is being searched.
+// middle_name: String or null (Optional)
+//     The middle name of the person whose email format is being searched.
+// last_name: String or null (Optional)
+//     The last name of the person whose email format is being searched.
+
+const payload = {
+  domain: "<DOMAIN>",
+  first_name: "<FIRST_NAME>",
+  middle_name: "<MIDDLE_NAME>",
+  last_name: "<LAST_NAME>"
+}
+
+try {
+  const response = await zeroBounce.guessFormat(payload);
+} catch (error) {
+  console.error(error);
+}
+```
+
 **Any of the following email addresses can be used for testing the API, no credits are charged for these test email addresses:**
 
 - disposable@example.com
