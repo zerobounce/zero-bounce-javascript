@@ -338,4 +338,35 @@ export class ZeroBounceSDK {
   deleteScoringFile(fileId) {
     return this._deleteFileUtil(fileId, "/scoring/deletefile", true);
   }
+
+  // EMAIL FINDER
+
+  guessFormat ({
+    domain, 
+    first_name = null, 
+    middle_name = null, 
+    last_name = null
+  }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!domain) {
+      parameterIsMissing("domain");
+      return;
+    }
+
+    const params = {
+      api_key: this._api_key,
+      domain: domain,
+      first_name: first_name,
+      middle_name: middle_name,
+      last_name: last_name,
+    };
+
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/guessformat",
+    });
+  }
 }
