@@ -1,5 +1,7 @@
 [ZeroBounce](https://www.zerobounce.net>) JavaScript API v2
 
+## WE DO NOT RECOMMEND USING THIS SDK ON A FRONT-END ENVIRONMENT AS THE API KEY WILL BE VISIBLE
+
 This is a JavaScript wrapper class for the ZeroBounce API v2.
 
 ## INSTALLATION
