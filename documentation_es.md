@@ -4,7 +4,7 @@
 #### INSTALACIÓN
 
 ```bash
-npm install zero-bounce-sdk
+npm install @zerobounce/zero-bounce-sdk
 ```
 
 #### USO
