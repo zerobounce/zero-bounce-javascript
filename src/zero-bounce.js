@@ -341,6 +341,12 @@ export class ZeroBounceSDK {
 
   // EMAIL FINDER
 
+  /**
+   * @param domain str - domain of the email address
+   * @param first_name str or null - first name
+   * @param middle_name str or null - middle name
+   * @param last_name str or null - last name
+   * */
   guessFormat ({
     domain, 
     first_name = null, 
