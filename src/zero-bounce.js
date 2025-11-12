@@ -1,23 +1,23 @@
 import { createRequest, notInitialized, parameterIsMissing } from "./utils.js";
 
 export class ZeroBounceSDK {
-  static ZBApiURL = Object.freeze({
-    DEFAULTAPIURL: "https://api.zerobounce.net/v2",
-    USAAPIURL: "https://api-us.zerobounce.net/v2",
-    EUAPIURL: "https://api-eu.zerobounce.net/v2"
+  static ApiURL = Object.freeze({
+    DEFAULT_API_URL: "https://api.zerobounce.net/v2",
+    USA_API_URL: "https://api-us.zerobounce.net/v2",
+    EU_API_URL: "https://api-eu.zerobounce.net/v2"
   });
 
   constructor() {
     this._initialized = false;
     this._api_key = null;
-    this._api_base_url = ZeroBounceSDK.ZBApiURL.DEFAULTAPIURL;
+    this._api_base_url = ZeroBounceSDK.ApiURL.DEFAULT_API_URL;
   }
 
   /**
    * @param apiKey - your private API key
-   * @param apiBaseURL - your preferred API, possible values being ZBApiURL.DEFAULTAPIURL, ZBApiURL.USAAPIURL, ZBApiURL.EUAPIURL
+   * @param apiBaseURL - your preferred API, possible values being ApiURL.DEFAULT_API_URL, ApiURL.USAAPIURL, ApiURL.EUAPIURL
    * */
-  init(apiKey, apiBaseURL = ZeroBounceSDK.ZBApiURL.DEFAULTAPIURL) {
+  init(apiKey, apiBaseURL = ZeroBounceSDK.ApiURL.DEFAULT_API_URL) {
     if (!apiKey) {
       parameterIsMissing("Api key", "Please provide a valid API key.");
     } else {
@@ -496,7 +496,7 @@ export class ZeroBounceSDK {
 
 
   /**
-   * @deprecated Use findEmail for Email Finder API, or findDomain for Domain Search API
+   * @deprecated Use findEmail for Email Finder API, or findDomain for Domain Search API.
    * @param domain str - domain of the email address
    * @param first_name str or null - first name
    * @param middle_name str or null - middle name
@@ -508,6 +508,7 @@ export class ZeroBounceSDK {
     middle_name = null, 
     last_name = null
   }) {
+    console.warn("guessFormat() is deprecated. Use findEmail for Email Finder API, or findDomain for Domain Search API.");
     if (!this._initialized) {
       notInitialized();
       return;

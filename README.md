@@ -37,7 +37,7 @@ const zeroBounce = new ZeroBounceSDK();
 Initialize the sdk with your api key:
 
 ```javascript
-zeroBounce.init("<YOUR_API_KEY>", ZeroBounceSDK.ZBApiURL.DEFAULTAPIURL);
+zeroBounce.init("<YOUR_API_KEY>", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
 ```
 
 NOTE: all the methods are asynchronous they have to be used with async / await or .then.catch

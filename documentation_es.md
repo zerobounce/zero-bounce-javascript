@@ -34,7 +34,7 @@ const zeroBounce = new ZeroBounceSDK();
 Inicialice el SDK con su clave de API y tu API preferida:
 
 ```javascript
-zeroBounce.init("<SU_CLAVE_DE_API>", ZeroBounceSDK.ZBApiURL.DEFAULTAPIURL);
+zeroBounce.init("<SU_CLAVE_DE_API>", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
 ```
 
 NOTA: todos los métodos son asíncronos y deben usarse con async / await o .then.catch.
