@@ -444,10 +444,10 @@ export class ZeroBounceSDK {
   /**
    * @param domain str - domain name
    * */
-  findDomainByDomain({
+  findEmailFormatByDomain({
     domain
   }) {
-    return this._findDomain({
+    return this._findEmailFormat({
       domain: domain
     });
   }
@@ -455,15 +455,15 @@ export class ZeroBounceSDK {
   /**
    * @param company_name str - company name
    * */
-  findDomainByCompanyName({
+  findEmailFormatByCompanyName({
     company_name
   }) {
-    return this._findDomain({
+    return this._findEmailFormat({
       company_name: company_name
     });
   }
 
-  _findDomain({
+  _findEmailFormat({
     domain = null,
     company_name = null
   }) {
@@ -496,7 +496,7 @@ export class ZeroBounceSDK {
 
 
   /**
-   * @deprecated Use findEmail for Email Finder API, or findDomain for Domain Search API.
+   * @deprecated Use findEmail for Email Finder API, or findEmailFormat for Domain Search API.
    * @param domain str - domain of the email address
    * @param first_name str or null - first name
    * @param middle_name str or null - middle name
@@ -508,7 +508,7 @@ export class ZeroBounceSDK {
     middle_name = null, 
     last_name = null
   }) {
-    console.warn("guessFormat() is deprecated. Use findEmail for Email Finder API, or findDomain for Domain Search API.");
+    console.warn("guessFormat() is deprecated. Use findEmail for Email Finder API, or findEmailFormat for Domain Search API.");
     if (!this._initialized) {
       notInitialized();
       return;

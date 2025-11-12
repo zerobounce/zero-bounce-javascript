@@ -790,7 +790,7 @@ describe("ZeroBounceSDK", () => {
   });
 
   // DOMAIN SEARCH
-  describe("findDomain", () => {
+  describe("findEmailFormat", () => {
     const payload = {
       domain: "example.com",
       first_name: "John",
@@ -798,13 +798,13 @@ describe("ZeroBounceSDK", () => {
     }
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.findDomainByDomain(payload);
+      await zeroBounceSDK.findEmailFormatByDomain(payload);
       expect(console.error).toHaveBeenCalledWith(initErrorMessage);
     });
 
     it("should throw an error if domain is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.findDomainByDomain({domain: null});
+      await zeroBounceSDK.findEmailFormatByDomain({domain: null});
       expect(console.error).toHaveBeenCalledWith(
         expect.stringContaining(missingParamMessage)
       );
@@ -813,7 +813,7 @@ describe("ZeroBounceSDK", () => {
     it("should return error response with invalid API key", async () => {
       zeroBounceSDK.init("invalid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
       try {
-        await zeroBounceSDK.findDomainByDomain(payload);
+        await zeroBounceSDK.findEmailFormatByDomain(payload);
       } catch (error) {
         expect(error.message).toEqual('TypeError: Network request failed');
       }
@@ -836,7 +836,7 @@ describe("ZeroBounceSDK", () => {
       }));
 
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      const response = await zeroBounceSDK.findDomainByDomain(payload);
+      const response = await zeroBounceSDK.findEmailFormatByDomain(payload);
       expect(response).toEqual(expectedResponse);
     });
   });

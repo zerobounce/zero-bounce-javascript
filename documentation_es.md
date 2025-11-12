@@ -311,8 +311,8 @@ const companyNamePayload = {
 }
 
 try {
-  const domainResponse = await zeroBounce.findDomainByDomain(domainPayload);
-  const companyNameResponse = await zeroBounce.findDomainByCompanyName(companyNamePayload);
+  const domainResponse = await zeroBounce.findEmailFormatByDomain(domainPayload);
+  const companyNameResponse = await zeroBounce.findEmailFormatByCompanyName(companyNamePayload);
 } catch (error) {
   console.error(error);
 }
