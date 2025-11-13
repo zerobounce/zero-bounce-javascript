@@ -31,10 +31,10 @@ const ZeroBounceSDK = require('zero-bounce-sdk')
 const zeroBounce = new ZeroBounceSDK();
 ```
 
-Inicialice el SDK con su clave de API:
+Inicialice el SDK con su clave de API y tu API preferida:
 
 ```javascript
-zeroBounce.init("<SU_CLAVE_DE_API>");
+zeroBounce.init("<SU_CLAVE_DE_API>", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
 ```
 
 NOTA: todos los métodos son asíncronos y deben usarse con async / await o .then.catch.
@@ -253,6 +253,71 @@ try {
   console.error(error);
 }
 ```
+
+- ####### Buscador de correos electrónicos: prueba una variedad de patrones y combinaciones en tiempo real hasta que identifique un correo electrónico comercial válido.
+
+```javascript
+// Parameters
+// ----------
+// domain: String
+//     El dominio de correo electrónico para el que se debe buscar el formato de correo electrónico. 
+// company_name: String
+//     El nombre de la empresa para la que se busca el formato de correo electrónico.
+// first_name: String
+//     El nombre de la persona cuyo formato de correo electrónico se está buscando.
+// middle_name: String or null (Optional)
+//     El segundo nombre de la persona cuyo formato de correo electrónico se está buscando.
+// last_name: String or null (Optional)
+//     El apellido de la persona cuyo formato de correo electrónico se está buscando.
+
+const domainPayload = {
+  domain: "<DOMAIN>",
+  first_name: "<FIRST_NAME>",
+  middle_name: "<MIDDLE_NAME>",
+  last_name: "<LAST_NAME>"
+}
+
+const companyNamePayload = {
+  company_name: "<COMPANY_NAME>",
+  first_name: "<FIRST_NAME>",
+  middle_name: "<MIDDLE_NAME>",
+  last_name: "<LAST_NAME>"
+}
+
+try {
+  const domainResponse = await zeroBounce.findEmailByDomain(domainPayload);
+  const companyNameResponse = await zeroBounce.findEmailByCompanyName(companyNamePayload);
+} catch (error) {
+  console.error(error);
+}
+```
+
+- ####### Búsqueda de dominios: encuentre el dominio basado en un nombre de dominio o nombre de empresa determinados.
+
+```javascript
+// Parameters
+// ----------
+// domain: String
+//     El nombre de dominio para el que se busca el formato de correo electrónico. 
+// company_name: String
+//     El nombre de la empresa para la que se debe buscar el formato de correo electrónico.
+
+const domainPayload = {
+  domain: "<DOMAIN>"
+}
+
+const companyNamePayload = {
+  company_name: "<COMPANY_NAME>"
+}
+
+try {
+  const domainResponse = await zeroBounce.findEmailFormatByDomain(domainPayload);
+  const companyNameResponse = await zeroBounce.findEmailFormatByCompanyName(companyNamePayload);
+} catch (error) {
+  console.error(error);
+}
+```
+
 
 **Puede utilizar cualquiera de las siguientes direcciones de correo electrónico para probar la API, no se cobran créditos por estas direcciones de correo electrónico de prueba:**
 

@@ -1,5 +1,4 @@
 // Constants
-export const API_BASE_URL = "https://api.zerobounce.net/v2";
 export const API_BULK_BASE_URL = "https://bulkapi.zerobounce.net/v2";
 export const HEADERS = {
   Accept: "*/*",
@@ -15,9 +14,10 @@ export async function createRequest({
   batch = false,
   returnText = false,
   scoring = false,
+  apiBaseURL
 }) {
   const url = `${
-    batch ? API_BULK_BASE_URL : API_BASE_URL
+    batch ? API_BULK_BASE_URL : apiBaseURL
   }${path}?${new URLSearchParams(params)}`;
 
   try {

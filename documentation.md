@@ -31,10 +31,10 @@ const ZeroBounceSDK = require('@zerobounce/zero-bounce-sdk')
 const zeroBounce = new ZeroBounceSDK();
 ```
 
-Initialize the sdk with your api key:
+Initialize the sdk with your api key and your preferred api:
 
 ```javascript
-zeroBounce.init("<YOUR_API_KEY>");
+zeroBounce.init("<YOUR_API_KEY>", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
 ```
 
 NOTE: all the methods are asynchronous they have to be used with async / await or .then.catch
@@ -257,22 +257,58 @@ try {
 // ----------
 // domain: String
 //     The email domain for which to find the email format. 
-// first_name: String or null (Optional)
+// company_name: String
+//     The company name for which to find the email format.
+// first_name: String
 //     The first name of the person whose email format is being searched.
 // middle_name: String or null (Optional)
 //     The middle name of the person whose email format is being searched.
 // last_name: String or null (Optional)
 //     The last name of the person whose email format is being searched.
 
-const payload = {
+const domainPayload = {
   domain: "<DOMAIN>",
   first_name: "<FIRST_NAME>",
   middle_name: "<MIDDLE_NAME>",
   last_name: "<LAST_NAME>"
 }
 
+const companyNamePayload = {
+  company_name: "<COMPANY_NAME>",
+  first_name: "<FIRST_NAME>",
+  middle_name: "<MIDDLE_NAME>",
+  last_name: "<LAST_NAME>"
+}
+
 try {
-  const response = await zeroBounce.guessFormat(payload);
+  const domainResponse = await zeroBounce.findEmailByDomain(domainPayload);
+  const companyNameResponse = await zeroBounce.findEmailByCompanyName(companyNamePayload);
+} catch (error) {
+  console.error(error);
+}
+```
+
+- ####### Domain Search - Find the domain based on a given domain name or company name
+
+```javascript
+// Parameters
+// ----------
+// domain: String
+//     The domain name for which to find the email format. 
+// company_name: String
+//     The company name for which to find the email format.
+
+const domainPayload = {
+  domain: "<DOMAIN>"
+}
+
+const companyNamePayload = {
+  company_name: "<COMPANY_NAME>"
+}
+
+try {
+  const domainResponse = await zeroBounce.findEmailFormatByDomain(domainPayload);
+  const companyNameResponse = await zeroBounce.findEmailFormatByCompanyName(companyNamePayload);
 } catch (error) {
   console.error(error);
 }

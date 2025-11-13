@@ -1,19 +1,28 @@
 import { createRequest, notInitialized, parameterIsMissing } from "./utils.js";
 
 export class ZeroBounceSDK {
+  static ApiURL = Object.freeze({
+    DEFAULT_API_URL: "https://api.zerobounce.net/v2",
+    USA_API_URL: "https://api-us.zerobounce.net/v2",
+    EU_API_URL: "https://api-eu.zerobounce.net/v2"
+  });
+
   constructor() {
     this._initialized = false;
     this._api_key = null;
+    this._api_base_url = ZeroBounceSDK.ApiURL.DEFAULT_API_URL;
   }
 
   /**
    * @param apiKey - your private API key
+   * @param apiBaseURL - your preferred API, possible values being ApiURL.DEFAULT_API_URL, ApiURL.USAAPIURL, ApiURL.EUAPIURL
    * */
-  init(apiKey) {
+  init(apiKey, apiBaseURL = ZeroBounceSDK.ApiURL.DEFAULT_API_URL) {
     if (!apiKey) {
       parameterIsMissing("Api key", "Please provide a valid API key.");
     } else {
       this._api_key = apiKey;
+      this._api_base_url = apiBaseURL;
       this._initialized = true;
     }
   }
@@ -26,7 +35,7 @@ export class ZeroBounceSDK {
     const params = {
       api_key: this._api_key,
     };
-    return createRequest({ requestType: "GET", params, path: "/getcredits" });
+    return createRequest({ requestType: "GET", params, path: "/getcredits", apiBaseURL: this._api_base_url });
   }
 
   /**
@@ -46,7 +55,7 @@ export class ZeroBounceSDK {
       email: email,
       ip_address,
     };
-    return createRequest({ requestType: "GET", params, path: "/validate" });
+    return createRequest({ requestType: "GET", params, path: "/validate", apiBaseURL: this._api_base_url });
   }
 
   /**
@@ -73,7 +82,8 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "GET",
       params,
-      path: "/getapiusage",
+      path: "/getapiusage", 
+      apiBaseURL: this._api_base_url
     });
   }
 
@@ -98,7 +108,8 @@ export class ZeroBounceSDK {
       requestType: "POST",
       path: "/validatebatch",
       body: JSON.stringify(body),
-      batch: true,
+      batch: true, 
+      apiBaseURL: this._api_base_url
     });
   }
 
@@ -120,7 +131,8 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "GET",
       params,
-      path: "/activity",
+      path: "/activity", 
+      apiBaseURL: this._api_base_url
     });
   }
 
@@ -184,7 +196,8 @@ export class ZeroBounceSDK {
       requestType: "POST",
       path: "/sendfile",
       body,
-      batch: true,
+      batch: true, 
+      apiBaseURL: this._api_base_url
     });
   }
 
@@ -229,7 +242,8 @@ export class ZeroBounceSDK {
       requestType: "POST",
       path: "/scoring/sendfile",
       body,
-      batch: true,
+      batch: true, 
+      apiBaseURL: this._api_base_url
     });
   }
 
@@ -251,6 +265,7 @@ export class ZeroBounceSDK {
       params,
       path,
       batch: true,
+      apiBaseURL: this._api_base_url
     });
   }
 
@@ -286,7 +301,8 @@ export class ZeroBounceSDK {
       path,
       batch: true,
       returnText: true,
-      scoring,
+      scoring, 
+      apiBaseURL: this._api_base_url
     });
   }
 
@@ -321,7 +337,8 @@ export class ZeroBounceSDK {
       params,
       path,
       batch: true,
-      scoring,
+      scoring, 
+      apiBaseURL: this._api_base_url
     });
   }
 
@@ -343,6 +360,144 @@ export class ZeroBounceSDK {
 
   /**
    * @param domain str - domain of the email address
+   * @param first_name str - first name
+   * @param middle_name str or null - middle name
+   * @param last_name str or null - last name
+   * */
+  findEmailByDomain({
+    domain, 
+    first_name, 
+    middle_name = null, 
+    last_name = null
+  }) {
+    return this._findEmail({
+      domain: domain,
+      first_name: first_name,
+      middle_name: middle_name,
+      last_name: last_name
+    });
+  }
+
+  /**
+   * @param company_name str - company name of the email address
+   * @param first_name str - first name
+   * @param middle_name str or null - middle name
+   * @param last_name str or null - last name
+   * */
+  findEmailByCompanyName({
+    company_name, 
+    first_name, 
+    middle_name = null, 
+    last_name = null
+  }) {
+    return this._findEmail({
+      company_name: company_name,
+      first_name: first_name,
+      middle_name: middle_name,
+      last_name: last_name
+    });
+  }
+
+  _findEmail({
+    domain = null,
+    company_name = null,
+    first_name,
+    middle_name = null,
+    last_name = null
+  }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!domain && !company_name) {
+      parameterIsMissing("domain");
+      parameterIsMissing("company_name");
+      return;
+    } else if (!first_name) {
+      parameterIsMissing("first_name");
+      return;
+    }
+
+    const params = {
+      api_key: this._api_key,
+      first_name: first_name,
+      middle_name: middle_name,
+      last_name: last_name,
+    };
+
+    if (domain != null) {
+      params["domain"] = domain;
+    } else if (company_name != null) {
+      params["company_name"] = company_name;
+    }
+
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/guessformat", 
+      apiBaseURL: this._api_base_url
+    });
+  }
+
+
+  // DOMAIN SEARCH
+
+  /**
+   * @param domain str - domain name
+   * */
+  findEmailFormatByDomain({
+    domain
+  }) {
+    return this._findEmailFormat({
+      domain: domain
+    });
+  }
+
+  /**
+   * @param company_name str - company name
+   * */
+  findEmailFormatByCompanyName({
+    company_name
+  }) {
+    return this._findEmailFormat({
+      company_name: company_name
+    });
+  }
+
+  _findEmailFormat({
+    domain = null,
+    company_name = null
+  }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!domain && !company_name) {
+      parameterIsMissing("domain");
+      parameterIsMissing("company_name");
+      return;
+    }
+
+    const params = {
+      api_key: this._api_key
+    };
+
+    if (domain != null) {
+      params["domain"] = domain;
+    } else if (company_name != null) {
+      params["company_name"] = company_name;
+    }
+
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/guessformat", 
+      apiBaseURL: this._api_base_url
+    });
+  }
+
+
+  /**
+   * @deprecated Use findEmail for Email Finder API, or findEmailFormat for Domain Search API.
+   * @param domain str - domain of the email address
    * @param first_name str or null - first name
    * @param middle_name str or null - middle name
    * @param last_name str or null - last name
@@ -353,6 +508,7 @@ export class ZeroBounceSDK {
     middle_name = null, 
     last_name = null
   }) {
+    console.warn("guessFormat() is deprecated. Use findEmail for Email Finder API, or findEmailFormat for Domain Search API.");
     if (!this._initialized) {
       notInitialized();
       return;
@@ -372,7 +528,8 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "GET",
       params,
-      path: "/guessformat",
+      path: "/guessformat", 
+      apiBaseURL: this._api_base_url
     });
   }
 }
