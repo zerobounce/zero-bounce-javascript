@@ -199,6 +199,84 @@ describe("ZeroBounceSDK", () => {
       const response = await zeroBounceSDK.validateEmail(email, ip_address);
       expect(response).toEqual(expectedResponse);
     });
+
+    it("should pass options object to the API", async () => {
+      const expectedResponse = {
+        "address": "valid@example.com",
+        "status": "valid",
+        "sub_status": "",
+        "free_email": false,
+        "did_you_mean": null,
+        "account": null,
+        "domain": null,
+        "domain_age_days": "9692",
+        "smtp_provider": "example",
+        "mx_found": "true",
+        "mx_record": "mx.example.com",
+        "firstname": "zero",
+        "lastname": "bounce",
+        "gender": "male",
+        "country": null,
+        "region": null,
+        "city": null,
+        "zipcode": null,
+        "processed_at": "2023-04-27 13:47:23.980"
+      }
+
+      const fetchSpy = jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.validateEmail(email, { ip_address: ip_address, timeout: 10 });
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining("ip_address=127.0.0.1"),
+        expect.any(Object)
+      );
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining("timeout=10"),
+        expect.any(Object)
+      );
+    });
+
+    it("should pass timeout only via options object", async () => {
+      const expectedResponse = {
+        "address": "valid@example.com",
+        "status": "valid",
+        "sub_status": "",
+      }
+
+      const fetchSpy = jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.validateEmail(email, { timeout: 30 });
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining("timeout=30"),
+        expect.any(Object)
+      );
+    });
+
+    it("should throw an error if timeout is less than 3", async () => {
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.validateEmail(email, { timeout: 2 });
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining("timeout parameter is invalid")
+      );
+    });
+
+    it("should throw an error if timeout is greater than 60", async () => {
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.validateEmail(email, { timeout: 61 });
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining("timeout parameter is invalid")
+      );
+    });
   });
 
 

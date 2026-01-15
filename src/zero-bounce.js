@@ -1,4 +1,4 @@
-import { createRequest, notInitialized, parameterIsMissing } from "./utils.js";
+import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid } from "./utils.js";
 
 export class ZeroBounceSDK {
   static ApiURL = Object.freeze({
@@ -40,9 +40,11 @@ export class ZeroBounceSDK {
 
   /**
    * @param email - email to be validated
-   * @param ip_address
+   * @param options - options object or ip_address string for backwards compatibility
+   * @param options.ip_address - IP address (optional)
+   * @param options.timeout - validation timeout in seconds, 3-60 (optional). If met, the API will return unknown/greylisted.
    * */
-  validateEmail(email, ip_address = null) {
+  validateEmail(email, options = null) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -50,11 +52,28 @@ export class ZeroBounceSDK {
       parameterIsMissing("Email");
       return;
     }
+
+    let ip_address;
+    let timeout;
+    if (typeof options === "string") {
+      ip_address = options;
+    } else if (options && typeof options === "object") {
+      ip_address = options.ip_address;
+      timeout = options.timeout;
+    }
+
+    if (timeout != null && (timeout < 3 || timeout > 60)) {
+      parameterIsInvalid("timeout", "Must be between 3 and 60 seconds.");
+      return;
+    }
+
     const params = {
       api_key: this._api_key,
-      email: email,
-      ip_address,
+      email,
     };
+    if (ip_address != null) params.ip_address = ip_address;
+    if (timeout != null) params.timeout = timeout;
+
     return createRequest({ requestType: "GET", params, path: "/validate", apiBaseURL: this._api_base_url });
   }
 

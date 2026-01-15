@@ -57,13 +57,19 @@ try {
 
 ```javascript
 const email = "<EMAIL_ADDRESS>"; // The email address you want to validate
-const ip_address = "127.0.0.1"; // The IP Address the email signed up from (Optional)
 
+// Using options object (recommended)
 try {
-  const response = await zeroBounce.validateEmail(email, ip_address);
+  const response = await zeroBounce.validateEmail(email, {
+    ip_address: "127.0.0.1", // The IP Address the email signed up from (Optional)
+    timeout: 10, // Validation timeout in seconds, 3-60 (Optional)
+  });
 } catch (error) {
   console.error(error);
 }
+
+// Legacy syntax (still supported for backwards compatibility)
+// const response = await zeroBounce.validateEmail(email, "127.0.0.1");
 ```
 
 - ####### Get api usage from a start date to an end date
