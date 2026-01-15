@@ -74,3 +74,9 @@ export function parameterIsMissing(parameter, aditionalInfo = "") {
     `ZeroBounce: ${parameter} parameter is missing. ${aditionalInfo}`
   );
 }
+
+export function parameterIsInvalid(parameter, aditionalInfo = "") {
+  console.error(
+    `ZeroBounce: ${parameter} parameter is invalid. ${aditionalInfo}`
+  );
+}
