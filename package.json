@@ -4,6 +4,11 @@
   "description": "This SDK contains methods for interacting easily with ZeroBounce API. More information about ZeroBounce you can find in the official documentation.",
   "main": "dist/zeroBounceSDK.js",
   "types": "zeroBounceSDK.d.ts",
+  "files": [
+    "dist",
+    "zeroBounceSDK.d.ts",
+    "README.md"
+  ],
   "scripts": {
     "test": "jest && npm run test:types",
     "test:unit": "jest",

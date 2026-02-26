@@ -247,17 +247,19 @@ export class ZeroBounceSDK {
 
   /**
    * Download result file for a completed validation.
+   * In browser may trigger download and return filename; otherwise returns JSON on error.
    * @param fileId - ID of the submitted file
    */
-  getFile(fileId: string): Promise<Blob | Record<string, unknown> | undefined>;
+  getFile(fileId: string): Promise<string | Blob | Record<string, unknown> | undefined>;
 
   /**
    * Download result file for a completed scoring job.
+   * In browser may trigger download and return filename; otherwise returns JSON on error.
    * @param fileId - ID of the submitted file
    */
   getScoringFile(
     fileId: string
-  ): Promise<Blob | Record<string, unknown> | undefined>;
+  ): Promise<string | Blob | Record<string, unknown> | undefined>;
 
   /**
    * Delete a submitted validation file.

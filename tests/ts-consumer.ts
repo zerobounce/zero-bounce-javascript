@@ -87,10 +87,10 @@ const fileStatusPromise: Promise<Record<string, unknown> | undefined> =
 const scoringFileStatusPromise: Promise<Record<string, unknown> | undefined> =
   zb.getScoringFileStatus("file-id");
 
-const getFilePromise: Promise<Blob | Record<string, unknown> | undefined> =
+const getFilePromise: Promise<string | Blob | Record<string, unknown> | undefined> =
   zb.getFile("file-id");
 const getScoringFilePromise: Promise<
-  Blob | Record<string, unknown> | undefined
+  string | Blob | Record<string, unknown> | undefined
 > = zb.getScoringFile("file-id");
 
 const deleteFilePromise: Promise<Record<string, unknown> | undefined> =

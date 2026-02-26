@@ -1,4 +1,4 @@
-[ZeroBounce](https://www.zerobounce.net>) JavaScript API v2
+[ZeroBounce](https://www.zerobounce.net) JavaScript API v2
 
 ## WE DO NOT RECOMMEND USING THIS SDK ON A FRONT-END ENVIRONMENT AS THE API KEY WILL BE VISIBLE
 
