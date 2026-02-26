@@ -10,6 +10,14 @@ This is a JavaScript wrapper class for the ZeroBounce API v2.
 npm install @zerobounce/zero-bounce-sdk
 ```
 
+## Testing
+
+- **`npm test`** — Runs unit tests (Jest) and TypeScript type checks.
+- **`npm run test:unit`** — Unit tests only.
+- **`npm run test:types`** — Type-checks the declaration file and a TypeScript consumer.
+- **`npm run dts-check`** — Validates `zeroBounceSDK.d.ts`.
+- **`npm run build && npm run test:smoke`** — Builds the bundle and runs a smoke test against `dist/`.
+
 ## TypeScript
 
 The package includes TypeScript declaration files. You can use it in TypeScript or JavaScript with full IntelliSense and type checking:

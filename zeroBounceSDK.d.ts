@@ -206,12 +206,12 @@ export class ZeroBounceSDK {
    * Submit file data (File, Blob, or stream) for bulk validation.
    * @param fileStreamOrBlob - File, Blob, or buffer
    * @param fileName - Name for the upload (e.g. "emails.csv")
-   * @param options - Same options as sendFile (email_address_column, etc.)
+   * @param options - Same options as sendFile (email_address_column, etc.); optional (defaults applied when omitted).
    */
   sendFileStream(
     fileStreamOrBlob: File | Blob,
     fileName: string,
-    options: SendFileStreamOptions
+    options?: SendFileStreamOptions
   ): Promise<Record<string, unknown> | undefined>;
 
   /**
@@ -223,11 +223,12 @@ export class ZeroBounceSDK {
 
   /**
    * Submit file data for bulk scoring.
+   * @param options - Optional; defaults applied when omitted.
    */
   sendScoringFileStream(
     fileStreamOrBlob: File | Blob,
     fileName: string,
-    options: SendScoringFileStreamOptions
+    options?: SendScoringFileStreamOptions
   ): Promise<Record<string, unknown> | undefined>;
 
   /**

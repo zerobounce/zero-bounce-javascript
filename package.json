@@ -5,10 +5,14 @@
   "main": "dist/zeroBounceSDK.js",
   "types": "zeroBounceSDK.d.ts",
   "scripts": {
-    "test": "jest",
+    "test": "jest && npm run test:types",
+    "test:unit": "jest",
+    "test:smoke": "node tests/smoke-dist.js",
     "test:coverage": "jest --coverage",
     "build": "webpack --mode=production",
-    "dts-check": "tsc --noEmit"
+    "prepublishOnly": "npm run build",
+    "dts-check": "tsc --noEmit",
+    "test:types": "tsc --noEmit -p tsconfig.test.json"
   },
   "repository": {
     "type": "git",
