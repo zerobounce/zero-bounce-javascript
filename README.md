@@ -10,6 +10,27 @@ This is a JavaScript wrapper class for the ZeroBounce API v2.
 npm install @zerobounce/zero-bounce-sdk
 ```
 
+## TypeScript
+
+The package includes TypeScript declaration files. You can use it in TypeScript or JavaScript with full IntelliSense and type checking:
+
+```typescript
+import ZeroBounceSDK from '@zerobounce/zero-bounce-sdk';
+import type { ValidateEmailOptions, ValidateBatchEmailItem } from '@zerobounce/zero-bounce-sdk';
+
+const zeroBounce = new ZeroBounceSDK();
+zeroBounce.init(process.env.ZEROBOUNCE_API_KEY!);
+
+// Typed options
+const opts: ValidateEmailOptions = { ip_address: '127.0.0.1', timeout: 10 };
+const result = await zeroBounce.validateEmail('user@example.com', opts);
+
+// Status constants
+if (result?.status === ZeroBounceSDK.ZBValidateStatus.VALID) {
+  // ...
+}
+```
+
 ## USAGE
 
 Add the script
