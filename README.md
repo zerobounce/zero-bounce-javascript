@@ -10,6 +10,16 @@ This is a JavaScript wrapper class for the ZeroBounce API v2.
 npm install @zerobounce/zero-bounce-sdk
 ```
 
+## Node.js
+
+The SDK uses the global `fetch` API for HTTP requests. **Node.js 18 or later** is required when running in Node; older versions do not provide `fetch` and will throw (e.g. `TypeError: fetch failed` or `fetch is not defined`). If you must use Node 16 or older, polyfill `fetch` before using the SDK, for example:
+
+```javascript
+global.fetch = require('node-fetch');
+const ZeroBounceSDK = require('@zerobounce/zero-bounce-sdk');
+// ...
+```
+
 ## Testing
 
 - **`npm test`** — Runs unit tests (Jest) and TypeScript type checks.

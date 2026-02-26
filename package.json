@@ -4,6 +4,14 @@
   "description": "This SDK contains methods for interacting easily with ZeroBounce API. More information about ZeroBounce you can find in the official documentation.",
   "main": "dist/zeroBounceSDK.js",
   "types": "zeroBounceSDK.d.ts",
+  "exports": {
+    ".": {
+      "types": "./zeroBounceSDK.d.ts",
+      "import": "./dist/zeroBounceSDK.js",
+      "require": "./dist/zeroBounceSDK.js",
+      "default": "./dist/zeroBounceSDK.js"
+    }
+  },
   "files": [
     "dist",
     "zeroBounceSDK.d.ts",
