@@ -355,6 +355,15 @@ try {
 
 ## Development
 
+### Run tests with Docker
+From the **parent repository root** (the folder that contains all SDKs and `docker-compose.yml`):
+
+```bash
+docker compose build javascript
+docker compose run --rm javascript
+```
+
+### Run tests (local)
 After checking out the repo run tests
 
 ```bash

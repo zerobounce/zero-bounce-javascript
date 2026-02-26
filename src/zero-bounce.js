@@ -1,11 +1,71 @@
 import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid } from "./utils.js";
 
+/**
+ * Validation status values returned by the API (validate, validateBatch).
+ * Use for comparison: response.status === ZeroBounceSDK.ZBValidateStatus.VALID
+ * Unknown/future API values are not listed; compare against response.status as string.
+ */
+export const ZBValidateStatus = Object.freeze({
+  NONE: "",
+  VALID: "valid",
+  INVALID: "invalid",
+  CATCH_ALL: "catch-all",
+  UNKNOWN: "unknown",
+  SPAMTRAP: "spamtrap",
+  ABUSE: "abuse",
+  DO_NOT_MAIL: "do_not_mail"
+});
+
+/**
+ * Validation sub-status values returned by the API (validate, validateBatch).
+ * Use for comparison: response.sub_status === ZeroBounceSDK.ZBValidateSubStatus.ACCEPT_ALL
+ * Unknown/future API values are not listed; compare against response.sub_status as string.
+ */
+export const ZBValidateSubStatus = Object.freeze({
+  NONE: "",
+  ANTISPAM_SYSTEM: "antispam_system",
+  GREYLISTED: "greylisted",
+  MAIL_SERVER_TEMPORARY_ERROR: "mail_server_temporary_error",
+  FORCIBLE_DISCONNECT: "forcible_disconnect",
+  MAIL_SERVER_DID_NOT_RESPOND: "mail_server_did_not_respond",
+  TIMEOUT_EXCEEDED: "timeout_exceeded",
+  FAILED_SMTP_CONNECTION: "failed_smtp_connection",
+  MAILBOX_QUOTA_EXCEEDED: "mailbox_quota_exceeded",
+  EXCEPTION_OCCURRED: "exception_occurred",
+  POSSIBLE_TRAP: "possible_trap",
+  ROLE_BASED: "role_based",
+  GLOBAL_SUPPRESSION: "global_suppression",
+  MAILBOX_NOT_FOUND: "mailbox_not_found",
+  NO_DNS_ENTRIES: "no_dns_entries",
+  FAILED_SYNTAX_CHECK: "failed_syntax_check",
+  POSSIBLE_TYPO: "possible_typo",
+  UNROUTABLE_IP_ADDRESS: "unroutable_ip_address",
+  LEADING_PERIOD_REMOVED: "leading_period_removed",
+  DOES_NOT_ACCEPT_MAIL: "does_not_accept_mail",
+  ALIAS_ADDRESS: "alias_address",
+  ROLE_BASED_CATCH_ALL: "role_based_catch_all",
+  DISPOSABLE: "disposable",
+  TOXIC: "toxic",
+  ALTERNATE: "alternate",
+  MX_FORWARD: "mx_forward",
+  BLOCKED: "blocked",
+  ALLOWED: "allowed",
+  ACCEPT_ALL: "accept_all",
+  ROLE_BASED_ACCEPT_ALL: "role_based_accept_all",
+  GOLD: "gold"
+});
+
 export class ZeroBounceSDK {
   static ApiURL = Object.freeze({
     DEFAULT_API_URL: "https://api.zerobounce.net/v2",
     USA_API_URL: "https://api-us.zerobounce.net/v2",
     EU_API_URL: "https://api-eu.zerobounce.net/v2"
   });
+
+  /** @deprecated Use top-level ZBValidateStatus for consistency */
+  static ZBValidateStatus = ZBValidateStatus;
+  /** @deprecated Use top-level ZBValidateSubStatus for consistency */
+  static ZBValidateSubStatus = ZBValidateSubStatus;
 
   constructor() {
     this._initialized = false;
@@ -221,6 +281,57 @@ export class ZeroBounceSDK {
   }
 
   /**
+   * Send a file for bulk email validation from a stream or Blob (e.g. in-memory CSV).
+   * @param fileStreamOrBlob: File|Blob - The file data (File, Blob, or in Node a stream/buffer).
+   * @param fileName: string - The file name to use for the upload (e.g. "emails.csv").
+   * @param options: object - Same options as sendFile (email_address_column, return_url, etc.).
+   * */
+  sendFileStream(fileStreamOrBlob, fileName, {
+    email_address_column,
+    first_name_column = false,
+    return_url = false,
+    last_name_column = false,
+    gender_column = false,
+    ip_address_column = false,
+    has_header_row = false,
+    remove_duplicate = false,
+  } = {}) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!fileStreamOrBlob) {
+      parameterIsMissing("fileStreamOrBlob");
+      return;
+    } else if (!fileName) {
+      parameterIsMissing("fileName");
+      return;
+    } else if (!email_address_column) {
+      parameterIsMissing("email_address_column");
+      return;
+    }
+
+    const body = new FormData();
+    if (return_url) body.append("return_url", return_url);
+    if (first_name_column) body.append("first_name_column", first_name_column);
+    if (last_name_column) body.append("last_name_column", last_name_column);
+    if (gender_column) body.append("gender_column", gender_column);
+    if (ip_address_column) body.append("ip_address_column", ip_address_column);
+    body.append("email_address_column", email_address_column);
+    body.append("file", fileStreamOrBlob, fileName);
+    body.append("has_header_row", has_header_row);
+    body.append("remove_duplicate", remove_duplicate);
+    body.append("api_key", this._api_key);
+
+    return createRequest({
+      requestType: "POST",
+      path: "/sendfile",
+      body,
+      batch: true,
+      apiBaseURL: this._api_base_url
+    });
+  }
+
+  /**
    * @param file: File - The csv or txt file to be submitted.
    * @param email_address_column: number - The column index of the email address in the file. Index starts from 1.
    * @param return_url: str or null - The URL will be used to call back when the validation is completed.
@@ -262,6 +373,49 @@ export class ZeroBounceSDK {
       path: "/scoring/sendfile",
       body,
       batch: true, 
+      apiBaseURL: this._api_base_url
+    });
+  }
+
+  /**
+   * Send a file for bulk email scoring from a stream or Blob.
+   * @param fileStreamOrBlob: File|Blob
+   * @param fileName: string - e.g. "emails.csv"
+   * @param options: object - email_address_column, return_url, has_header_row, remove_duplicate
+   * */
+  sendScoringFileStream(fileStreamOrBlob, fileName, {
+    email_address_column,
+    return_url = false,
+    has_header_row = false,
+    remove_duplicate = false,
+  } = {}) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!fileStreamOrBlob) {
+      parameterIsMissing("fileStreamOrBlob");
+      return;
+    } else if (!fileName) {
+      parameterIsMissing("fileName");
+      return;
+    } else if (!email_address_column) {
+      parameterIsMissing("email_address_column");
+      return;
+    }
+
+    const body = new FormData();
+    if (return_url) body.append("return_url", return_url);
+    body.append("file", fileStreamOrBlob, fileName);
+    body.append("email_address_column", email_address_column);
+    body.append("has_header_row", has_header_row);
+    body.append("api_key", this._api_key);
+    body.append("remove_duplicate", remove_duplicate);
+
+    return createRequest({
+      requestType: "POST",
+      path: "/scoring/sendfile",
+      body,
+      batch: true,
       apiBaseURL: this._api_base_url
     });
   }
