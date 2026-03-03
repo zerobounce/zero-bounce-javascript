@@ -37,6 +37,9 @@
     "url": "https://github.com/zerobounce/zero-bounce-javascript/issues"
   },
   "homepage": "https://github.com/zerobounce/zero-bounce-javascript#readme",
+  "overrides": {
+    "serialize-javascript": "^7.0.3"
+  },
   "devDependencies": {
     "@babel/core": "^7.21.4",
     "@babel/preset-env": "^7.21.4",
