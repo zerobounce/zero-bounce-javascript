@@ -1,6 +1,6 @@
 {
   "name": "@zerobounce/zero-bounce-sdk",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "description": "This SDK contains methods for interacting easily with ZeroBounce API. More information about ZeroBounce you can find in the official documentation.",
   "main": "dist/zeroBounceSDK.js",
   "types": "zeroBounceSDK.d.ts",
