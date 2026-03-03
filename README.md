@@ -418,3 +418,7 @@ Snapshots:   0 total
 Time:        2.596 s, estimated 3 s
 Ran all test suites.
 ```
+
+## Publish
+
+See the [sdk-docs (npm)](../sdk-docs/npm/) guide in the SDKs repo for build and `npm publish` steps.
