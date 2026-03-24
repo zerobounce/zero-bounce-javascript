@@ -11,8 +11,6 @@ updates:
       interval: "weekly"
       day: "monday"
     target-branch: "main"
-    labels:
-      - "npm dependencies"
     groups:
       npm:
         applies-to: version-updates
@@ -26,8 +24,6 @@ updates:
       interval: "weekly"
       day: "monday"
     target-branch: "main"
-    labels:
-      - "github dependencies"
     groups:
       github:
         applies-to: version-updates
