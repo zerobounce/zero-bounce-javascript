@@ -63,6 +63,21 @@ export interface ValidateBatchEmailItem {
   email_address: string;
 }
 
+/** Bulk `getfile` query values for `download_type` (validation and scoring). */
+export type ZBDownloadTypeValues = Readonly<{
+  PHASE_1: "phase_1";
+  PHASE_2: "phase_2";
+  COMBINED: "combined";
+}>;
+
+/** Optional query parameters for bulk `getfile`. */
+export interface GetFileOptions {
+  /** Maps to `download_type` (e.g. `ZeroBounceSDK.ZBDownloadType.COMBINED`). */
+  downloadType?: string;
+  /** Maps to `activity_data`; validation `getFile` only — omitted for `getScoringFile`. */
+  activityData?: boolean;
+}
+
 /** Options for sendFile. */
 export interface SendFileOptions {
   /** The CSV or TXT file to submit. */
@@ -83,6 +98,11 @@ export interface SendFileOptions {
   has_header_row?: boolean;
   /** Whether to remove duplicate emails. */
   remove_duplicate?: boolean;
+  /**
+   * When set, sends `allow_phase_2` (validation bulk only).
+   * See [v2 send file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-send-file).
+   */
+  allowPhase2?: boolean | null;
 }
 
 /** Options for sendFileStream. */
@@ -95,6 +115,7 @@ export interface SendFileStreamOptions {
   ip_address_column?: number | false;
   has_header_row?: boolean;
   remove_duplicate?: boolean;
+  allowPhase2?: boolean | null;
 }
 
 /** Options for sendScoringFile. */
@@ -150,6 +171,9 @@ export class ZeroBounceSDK {
   static ZBValidateStatus: ZBValidateStatusType;
   /** Validation sub-status values returned by the API (validate, validateBatch). */
   static ZBValidateSubStatus: ZBValidateSubStatusType;
+
+  /** Bulk `getfile` `download_type` query values (`phase_1`, `phase_2`, `combined`). */
+  static ZBDownloadType: ZBDownloadTypeValues;
 
   /**
    * Initialize the SDK with your API key and optional base URL.
@@ -247,18 +271,24 @@ export class ZeroBounceSDK {
 
   /**
    * Download result file for a completed validation.
-   * In browser may trigger download and return filename; otherwise returns JSON on error.
+   * In the browser may trigger a download and return the filename; on API error (including JSON with HTTP 200) returns a parsed object.
    * @param fileId - ID of the submitted file
+   * @param options - Optional `downloadType` and `activityData` (see v2 get file API).
    */
-  getFile(fileId: string): Promise<string | Blob | Record<string, unknown> | undefined>;
+  getFile(
+    fileId: string,
+    options?: GetFileOptions | null
+  ): Promise<string | Blob | Record<string, unknown> | undefined>;
 
   /**
    * Download result file for a completed scoring job.
-   * In browser may trigger download and return filename; otherwise returns JSON on error.
+   * `activityData` in options is not sent to the API.
    * @param fileId - ID of the submitted file
+   * @param options - Optional `downloadType` only.
    */
   getScoringFile(
-    fileId: string
+    fileId: string,
+    options?: GetFileOptions | null
   ): Promise<string | Blob | Record<string, unknown> | undefined>;
 
   /**

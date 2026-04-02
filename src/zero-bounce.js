@@ -55,6 +55,16 @@ export const ZBValidateSubStatus = Object.freeze({
   GOLD: "gold"
 });
 
+/**
+ * Bulk {@code getfile} query parameter {@code download_type} (validation and scoring).
+ * Use: {@code response.download_type === ZeroBounceSDK.ZBDownloadType.PHASE_1}
+ */
+export const ZBDownloadType = Object.freeze({
+  PHASE_1: "phase_1",
+  PHASE_2: "phase_2",
+  COMBINED: "combined"
+});
+
 export class ZeroBounceSDK {
   static ApiURL = Object.freeze({
     DEFAULT_API_URL: "https://api.zerobounce.net/v2",
@@ -66,6 +76,8 @@ export class ZeroBounceSDK {
   static ZBValidateStatus = ZBValidateStatus;
   /** @deprecated Use top-level ZBValidateSubStatus for consistency */
   static ZBValidateSubStatus = ZBValidateSubStatus;
+
+  static ZBDownloadType = ZBDownloadType;
 
   constructor() {
     this._initialized = false;
@@ -225,6 +237,7 @@ export class ZeroBounceSDK {
    * @param ip_address_column: number or null - The IP Address the email signed up from.
    * @param has_header_row: Boolean - If the first row from the submitted file is a header row.
    * @param remove_duplicate: Boolean - If you want the system to remove duplicate emails.
+   * @param allowPhase2: Boolean|null - Optional. When set, sends {@code allow_phase_2} (validation bulk only; see v2 send file API).
    * */
   sendFile({
     file,
@@ -236,6 +249,7 @@ export class ZeroBounceSDK {
     ip_address_column = false,
     has_header_row = false,
     remove_duplicate = false,
+    allowPhase2 = null,
   }) {
     if (!this._initialized) {
       notInitialized();
@@ -270,6 +284,9 @@ export class ZeroBounceSDK {
     body.append("has_header_row", has_header_row);
     body.append("remove_duplicate", remove_duplicate);
     body.append("api_key", this._api_key);
+    if (allowPhase2 != null) {
+      body.append("allow_phase_2", String(allowPhase2));
+    }
 
     return createRequest({
       requestType: "POST",
@@ -295,6 +312,7 @@ export class ZeroBounceSDK {
     ip_address_column = false,
     has_header_row = false,
     remove_duplicate = false,
+    allowPhase2 = null,
   } = {}) {
     if (!this._initialized) {
       notInitialized();
@@ -321,6 +339,9 @@ export class ZeroBounceSDK {
     body.append("has_header_row", has_header_row);
     body.append("remove_duplicate", remove_duplicate);
     body.append("api_key", this._api_key);
+    if (allowPhase2 != null) {
+      body.append("allow_phase_2", String(allowPhase2));
+    }
 
     return createRequest({
       requestType: "POST",
@@ -456,7 +477,7 @@ export class ZeroBounceSDK {
     return this._getStatusUtil(fileId, "/scoring/filestatus");
   }
 
-  _getFileUtil(fileId, path, scoring = false) {
+  _getFileUtil(fileId, path, scoring = false, getFileOptions = null) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -468,6 +489,14 @@ export class ZeroBounceSDK {
       api_key: this._api_key,
       file_id: fileId,
     };
+    if (getFileOptions != null && typeof getFileOptions === "object") {
+      if (getFileOptions.downloadType != null) {
+        params.download_type = getFileOptions.downloadType;
+      }
+      if (!scoring && getFileOptions.activityData != null) {
+        params.activity_data = getFileOptions.activityData ? "true" : "false";
+      }
+    }
     return createRequest({
       requestType: "GET",
       params,
@@ -481,16 +510,18 @@ export class ZeroBounceSDK {
 
   /**
    * @param fileId - the id of a previously submmitted and accepted file
+   * @param getFileOptions - optional {@code downloadType} ({@link ZBDownloadType} values) and {@code activityData} (validation only)
    * */
-  getFile(fileId) {
-    return this._getFileUtil(fileId, "/getfile");
+  getFile(fileId, getFileOptions = null) {
+    return this._getFileUtil(fileId, "/getfile", false, getFileOptions);
   }
 
   /**
    * @param fileId - the id of a previously submmitted and accepted file
+   * @param getFileOptions - optional {@code downloadType}; {@code activityData} is not sent for scoring getfile
    * */
-  getScoringFile(fileId) {
-    return this._getFileUtil(fileId, "/scoring/getfile", true);
+  getScoringFile(fileId, getFileOptions = null) {
+    return this._getFileUtil(fileId, "/scoring/getfile", true, getFileOptions);
   }
 
   _deleteFileUtil(fileId, path, scoring = false) {

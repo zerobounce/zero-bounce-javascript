@@ -6,6 +6,69 @@ export const HEADERS = {
   Connection: "keep-alive",
 };
 
+function nonEmptyStringField(o, key) {
+  const v = o[key];
+  if (v == null) return false;
+  if (typeof v === "string") return v.trim() !== "";
+  if (Array.isArray(v)) {
+    return v.some((item) => typeof item === "string" && item.trim() !== "");
+  }
+  return false;
+}
+
+/**
+ * Whether a parsed JSON object from getfile should be treated as an API error payload
+ * (aligned with other ZeroBounce SDKs).
+ */
+export function getFileJsonIndicatesFailure(o) {
+  if (!o || typeof o !== "object" || Array.isArray(o)) return false;
+  if (Object.prototype.hasOwnProperty.call(o, "success") && o.success != null) {
+    if (o.success === false || o.success === "False" || o.success === "false") {
+      return true;
+    }
+  }
+  return (
+    nonEmptyStringField(o, "message") ||
+    nonEmptyStringField(o, "error") ||
+    nonEmptyStringField(o, "error_message")
+  );
+}
+
+function shouldReturnGetFileAsJsonError(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  if (getFileJsonIndicatesFailure(parsed)) return true;
+  return Object.prototype.hasOwnProperty.call(parsed, "success");
+}
+
+function processGetFileResponseBody(finalResult, response, scoring) {
+  const ct = (response.headers.get("content-type") || "").toLowerCase();
+  const trimmed = finalResult.trim();
+  const looksJson =
+    ct.includes("application/json") || trimmed.startsWith("{") || trimmed.startsWith("[");
+
+  if (looksJson) {
+    try {
+      const parsed = JSON.parse(finalResult);
+      if (shouldReturnGetFileAsJsonError(parsed)) {
+        return parsed;
+      }
+    } catch {
+      /* treat as file body */
+    }
+  }
+
+  if (!response.ok) {
+    try {
+      return JSON.parse(finalResult);
+    } catch {
+      throw new Error(finalResult || `HTTP ${response.status}`);
+    }
+  }
+
+  const blob = new Blob([finalResult], { type: "text/csv" });
+  return saveFile(blob, `result${scoring ? "-scoring" : ""}.csv`);
+}
+
 export async function createRequest({
   requestType,
   body = null,
@@ -28,12 +91,7 @@ export async function createRequest({
     });
     if (returnText) {
       const finalResult = await response.text();
-      if (!finalResult.includes('"success":"False"')) {
-        const blob = new Blob([finalResult], { type: "application/json" });
-        return saveFile(blob, `result${scoring ? "-scoring" : ""}.csv`);
-      } else {
-        return JSON.parse(finalResult);
-      }
+      return processGetFileResponseBody(finalResult, response, scoring);
     }
     if (response.status === 403) {  
       throw new Error('[Error]: api_key is invalid');

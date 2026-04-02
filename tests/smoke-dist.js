@@ -19,6 +19,7 @@ assert(ZeroBounceSDK.ApiURL?.USA_API_URL, "ApiURL.USA_API_URL should exist");
 assert(ZeroBounceSDK.ApiURL?.EU_API_URL, "ApiURL.EU_API_URL should exist");
 assert(ZeroBounceSDK.ZBValidateStatus?.VALID === "valid", "ZBValidateStatus.VALID should be 'valid'");
 assert(ZeroBounceSDK.ZBValidateSubStatus?.GREYLISTED === "greylisted", "ZBValidateSubStatus.GREYLISTED should exist");
+assert(ZeroBounceSDK.ZBDownloadType?.COMBINED === "combined", "ZBDownloadType.COMBINED should be 'combined'");
 
 const zb = new ZeroBounceSDK();
 assert(typeof zb.init === "function", "init should be a function");

@@ -135,6 +135,8 @@ try {
 //     If the first row from the submitted file is a header row.
 // remove_duplicate: Boolean (Optional)
 //     If you want the system to remove duplicate emails.
+// allowPhase2: Boolean (Optional)
+//     When set, sends allow_phase_2 (validation bulk only). See v2 send file API.
 const payload = {
   file: "<FILE>",
   email_address_column: "<NUMBER_OF_COLUMN>", //example 3
@@ -145,6 +147,7 @@ const payload = {
   ip_address_column: "<NUMBER_OF_COLUMN>", //example 3 (Optional)
   has_header_row: true / false, // (Optional)
   remove_duplicate: true / false, // (Optional)
+  allowPhase2: true, // (Optional)
 };
 
 try {
@@ -153,6 +156,10 @@ try {
   console.error(error);
 }
 ```
+
+Bulk validation uses `https://bulkapi.zerobounce.net/v2`. See [v2 send file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-send-file), [v2 file status](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-file-status), and [v2 get file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-get-file).
+
+**Bulk API v2:** `ZeroBounceSDK.ZBDownloadType` provides `PHASE_1`, `PHASE_2`, and `COMBINED` for `getFile` / `getScoringFile`. File status responses may include `file_phase_2_status`. For `getFile`, pass an optional second argument `{ downloadType, activityData }` (validation only for `activityData`; `getScoringFile` does not send `activity_data`). If the API returns a JSON error body with HTTP 200, the SDK returns a parsed object instead of treating the body as CSV.
 
 - ####### Send a csv file containing email addresses to get the scoring of the emails
 
@@ -220,6 +227,15 @@ try {
 }
 ```
 
+Optional query parameters (see v2 get file API):
+
+```javascript
+await zeroBounce.getFile(fileId, {
+  downloadType: ZeroBounceSDK.ZBDownloadType.COMBINED,
+  activityData: true,
+});
+```
+
 - ####### Get the file with the scoring data
 
 ```javascript
@@ -230,6 +246,12 @@ try {
 } catch (error) {
   console.error(error);
 }
+```
+
+```javascript
+await zeroBounce.getScoringFile(fileId, {
+  downloadType: ZeroBounceSDK.ZBDownloadType.PHASE_2,
+});
 ```
 
 - ####### Delete the file with the validated data

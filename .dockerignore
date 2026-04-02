@@ -1,8 +1,21 @@
-node_modules/
-coverage/
-.git/
+.git
 .gitignore
-*.md
+
+node_modules
+coverage
+dist
+
+# IDE & OS
+.idea
+.vscode
+*.log
+.DS_Store
+Thumbs.db
+
+# Env & secrets
 .env
 .env.*
-npm-debug.log*
+
+# Docs not required for tests in the image
+*.md
+!README.md

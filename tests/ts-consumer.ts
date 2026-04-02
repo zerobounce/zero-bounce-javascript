@@ -12,6 +12,7 @@ import ZeroBounceSDK, {
   type SendScoringFileStreamOptions,
   type FindEmailByDomainOptions,
   type FindEmailByCompanyNameOptions,
+  type GetFileOptions,
   type ApiURL,
   type ZBValidateStatusType,
   type ZBValidateSubStatusType,
@@ -26,6 +27,7 @@ const urlEU: ApiURL = ZeroBounceSDK.ApiURL.EU_API_URL;
 const statusValid: string = ZeroBounceSDK.ZBValidateStatus.VALID;
 const statusInvalid: string = ZeroBounceSDK.ZBValidateStatus.INVALID;
 const subStatus: string = ZeroBounceSDK.ZBValidateSubStatus.GREYLISTED;
+const downloadCombined: string = ZeroBounceSDK.ZBDownloadType.COMBINED;
 
 // --- Typed options (compile-time only; no runtime API calls in this file) ---
 const validateOpts: ValidateEmailOptions = {
@@ -89,9 +91,17 @@ const scoringFileStatusPromise: Promise<Record<string, unknown> | undefined> =
 
 const getFilePromise: Promise<string | Blob | Record<string, unknown> | undefined> =
   zb.getFile("file-id");
+const getFileOpts: GetFileOptions = {
+  downloadType: ZeroBounceSDK.ZBDownloadType.COMBINED,
+  activityData: true,
+};
+const getFileWithOptsPromise: Promise<string | Blob | Record<string, unknown> | undefined> =
+  zb.getFile("file-id", getFileOpts);
 const getScoringFilePromise: Promise<
   string | Blob | Record<string, unknown> | undefined
 > = zb.getScoringFile("file-id");
+const getScoringWithOptsPromise: Promise<string | Blob | Record<string, unknown> | undefined> =
+  zb.getScoringFile("file-id", { downloadType: ZeroBounceSDK.ZBDownloadType.PHASE_2 });
 
 const deleteFilePromise: Promise<Record<string, unknown> | undefined> =
   zb.deleteFile("file-id");
@@ -109,6 +119,7 @@ const sendFileOpts: SendFileOptions = {
   return_url: "https://example.com/callback",
   has_header_row: true,
   remove_duplicate: false,
+  allowPhase2: true,
 };
 
 const sendFileStreamOpts: SendFileStreamOptions = {
@@ -148,7 +159,11 @@ function assertTypes(): void {
   void fileStatusPromise;
   void scoringFileStatusPromise;
   void getFilePromise;
+  void getFileWithOptsPromise;
   void getScoringFilePromise;
+  void getScoringWithOptsPromise;
+  void downloadCombined;
+  void getFileOpts;
   void deleteFilePromise;
   void deleteScoringPromise;
   void guessPromise;

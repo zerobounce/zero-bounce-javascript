@@ -23,6 +23,20 @@ describe("ZeroBounceSDK", () => {
     jest.restoreAllMocks();
   });
 
+  describe("getFileJsonIndicatesFailure", () => {
+    it("returns true for boolean success false", () => {
+      expect(utils.getFileJsonIndicatesFailure({ success: false, message: "" })).toBe(true);
+    });
+    it("returns true for string success False", () => {
+      expect(utils.getFileJsonIndicatesFailure({ success: "False", message: "" })).toBe(true);
+    });
+    it("returns true for non-empty message", () => {
+      expect(utils.getFileJsonIndicatesFailure({ success: true, message: "err" })).toBe(true);
+    });
+    it("returns false for unrelated object", () => {
+      expect(utils.getFileJsonIndicatesFailure({ file_id: "x" })).toBe(false);
+    });
+  });
 
   describe("getCredits", () => {
     it("should throw an error if not initialized", async () => {
@@ -480,6 +494,20 @@ describe("ZeroBounceSDK", () => {
       const response = await zeroBounceSDK.sendFile(payload);
       expect(response).toEqual(expectedResponse);
     });
+
+    it("should append allow_phase_2 when allowPhase2 is set", async () => {
+      let capturedBody;
+      jest.spyOn(global, "fetch").mockImplementationOnce((_url, init) => {
+        capturedBody = init.body;
+        return Promise.resolve({
+          json: () => Promise.resolve({ success: true }),
+          text: () => Promise.resolve("{}"),
+        });
+      });
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.sendFile({ ...payload, allowPhase2: true });
+      expect(capturedBody.get("allow_phase_2")).toBe("true");
+    });
   });
 
 
@@ -584,6 +612,7 @@ describe("ZeroBounceSDK", () => {
         "file_name": "email_file.csv",
         "upload_date": "2023-04-21T06:50:18Z",
         "file_status": "Complete",
+        "file_phase_2_status": "N/A",
         "complete_percentage": "100%",
         "error_reason": null,
         "return_url": "Your return URL if provided when calling sendfile API"
@@ -685,6 +714,49 @@ describe("ZeroBounceSDK", () => {
       const response = await zeroBounceSDK.getFile(fileId);
       expect(createRequestSpy.mock.calls[0][0]["returnText"]).toEqual(true);
       expect(response).toEqual(expectedResponse);
+    });
+
+    it("should pass download_type and activity_data for validation getfile", async () => {
+      const createRequestSpy = jest.spyOn(utils, "createRequest").mockImplementationOnce(() =>
+        Promise.resolve("ok")
+      );
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.getFile(fileId, {
+        downloadType: ZeroBounceSDK.ZBDownloadType.COMBINED,
+        activityData: true,
+      });
+      const arg = createRequestSpy.mock.calls[0][0];
+      expect(arg.params.download_type).toBe("combined");
+      expect(arg.params.activity_data).toBe("true");
+    });
+
+    it("should not pass activity_data for scoring getfile", async () => {
+      const createRequestSpy = jest.spyOn(utils, "createRequest").mockImplementationOnce(() =>
+        Promise.resolve("ok")
+      );
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.getScoringFile(fileId, {
+        downloadType: ZeroBounceSDK.ZBDownloadType.PHASE_2,
+        activityData: true,
+      });
+      const arg = createRequestSpy.mock.calls[0][0];
+      expect(arg.params.download_type).toBe("phase_2");
+      expect(arg.params.activity_data).toBeUndefined();
+    });
+
+    it("should return parsed JSON when getfile body is an API error (HTTP 200)", async () => {
+      const errPayload = { success: false, message: "File not ready" };
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => "" },
+          text: () => Promise.resolve(JSON.stringify(errPayload)),
+        })
+      );
+      const response = await zeroBounceSDK.getFile(fileId);
+      expect(response).toEqual(errPayload);
     });
   });
 
