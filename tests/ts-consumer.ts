@@ -16,6 +16,19 @@ import ZeroBounceSDK, {
   type ApiURL,
   type ZBValidateStatusType,
   type ZBValidateSubStatusType,
+  type GetCreditsResponse,
+  type EmailValidationResult,
+  type ValidateBatchResponse,
+  type ApiUsageResponse,
+  type EmailActivityResponse,
+  type SendFileResponse,
+  type ValidationFileStatusResponse,
+  type ScoringFileStatusResponse,
+  type GetFileJsonErrorPayload,
+  type BulkFileDeletedResponse,
+  type EmailFinderResponse,
+  type DomainFormatResponse,
+  type SendScoringFileResponse,
 } from "@zerobounce/zero-bounce-sdk";
 
 // --- Class and static members ---
@@ -57,59 +70,59 @@ const zb: ZeroBounceSDK = new ZeroBounceSDK();
 zb.init("fake-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
 
 // Return types are Promise<...>; we only check they're assignable
-const creditsPromise: Promise<{ Credits?: string } | undefined> = zb.getCredits();
-const validatePromise: Promise<Record<string, unknown> | undefined> =
+const creditsPromise: Promise<GetCreditsResponse | undefined> = zb.getCredits();
+const validatePromise: Promise<EmailValidationResult | undefined> =
   zb.validateEmail("test@example.com");
-const validateWithOpts: Promise<Record<string, unknown> | undefined> =
+const validateWithOpts: Promise<EmailValidationResult | undefined> =
   zb.validateEmail("test@example.com", validateOpts);
-const validateLegacyIp: Promise<Record<string, unknown> | undefined> =
+const validateLegacyIp: Promise<EmailValidationResult | undefined> =
   zb.validateEmail("test@example.com", "127.0.0.1");
 
-const usagePromise: Promise<Record<string, unknown> | undefined> =
+const usagePromise: Promise<ApiUsageResponse | undefined> =
   zb.getApiUsage("2024-01-01", "2024-12-31");
 
-const batchPromise: Promise<Record<string, unknown> | undefined> =
+const batchPromise: Promise<ValidateBatchResponse | undefined> =
   zb.validateBatch(batchItems);
 
-const activityPromise: Promise<Record<string, unknown> | undefined> =
+const activityPromise: Promise<EmailActivityResponse | undefined> =
   zb.getEmailActivity("test@example.com");
 
-const findDomainPromise: Promise<Record<string, unknown> | undefined> =
+const findDomainPromise: Promise<EmailFinderResponse | undefined> =
   zb.findEmailByDomain(findByDomainOpts);
-const findCompanyPromise: Promise<Record<string, unknown> | undefined> =
+const findCompanyPromise: Promise<EmailFinderResponse | undefined> =
   zb.findEmailByCompanyName(findByCompanyOpts);
 
-const formatDomainPromise: Promise<Record<string, unknown> | undefined> =
+const formatDomainPromise: Promise<DomainFormatResponse | undefined> =
   zb.findEmailFormatByDomain({ domain: "example.com" });
-const formatCompanyPromise: Promise<Record<string, unknown> | undefined> =
+const formatCompanyPromise: Promise<DomainFormatResponse | undefined> =
   zb.findEmailFormatByCompanyName({ company_name: "Acme" });
 
-const fileStatusPromise: Promise<Record<string, unknown> | undefined> =
+const fileStatusPromise: Promise<ValidationFileStatusResponse | undefined> =
   zb.getFileStatus("file-id");
-const scoringFileStatusPromise: Promise<Record<string, unknown> | undefined> =
+const scoringFileStatusPromise: Promise<ScoringFileStatusResponse | undefined> =
   zb.getScoringFileStatus("file-id");
 
-const getFilePromise: Promise<string | Blob | Record<string, unknown> | undefined> =
+const getFilePromise: Promise<string | Blob | GetFileJsonErrorPayload | undefined> =
   zb.getFile("file-id");
 const getFileOpts: GetFileOptions = {
   downloadType: ZeroBounceSDK.ZBDownloadType.COMBINED,
   activityData: true,
 };
-const getFileWithOptsPromise: Promise<string | Blob | Record<string, unknown> | undefined> =
+const getFileWithOptsPromise: Promise<string | Blob | GetFileJsonErrorPayload | undefined> =
   zb.getFile("file-id", getFileOpts);
 const getScoringFilePromise: Promise<
-  string | Blob | Record<string, unknown> | undefined
+  string | Blob | GetFileJsonErrorPayload | undefined
 > = zb.getScoringFile("file-id");
-const getScoringWithOptsPromise: Promise<string | Blob | Record<string, unknown> | undefined> =
+const getScoringWithOptsPromise: Promise<string | Blob | GetFileJsonErrorPayload | undefined> =
   zb.getScoringFile("file-id", { downloadType: ZeroBounceSDK.ZBDownloadType.PHASE_2 });
 
-const deleteFilePromise: Promise<Record<string, unknown> | undefined> =
+const deleteFilePromise: Promise<BulkFileDeletedResponse | undefined> =
   zb.deleteFile("file-id");
-const deleteScoringPromise: Promise<Record<string, unknown> | undefined> =
+const deleteScoringPromise: Promise<BulkFileDeletedResponse | undefined> =
   zb.deleteScoringFile("file-id");
 
 // Deprecated still callable
-const guessPromise: Promise<Record<string, unknown> | undefined> =
+const guessPromise: Promise<EmailFinderResponse | DomainFormatResponse | undefined> =
   zb.guessFormat({ domain: "example.com", first_name: "John" });
 
 // Type-only: optional SendFile* options (no File in test env)
@@ -136,8 +149,41 @@ const sendScoringStreamOpts: SendScoringFileStreamOptions = {
   email_address_column: 1,
 };
 
-// Optional third param: sendFileStream / sendScoringFileStream accept 2 args (options omitted)
 const blob = new Blob(["email\nx@y.com"], { type: "text/csv" });
+
+const sendFilePromise: Promise<SendFileResponse | undefined> = zb.sendFile(sendFileOpts);
+const sendFileStreamPromise: Promise<SendFileResponse | undefined> = zb.sendFileStream(
+  blob,
+  "emails.csv",
+  sendFileStreamOpts
+);
+const sendScoringFilePromise: Promise<SendScoringFileResponse | undefined> =
+  zb.sendScoringFile(sendScoringOpts);
+const sendScoringFileStreamPromise: Promise<SendScoringFileResponse | undefined> =
+  zb.sendScoringFileStream(blob, "scoring.csv", sendScoringStreamOpts);
+
+/** Compile-time check: bulk sendfile success vs error discriminant. */
+function assertSendFileDiscriminant(r: SendFileResponse): void {
+  if (r.success === true) {
+    const _id: string = r.file_id;
+    const _name: string = r.file_name;
+    void _id;
+    void _name;
+  } else {
+    const _msg: string | string[] = r.message;
+    void _msg;
+  }
+}
+
+assertSendFileDiscriminant({
+  success: true,
+  message: "File Accepted",
+  file_name: "a.csv",
+  file_id: "id",
+});
+assertSendFileDiscriminant({ success: "False", message: ["api_key is invalid"] });
+
+// Optional third param: sendFileStream / sendScoringFileStream accept 2 args (options omitted)
 zb.sendFileStream(blob, "emails.csv");
 zb.sendFileStream(blob, "emails.csv", sendFileStreamOpts);
 zb.sendScoringFileStream(blob, "scoring.csv");
@@ -171,6 +217,10 @@ function assertTypes(): void {
   void sendFileStreamOpts;
   void sendScoringOpts;
   void sendScoringStreamOpts;
+  void sendFilePromise;
+  void sendFileStreamPromise;
+  void sendScoringFilePromise;
+  void sendScoringFileStreamPromise;
   void blob;
   void SDK;
   void urlDefault;

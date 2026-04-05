@@ -25,7 +25,8 @@
     "build": "webpack --mode=production",
     "prepublishOnly": "npm run build",
     "dts-check": "tsc --noEmit",
-    "test:types": "tsc --noEmit -p tsconfig.test.json"
+    "test:types": "tsc --noEmit -p tsconfig.test.json",
+    "test:real-api": "node tests/real-api-prod.mjs"
   },
   "repository": {
     "type": "git",
