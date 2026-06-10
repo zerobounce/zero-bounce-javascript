@@ -461,8 +461,10 @@ On [npmjs.com](https://www.npmjs.com/package/@zerobounce/zero-bounce-sdk) → **
 | Repository owner | `zerobounce` |
 | Repository | `zero-bounce-javascript` |
 | Workflow file | `publish.yml` |
+| Environment | `release` |
+| Allowed actions | **`npm publish`** |
 
-The workflow uses Node 24, npm 11.5.1+, and OIDC (`id-token: write`).
+The workflow uses Node 24, npm 11.5.1+, OIDC (`id-token: write`), and the GitHub **`release`** environment.
 
 **Option B — granular access token fallback**
 
