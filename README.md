@@ -418,9 +418,10 @@ try {
 ## Development
 
 ### Run tests with Docker
-From the **parent repository root** (the folder that contains all SDKs and `docker-compose.yml`):
+From the **`sdk-docs/`** folder in the SDKs monorepo:
 
 ```bash
+cd sdk-docs
 docker compose build javascript
 docker compose run --rm javascript
 ```
@@ -448,37 +449,7 @@ Ran all test suites.
 
 ## Publish
 
-Publishing to npm uses **GitHub Actions** (same manual tag workflow as Java, C#, iOS, and PHP).
+1. Bump `version` in `package.json`, commit, tag (`vX.Y.Z`), push tag.
+2. **Actions → Publish → Run workflow** with that tag.
 
-### One-time setup (pick one)
-
-**Option A — npm trusted publishing (recommended, no long-lived token)**
-
-On [npmjs.com](https://www.npmjs.com/package/@zerobounce/zero-bounce-sdk) → **Settings → Trusted Publisher** → GitHub Actions:
-
-| Field | Value |
-|-------|--------|
-| Repository owner | `zerobounce` |
-| Repository | `zero-bounce-javascript` |
-| Workflow file | `publish.yml` |
-| Environment | `release` |
-| Allowed actions | **`npm publish`** |
-
-The workflow uses Node 24, npm 11.5.1+, OIDC (`id-token: write`), and the GitHub **`release`** environment.
-
-**Option B — granular access token fallback**
-
-Add repo secret **`NPM_TOKEN`** (Automation or Publish token for `@zerobounce/zero-bounce-sdk`).
-
-### Release steps
-
-1. Bump `"version"` in `package.json` and update `package-lock.json` (`npm install --package-lock-only`).
-2. Commit, tag (`v2.1.5`), and push the tag.
-3. **Actions → Publish → Run workflow** and enter the tag, or:
-   ```bash
-   gh workflow run publish.yml --repo zerobounce/zero-bounce-javascript -f tag=v2.1.5
-   ```
-
-The workflow validates the tag, runs tests, builds, publishes `@zerobounce/zero-bounce-sdk`, and creates a GitHub release if missing.
-
-See also the [sdk-docs (npm)](../sdk-docs/npm/) guide.
+Registry: [@zerobounce/zero-bounce-sdk on npm](https://www.npmjs.com/package/@zerobounce/zero-bounce-sdk)
