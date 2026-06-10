@@ -70,6 +70,8 @@ export interface EmailValidationResult {
   domain?: string | null;
   domain_age_days?: string | null;
   smtp_provider?: string | null;
+  /** [true/false or null] Is the domain a catch-all? */
+  catchall_domain?: boolean | null;
   /** API often returns `"true"` / `"false"` strings; compare accordingly. */
   mx_found?: string | boolean | null;
   mx_record?: string | null;
