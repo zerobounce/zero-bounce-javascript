@@ -448,4 +448,35 @@ Ran all test suites.
 
 ## Publish
 
-See the [sdk-docs (npm)](../sdk-docs/npm/) guide in the SDKs repo for build and `npm publish` steps.
+Publishing to npm uses **GitHub Actions** (same manual tag workflow as Java, C#, iOS, and PHP).
+
+### One-time setup (pick one)
+
+**Option A — npm trusted publishing (recommended, no long-lived token)**
+
+On [npmjs.com](https://www.npmjs.com/package/@zerobounce/zero-bounce-sdk) → **Settings → Trusted Publisher** → GitHub Actions:
+
+| Field | Value |
+|-------|--------|
+| Repository owner | `zerobounce` |
+| Repository | `zero-bounce-javascript` |
+| Workflow file | `publish.yml` |
+
+The workflow uses Node 24, npm 11.5.1+, and OIDC (`id-token: write`).
+
+**Option B — granular access token fallback**
+
+Add repo secret **`NPM_TOKEN`** (Automation or Publish token for `@zerobounce/zero-bounce-sdk`).
+
+### Release steps
+
+1. Bump `"version"` in `package.json` and update `package-lock.json` (`npm install --package-lock-only`).
+2. Commit, tag (`v2.1.5`), and push the tag.
+3. **Actions → Publish → Run workflow** and enter the tag, or:
+   ```bash
+   gh workflow run publish.yml --repo zerobounce/zero-bounce-javascript -f tag=v2.1.5
+   ```
+
+The workflow validates the tag, runs tests, builds, publishes `@zerobounce/zero-bounce-sdk`, and creates a GitHub release if missing.
+
+See also the [sdk-docs (npm)](../sdk-docs/npm/) guide.
