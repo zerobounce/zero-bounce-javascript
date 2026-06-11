@@ -20,6 +20,8 @@ const ZeroBounceSDK = require('@zerobounce/zero-bounce-sdk');
 // ...
 ```
 
+Bulk `getFile` / `getScoringFile` return the downloaded CSV as a **string** in Node (stdio MCP servers, Docker, CI). In the browser they trigger a file download and return the suggested filename.
+
 ## Testing
 
 - **`npm test`** — Runs unit tests (Jest) and TypeScript type checks.

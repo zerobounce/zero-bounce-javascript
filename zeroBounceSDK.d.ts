@@ -446,7 +446,9 @@ export class ZeroBounceSDK {
 
   /**
    * Download result file for a completed validation.
-   * In the browser may trigger a download and return the filename; on API error (including JSON with HTTP 200) returns a parsed object.
+   * In the browser, triggers a download and returns the filename.
+   * In Node.js and other non-browser runtimes, returns the file body as a string.
+   * On API error (including JSON with HTTP 200) returns a parsed object.
    * @param fileId - ID of the submitted file
    * @param options - Optional `downloadType` and `activityData` (see v2 get file API).
    */
@@ -457,6 +459,8 @@ export class ZeroBounceSDK {
 
   /**
    * Download result file for a completed scoring job.
+   * In the browser, triggers a download and returns the filename.
+   * In Node.js and other non-browser runtimes, returns the file body as a string.
    * `activityData` in options is not sent to the API.
    * @param fileId - ID of the submitted file
    * @param options - Optional `downloadType` only.

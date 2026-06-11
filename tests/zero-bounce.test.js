@@ -683,6 +683,11 @@ describe("ZeroBounceSDK", () => {
   describe("getFile", () => {
     const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
 
+    afterEach(() => {
+      jest.restoreAllMocks();
+      jest.spyOn(console, "error").mockImplementation(() => {});
+    });
+
     it("should throw an error if not initialized", async () => {
       await zeroBounceSDK.getFile(fileId);
       expect(console.error).toHaveBeenCalledWith(initErrorMessage);
@@ -759,6 +764,27 @@ describe("ZeroBounceSDK", () => {
       );
       const response = await zeroBounceSDK.getFile(fileId);
       expect(response).toEqual(errPayload);
+    });
+
+    it("should trigger browser download and return filename on success", async () => {
+      const csvBody = '"Email Address"\n"valid@example.com"\n';
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => "text/csv" },
+          text: () => Promise.resolve(csvBody),
+        })
+      );
+      const clickSpy = jest
+        .spyOn(HTMLAnchorElement.prototype, "click")
+        .mockImplementation(() => {});
+
+      const response = await zeroBounceSDK.getFile(fileId);
+
+      expect(response).toBe("result.csv");
+      expect(clickSpy).toHaveBeenCalled();
     });
   });
 

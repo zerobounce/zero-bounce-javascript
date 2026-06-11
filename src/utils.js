@@ -40,6 +40,14 @@ function shouldReturnGetFileAsJsonError(parsed) {
   return Object.prototype.hasOwnProperty.call(parsed, "success");
 }
 
+function isBrowserEnvironment() {
+  return (
+    typeof window !== "undefined" &&
+    typeof document !== "undefined" &&
+    typeof document.createElement === "function"
+  );
+}
+
 function processGetFileResponseBody(finalResult, response, scoring) {
   const ct = (response.headers.get("content-type") || "").toLowerCase();
   const trimmed = finalResult.trim();
@@ -63,6 +71,10 @@ function processGetFileResponseBody(finalResult, response, scoring) {
     } catch {
       throw new Error(finalResult || `HTTP ${response.status}`);
     }
+  }
+
+  if (!isBrowserEnvironment()) {
+    return finalResult;
   }
 
   const blob = new Blob([finalResult], { type: "text/csv" });
@@ -105,6 +117,9 @@ export async function createRequest({
 }
 
 function saveFile(blob, filename) {
+  if (!isBrowserEnvironment()) {
+    throw new Error("saveFile is only available in browser environments");
+  }
   if (window.navigator.msSaveOrOpenBlob) {
     // IE support
     window.navigator.msSaveOrOpenBlob(blob, filename);
