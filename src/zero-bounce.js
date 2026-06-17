@@ -199,7 +199,6 @@ export class ZeroBounceSDK {
       requestType: "POST",
       path: "/validatebatch",
       body: JSON.stringify(body),
-      batch: true, 
       apiBaseURL: this._api_base_url
     });
   }

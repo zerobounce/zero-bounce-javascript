@@ -375,13 +375,18 @@ describe("ZeroBounceSDK", () => {
         "errors": []
       }
 
-      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+      jest.spyOn(global, "fetch").mockImplementationOnce((url) => Promise.resolve({
         json: () => Promise.resolve(expectedResponse),
         text: () => Promise.resolve(JSON.stringify(expectedResponse)),
       }));
 
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
       const response = await zeroBounceSDK.validateBatch(emailBatch);
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("https://api.zerobounce.net/v2/validatebatch"),
+        expect.any(Object)
+      );
+      expect(String(fetch.mock.calls[0][0])).not.toContain("bulkapi");
       expect(response).toEqual(expectedResponse);
     });
   });
