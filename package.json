@@ -1,6 +1,6 @@
 {
   "name": "@zerobounce/zero-bounce-sdk",
-  "version": "2.1.9",
+  "version": "2.1.10",
   "description": "This SDK contains methods for interacting easily with ZeroBounce API. More information about ZeroBounce you can find in the official documentation.",
   "main": "dist/zeroBounceSDK.js",
   "types": "zeroBounceSDK.d.ts",
@@ -40,7 +40,9 @@
   "homepage": "https://github.com/zerobounce/zero-bounce-javascript#readme",
   "overrides": {
     "serialize-javascript": "^7.0.3",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.3.0",
+    "brace-expansion": "^5.0.8",
+    "fast-uri": "^3.1.4"
   },
   "devDependencies": {
     "@babel/core": "^7.21.4",
