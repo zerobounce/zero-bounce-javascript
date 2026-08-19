@@ -1,4 +1,4 @@
-import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid } from "./utils.js";
+import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid, requireHttpsUrl } from "./utils.js";
 
 /**
  * Validation status values returned by the API (validate, validateBatch).
@@ -94,7 +94,7 @@ export class ZeroBounceSDK {
       parameterIsMissing("Api key", "Please provide a valid API key.");
     } else {
       this._api_key = apiKey;
-      this._api_base_url = apiBaseURL;
+      this._api_base_url = requireHttpsUrl(apiBaseURL);
       this._initialized = true;
     }
   }

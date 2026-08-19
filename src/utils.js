@@ -1,10 +1,26 @@
 // Constants
 export const API_BULK_BASE_URL = "https://bulkapi.zerobounce.net/v2";
+export const HTTP_TIMEOUT_MS = 120000;
 export const HEADERS = {
   Accept: "*/*",
   "Accept-Encoding": "gzip, deflate, br",
   Connection: "keep-alive",
 };
+
+export function requireHttpsUrl(url) {
+  if (typeof url !== "string" || !/^https:\/\//i.test(url)) {
+    parameterIsInvalid("apiBaseURL", "Must be an https:// URL.");
+    throw new Error("apiBaseURL must be an https:// URL");
+  }
+  return url;
+}
+
+function fetchTimeoutSignal() {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(HTTP_TIMEOUT_MS);
+  }
+  return undefined;
+}
 
 function nonEmptyStringField(o, key) {
   const v = o[key];
@@ -100,6 +116,7 @@ export async function createRequest({
       method: requestType,
       headers: HEADERS,
       body,
+      signal: fetchTimeoutSignal(),
     });
     if (returnText) {
       const finalResult = await response.text();

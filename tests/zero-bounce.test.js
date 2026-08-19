@@ -38,6 +38,14 @@ describe("ZeroBounceSDK", () => {
     });
   });
 
+  describe("init security", () => {
+    it("rejects a non-https apiBaseURL", () => {
+      expect(() => zeroBounceSDK.init("valid-api-key", "http://evil.example/v2")).toThrow(
+        "apiBaseURL must be an https:// URL"
+      );
+    });
+  });
+
   describe("getCredits", () => {
     it("should throw an error if not initialized", async () => {
       await zeroBounceSDK.getCredits();
