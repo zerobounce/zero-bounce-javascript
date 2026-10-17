@@ -363,7 +363,8 @@ describe("ZeroBounceSDK", () => {
       };
 
       jest.spyOn(global, "fetch").mockImplementationOnce((url, init) => {
-        expect(String(url)).toContain("/scoring?");
+        expect(String(url)).toContain("/scoring");
+        expect(String(url)).not.toContain("api_key=");
         expect(init.method).toBe("POST");
         expect(init.body).toBeInstanceOf(URLSearchParams);
         expect(init.body.get("email")).toBe(email);
@@ -1132,6 +1133,115 @@ describe("ZeroBounceSDK", () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
       const response = await zeroBounceSDK.findEmailFormatByDomain(payload);
       expect(response).toEqual(expectedResponse);
+    });
+  });
+
+  describe("Priority 3 bulk APIs", () => {
+    class File {}
+    const file = new File();
+
+    const jsonOk = (data) =>
+      Promise.resolve({
+        json: () => Promise.resolve(data),
+        text: () => Promise.resolve(JSON.stringify(data)),
+        ok: true,
+        headers: { get: () => "application/json" },
+      });
+
+    beforeEach(() => {
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+    });
+
+    it("sendEmailFinderFile targets bulkapi email-finder sendfile", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ success: true, file_id: "fid" })
+      );
+      await zeroBounceSDK.sendEmailFinderFile({ file, domain_column: 1 });
+      expect(String(fetch.mock.calls[0][0])).toContain(
+        "https://bulkapi.zerobounce.net/email-finder/sendfile"
+      );
+    });
+
+    it("getDomainSearchFileStatus uses domain-search filestatus on bulk root", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ success: true, file_status: "Complete" })
+      );
+      await zeroBounceSDK.getDomainSearchFileStatus("file-123");
+      expect(String(fetch.mock.calls[0][0])).toContain(
+        "https://bulkapi.zerobounce.net/domain-search/filestatus"
+      );
+      expect(String(fetch.mock.calls[0][0])).toContain("file_id=file-123");
+    });
+
+    it("sendListEvaluatorFile posts to v2 listevaluator", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ file_id: "le-1" })
+      );
+      await zeroBounceSDK.sendListEvaluatorFile({ file, email_address_column: 2 });
+      expect(String(fetch.mock.calls[0][0])).toBe(
+        "https://bulkapi.zerobounce.net/v2/listevaluator/"
+      );
+    });
+
+    it("getListEvaluatorResult GETs file id path on bulk v2", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ file_status: "Complete" })
+      );
+      await zeroBounceSDK.getListEvaluatorResult("abc-def");
+      expect(String(fetch.mock.calls[0][0])).toContain(
+        "https://bulkapi.zerobounce.net/v2/listevaluator/abc-def/"
+      );
+    });
+
+    it("addFilter POSTs to main API filters/add", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ Message: "Filter successfully added" })
+      );
+      await zeroBounceSDK.addFilter({
+        rule: "allow",
+        target: "domain",
+        value: "example.com",
+      });
+      const [url, init] = fetch.mock.calls[0];
+      expect(String(url)).toContain("https://api.zerobounce.net/v2/filters/add");
+      expect(init.method).toBe("POST");
+    });
+
+    it("listFilters supports POST method option", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk([])
+      );
+      await zeroBounceSDK.listFilters({ method: "POST" });
+      const [url, init] = fetch.mock.calls[0];
+      expect(String(url)).toContain("/filters/list");
+      expect(init.method).toBe("POST");
+    });
+
+    it("validateS3file posts to bulkapi validateS3file", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ success: true, file_id: "s3-job" })
+      );
+      await zeroBounceSDK.validateS3file({
+        file_name: "emails/list.csv",
+        has_header_row: true,
+        remove_duplicates: true,
+      });
+      expect(String(fetch.mock.calls[0][0])).toBe(
+        "https://bulkapi.zerobounce.net/validateS3file"
+      );
+    });
+
+    it("exportS3file posts file_id and export_bucket", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ success: true })
+      );
+      await zeroBounceSDK.exportS3file({
+        file_id: "job-1",
+        export_bucket: "my-bucket",
+      });
+      const body = fetch.mock.calls[0][1].body;
+      expect(body.get("file_id")).toBe("job-1");
+      expect(body.get("export_bucket")).toBe("my-bucket");
     });
   });
 });

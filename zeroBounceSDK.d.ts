@@ -346,6 +346,127 @@ export interface SendScoringFileStreamOptions {
   remove_duplicate?: boolean;
 }
 
+/** Options for bulk email finder sendfile. */
+export interface SendEmailFinderFileOptions {
+  file: File;
+  domain_column: number;
+  first_name_column?: number | false;
+  last_name_column?: number | false;
+  middle_name_column?: number | false;
+  full_name_column?: number | false;
+  has_header_row?: boolean;
+}
+
+export interface SendEmailFinderFileStreamOptions {
+  domain_column: number;
+  first_name_column?: number | false;
+  last_name_column?: number | false;
+  middle_name_column?: number | false;
+  full_name_column?: number | false;
+  has_header_row?: boolean;
+}
+
+/** Options for bulk domain search sendfile. */
+export interface SendDomainSearchFileOptions {
+  file: File;
+  domain_column: number;
+  has_header_row?: boolean;
+}
+
+export interface SendDomainSearchFileStreamOptions {
+  domain_column: number;
+  has_header_row?: boolean;
+}
+
+/** POST /v2/listevaluator/ success (201). */
+export interface ListEvaluatorSubmitResponse {
+  file_id?: string;
+  message?: string;
+  success?: boolean;
+}
+
+/** GET /v2/listevaluator/{file_id}/ while processing or complete. */
+export interface ListEvaluatorResultResponse {
+  file_status?: string;
+  success?: boolean;
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface SendListEvaluatorFileOptions {
+  file: File;
+  email_address_column: number;
+}
+
+export interface SendListEvaluatorFileStreamOptions {
+  email_address_column: number;
+}
+
+export interface SendEvaluatedFileOptions {
+  file: File;
+}
+
+export type FilterRule = "allow" | "block";
+export type FilterTarget = "email" | "domain" | "mx" | "tld";
+
+export interface FilterRuleParams {
+  rule: FilterRule;
+  target: FilterTarget;
+  value: string;
+}
+
+export interface FilterListItem {
+  rule: FilterRule;
+  target: FilterTarget;
+  value: string;
+}
+
+export interface FilterMessageResponse {
+  Message?: string;
+  Error?: string;
+}
+
+export interface ListFiltersOptions {
+  /** When `"POST"`, uses form-encoded POST (supported from Sep 2026). */
+  method?: "GET" | "POST";
+}
+
+export interface ValidateS3FileOptions {
+  file_name: string;
+  has_header_row?: boolean;
+  /** Postman field name for duplicate removal. */
+  remove_duplicates?: boolean;
+  /** Alternate field name used by some bulk endpoints. */
+  remove_duplicate?: boolean;
+  email_address_column?: number;
+  return_url?: string | false;
+  first_name_column?: number | false;
+  last_name_column?: number | false;
+  gender_column?: number | false;
+  ip_address_column?: number | false;
+  allowPhase2?: boolean | null;
+}
+
+export interface ScoreS3FileOptions {
+  file_name: string;
+  has_header_row?: boolean;
+  remove_duplicates?: boolean;
+  remove_duplicate?: boolean;
+  email_address_column?: number;
+}
+
+export interface ExportS3FileOptions {
+  file_id: string;
+  export_bucket: string;
+}
+
+export interface S3BulkJobResponse {
+  success?: boolean;
+  message?: string;
+  file_id?: string;
+  export_path?: string;
+}
+
 /** Options for findEmailByDomain / Email Finder. */
 export interface FindEmailByDomainOptions {
   domain: string;
@@ -531,6 +652,92 @@ export class ZeroBounceSDK {
   deleteScoringFile(
     fileId: string
   ): Promise<BulkFileDeletedResponse | undefined>;
+
+  sendEmailFinderFile(
+    options: SendEmailFinderFileOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  sendEmailFinderFileStream(
+    fileStreamOrBlob: File | Blob,
+    fileName: string,
+    options?: SendEmailFinderFileStreamOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  getEmailFinderFileStatus(
+    fileId: string
+  ): Promise<ValidationFileStatusResponse | undefined>;
+
+  getEmailFinderFile(
+    fileId: string
+  ): Promise<string | Blob | GetFileJsonErrorPayload | undefined>;
+
+  deleteEmailFinderFile(
+    fileId: string
+  ): Promise<BulkFileDeletedResponse | undefined>;
+
+  sendDomainSearchFile(
+    options: SendDomainSearchFileOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  sendDomainSearchFileStream(
+    fileStreamOrBlob: File | Blob,
+    fileName: string,
+    options?: SendDomainSearchFileStreamOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  getDomainSearchFileStatus(
+    fileId: string
+  ): Promise<ValidationFileStatusResponse | undefined>;
+
+  getDomainSearchFile(
+    fileId: string
+  ): Promise<string | Blob | GetFileJsonErrorPayload | undefined>;
+
+  deleteDomainSearchFile(
+    fileId: string
+  ): Promise<BulkFileDeletedResponse | undefined>;
+
+  sendListEvaluatorFile(
+    options: SendListEvaluatorFileOptions
+  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+
+  sendListEvaluatorFileStream(
+    fileStreamOrBlob: File | Blob,
+    fileName: string,
+    options?: SendListEvaluatorFileStreamOptions
+  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+
+  getListEvaluatorResult(
+    fileId: string
+  ): Promise<ListEvaluatorResultResponse | undefined>;
+
+  sendEvaluatedFile(
+    options: SendEvaluatedFileOptions
+  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+
+  addFilter(
+    options: FilterRuleParams
+  ): Promise<FilterMessageResponse | undefined>;
+
+  listFilters(
+    options?: ListFiltersOptions | null
+  ): Promise<FilterListItem[] | FilterMessageResponse | undefined>;
+
+  deleteFilter(
+    options: FilterRuleParams
+  ): Promise<FilterMessageResponse | undefined>;
+
+  validateS3file(
+    options: ValidateS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  scoreS3file(
+    options: ScoreS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  exportS3file(
+    options: ExportS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
 
   /**
    * Email Finder: find email by domain and name.

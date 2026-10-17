@@ -506,7 +506,7 @@ export class ZeroBounceSDK {
     });
   }
 
-  _getStatusUtil(fileId, path) {
+  _getStatusUtil(fileId, path, { bulkRoot = false } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -524,6 +524,7 @@ export class ZeroBounceSDK {
       params,
       path,
       batch: true,
+      bulkBase: bulkRoot ? "root" : "v2",
       apiBaseURL: this._api_base_url
     });
   }
@@ -542,7 +543,7 @@ export class ZeroBounceSDK {
     return this._getStatusUtil(fileId, "/scoring/filestatus");
   }
 
-  _getFileUtil(fileId, path, scoring = false, getFileOptions = null) {
+  _getFileUtil(fileId, path, scoring = false, getFileOptions = null, { bulkRoot = false } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -567,6 +568,7 @@ export class ZeroBounceSDK {
       params,
       path,
       batch: true,
+      bulkBase: bulkRoot ? "root" : "v2",
       returnText: true,
       scoring, 
       apiBaseURL: this._api_base_url
@@ -589,7 +591,7 @@ export class ZeroBounceSDK {
     return this._getFileUtil(fileId, "/scoring/getfile", true, getFileOptions);
   }
 
-  _deleteFileUtil(fileId, path, scoring = false) {
+  _deleteFileUtil(fileId, path, scoring = false, { bulkRoot = false } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -606,8 +608,48 @@ export class ZeroBounceSDK {
       params,
       path,
       batch: true,
+      bulkBase: bulkRoot ? "root" : "v2",
       scoring, 
       apiBaseURL: this._api_base_url
+    });
+  }
+
+  _sendBulkRootMultipartFile(path, { file, fileName = null, fields = {} }) {
+    const body = new FormData();
+    for (const [key, value] of Object.entries(fields)) {
+      if (value != null && value !== false) {
+        body.append(key, value);
+      }
+    }
+    if (fileName != null) {
+      body.append("file", file, fileName);
+    } else {
+      body.append("file", file);
+    }
+    body.append("api_key", this._api_key);
+    return createRequest({
+      requestType: "POST",
+      path,
+      body,
+      batch: true,
+      bulkBase: "root",
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
+  _sendBulkRootFormPost(path, fields) {
+    const params = {
+      api_key: this._api_key,
+      ...fields,
+    };
+    return createRequest({
+      requestType: "POST",
+      path,
+      body: new URLSearchParams(params),
+      params: {},
+      batch: true,
+      bulkBase: "root",
+      apiBaseURL: this._api_base_url,
     });
   }
 
@@ -623,6 +665,397 @@ export class ZeroBounceSDK {
    * */
   deleteScoringFile(fileId) {
     return this._deleteFileUtil(fileId, "/scoring/deletefile", true);
+  }
+
+  // BULK EMAIL FINDER (bulkapi.zerobounce.net/email-finder/*)
+
+  sendEmailFinderFile({
+    file,
+    domain_column,
+    first_name_column = false,
+    last_name_column = false,
+    middle_name_column = false,
+    full_name_column = false,
+    has_header_row = false,
+  }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!file) {
+      parameterIsMissing("file");
+      return;
+    } else if (!domain_column) {
+      parameterIsMissing("domain_column");
+      return;
+    }
+    return this._sendBulkRootMultipartFile("/email-finder/sendfile", {
+      file,
+      fields: {
+        domain_column,
+        first_name_column,
+        last_name_column,
+        middle_name_column,
+        full_name_column,
+        has_header_row,
+      },
+    });
+  }
+
+  sendEmailFinderFileStream(fileStreamOrBlob, fileName, {
+    domain_column,
+    first_name_column = false,
+    last_name_column = false,
+    middle_name_column = false,
+    full_name_column = false,
+    has_header_row = false,
+  } = {}) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!fileStreamOrBlob) {
+      parameterIsMissing("fileStreamOrBlob");
+      return;
+    } else if (!fileName) {
+      parameterIsMissing("fileName");
+      return;
+    } else if (!domain_column) {
+      parameterIsMissing("domain_column");
+      return;
+    }
+    return this._sendBulkRootMultipartFile("/email-finder/sendfile", {
+      file: fileStreamOrBlob,
+      fileName,
+      fields: {
+        domain_column,
+        first_name_column,
+        last_name_column,
+        middle_name_column,
+        full_name_column,
+        has_header_row,
+      },
+    });
+  }
+
+  getEmailFinderFileStatus(fileId) {
+    return this._getStatusUtil(fileId, "/email-finder/filestatus", { bulkRoot: true });
+  }
+
+  getEmailFinderFile(fileId) {
+    return this._getFileUtil(fileId, "/email-finder/getfile", false, null, { bulkRoot: true });
+  }
+
+  deleteEmailFinderFile(fileId) {
+    return this._deleteFileUtil(fileId, "/email-finder/deletefile", false, { bulkRoot: true });
+  }
+
+  // BULK DOMAIN SEARCH (bulkapi.zerobounce.net/domain-search/*)
+
+  sendDomainSearchFile({
+    file,
+    domain_column,
+    has_header_row = false,
+  }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!file) {
+      parameterIsMissing("file");
+      return;
+    } else if (!domain_column) {
+      parameterIsMissing("domain_column");
+      return;
+    }
+    return this._sendBulkRootMultipartFile("/domain-search/sendfile", {
+      file,
+      fields: { domain_column, has_header_row },
+    });
+  }
+
+  sendDomainSearchFileStream(fileStreamOrBlob, fileName, {
+    domain_column,
+    has_header_row = false,
+  } = {}) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!fileStreamOrBlob) {
+      parameterIsMissing("fileStreamOrBlob");
+      return;
+    } else if (!fileName) {
+      parameterIsMissing("fileName");
+      return;
+    } else if (!domain_column) {
+      parameterIsMissing("domain_column");
+      return;
+    }
+    return this._sendBulkRootMultipartFile("/domain-search/sendfile", {
+      file: fileStreamOrBlob,
+      fileName,
+      fields: { domain_column, has_header_row },
+    });
+  }
+
+  getDomainSearchFileStatus(fileId) {
+    return this._getStatusUtil(fileId, "/domain-search/filestatus", { bulkRoot: true });
+  }
+
+  getDomainSearchFile(fileId) {
+    return this._getFileUtil(fileId, "/domain-search/getfile", false, null, { bulkRoot: true });
+  }
+
+  deleteDomainSearchFile(fileId) {
+    return this._deleteFileUtil(fileId, "/domain-search/deletefile", false, { bulkRoot: true });
+  }
+
+  // LIST EVALUATOR (bulkapi.zerobounce.net/v2/listevaluator/)
+
+  sendListEvaluatorFile({ file, email_address_column }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!file) {
+      parameterIsMissing("file");
+      return;
+    } else if (!email_address_column) {
+      parameterIsMissing("email_address_column");
+      return;
+    }
+    const body = new FormData();
+    body.append("file", file);
+    body.append("email_address_column", email_address_column);
+    body.append("api_key", this._api_key);
+    return createRequest({
+      requestType: "POST",
+      path: "/listevaluator/",
+      body,
+      batch: true,
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
+  sendListEvaluatorFileStream(fileStreamOrBlob, fileName, { email_address_column } = {}) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!fileStreamOrBlob) {
+      parameterIsMissing("fileStreamOrBlob");
+      return;
+    } else if (!fileName) {
+      parameterIsMissing("fileName");
+      return;
+    } else if (!email_address_column) {
+      parameterIsMissing("email_address_column");
+      return;
+    }
+    const body = new FormData();
+    body.append("file", fileStreamOrBlob, fileName);
+    body.append("email_address_column", email_address_column);
+    body.append("api_key", this._api_key);
+    return createRequest({
+      requestType: "POST",
+      path: "/listevaluator/",
+      body,
+      batch: true,
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
+  getListEvaluatorResult(fileId) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!fileId) {
+      parameterIsMissing("File id");
+      return;
+    }
+    const params = { api_key: this._api_key };
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: `/listevaluator/${fileId}/`,
+      batch: true,
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
+  sendEvaluatedFile({ file }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!file) {
+      parameterIsMissing("file");
+      return;
+    }
+    const body = new FormData();
+    body.append("file", file);
+    body.append("api_key", this._api_key);
+    return createRequest({
+      requestType: "POST",
+      path: "/send-evaluated-file/",
+      body,
+      batch: true,
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
+  // CUSTOM FILTERS (main API /v2/filters/*)
+
+  addFilter({ rule, target, value }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!rule) {
+      parameterIsMissing("rule");
+      return;
+    } else if (!target) {
+      parameterIsMissing("target");
+      return;
+    } else if (!value) {
+      parameterIsMissing("value");
+      return;
+    }
+    const params = {
+      api_key: this._api_key,
+      rule,
+      target,
+      value,
+    };
+    return createRequest({
+      requestType: "POST",
+      path: "/filters/add",
+      body: new URLSearchParams(params),
+      params: {},
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
+  listFilters(options = null) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    }
+    const params = { api_key: this._api_key };
+    const usePost =
+      options && typeof options === "object" && options.method === "POST";
+    if (usePost) {
+      return createRequest({
+        requestType: "POST",
+        path: "/filters/list",
+        body: new URLSearchParams(params),
+        params: {},
+        apiBaseURL: this._api_base_url,
+      });
+    }
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/filters/list",
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
+  deleteFilter({ rule, target, value }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!rule) {
+      parameterIsMissing("rule");
+      return;
+    } else if (!target) {
+      parameterIsMissing("target");
+      return;
+    } else if (!value) {
+      parameterIsMissing("value");
+      return;
+    }
+    const params = {
+      api_key: this._api_key,
+      rule,
+      target,
+      value,
+    };
+    return createRequest({
+      requestType: "POST",
+      path: "/filters/delete",
+      body: new URLSearchParams(params),
+      params: {},
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
+  // AMAZON S3 BULK HELPERS (bulkapi root)
+
+  validateS3file({
+    file_name,
+    has_header_row,
+    remove_duplicates,
+    email_address_column = null,
+    return_url = false,
+    first_name_column = false,
+    last_name_column = false,
+    gender_column = false,
+    ip_address_column = false,
+    remove_duplicate = null,
+    allowPhase2 = null,
+  }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!file_name) {
+      parameterIsMissing("file_name");
+      return;
+    }
+    const fields = { file_name };
+    if (has_header_row != null) fields.has_header_row = has_header_row;
+    if (remove_duplicates != null) fields.remove_duplicates = remove_duplicates;
+    if (remove_duplicate != null) fields.remove_duplicate = remove_duplicate;
+    if (email_address_column != null) fields.email_address_column = email_address_column;
+    if (return_url) fields.return_url = return_url;
+    if (first_name_column) fields.first_name_column = first_name_column;
+    if (last_name_column) fields.last_name_column = last_name_column;
+    if (gender_column) fields.gender_column = gender_column;
+    if (ip_address_column) fields.ip_address_column = ip_address_column;
+    if (allowPhase2 != null) fields.allow_phase_2 = String(allowPhase2);
+    return this._sendBulkRootFormPost("/validateS3file", fields);
+  }
+
+  scoreS3file({
+    file_name,
+    has_header_row,
+    remove_duplicates,
+    email_address_column = null,
+    remove_duplicate = null,
+  }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!file_name) {
+      parameterIsMissing("file_name");
+      return;
+    }
+    const fields = { file_name };
+    if (has_header_row != null) fields.has_header_row = has_header_row;
+    if (remove_duplicates != null) fields.remove_duplicates = remove_duplicates;
+    if (remove_duplicate != null) fields.remove_duplicate = remove_duplicate;
+    if (email_address_column != null) fields.email_address_column = email_address_column;
+    return this._sendBulkRootFormPost("/scoreS3file", fields);
+  }
+
+  exportS3file({ file_id, export_bucket }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!file_id) {
+      parameterIsMissing("file_id");
+      return;
+    } else if (!export_bucket) {
+      parameterIsMissing("export_bucket");
+      return;
+    }
+    return this._sendBulkRootFormPost("/exportS3file", {
+      file_id,
+      export_bucket,
+    });
   }
 
   // EMAIL FINDER
