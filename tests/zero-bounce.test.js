@@ -303,6 +303,107 @@ describe("ZeroBounceSDK", () => {
         expect.stringContaining("timeout parameter is invalid")
       );
     });
+
+    it("should pass activity_data and verify_plus via options object", async () => {
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve({ status: "valid" }),
+        text: () => Promise.resolve('{"status":"valid"}'),
+      }));
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.validateEmail(email, {
+        activityData: true,
+        verifyPlus: false,
+      });
+      const calledUrl = String(fetch.mock.calls[0][0]);
+      expect(calledUrl).toContain("activity_data=true");
+      expect(calledUrl).toContain("verify_plus=false");
+    });
+
+    it("should send POST with form body when method is POST", async () => {
+      const expectedResponse = { status: "valid", address: email };
+
+      jest.spyOn(global, "fetch").mockImplementationOnce((url, init) => {
+        expect(String(url)).toContain("/validate");
+        expect(String(url)).not.toContain("api_key=");
+        expect(init.method).toBe("POST");
+        expect(init.body).toBeInstanceOf(URLSearchParams);
+        expect(init.body.get("email")).toBe(email);
+        expect(init.body.get("api_key")).toBe("valid-api-key");
+        expect(init.body.get("ip_address")).toBe(ip_address);
+        return Promise.resolve({
+          json: () => Promise.resolve(expectedResponse),
+          text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+        });
+      });
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      const response = await zeroBounceSDK.validateEmail(email, {
+        ip_address,
+        method: "POST",
+      });
+      expect(response).toEqual(expectedResponse);
+    });
+  });
+
+  describe("scoreEmail", () => {
+    const email = "mark@gmail.com";
+
+    it("should throw an error if not initialized", async () => {
+      await zeroBounceSDK.scoreEmail(email);
+      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+    });
+
+    it("should throw an error if email is missing", async () => {
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.scoreEmail(null);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should return scoring data via GET", async () => {
+      const expectedResponse = {
+        email: "mark@gmail.com",
+        score: 10,
+      };
+
+      jest.spyOn(global, "fetch").mockImplementationOnce((url, init) => {
+        expect(String(url)).toContain("/scoring?");
+        expect(init.method).toBe("GET");
+        return Promise.resolve({
+          json: () => Promise.resolve(expectedResponse),
+          text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+        });
+      });
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      const response = await zeroBounceSDK.scoreEmail(email);
+      expect(response).toEqual(expectedResponse);
+    });
+
+    it("should send POST with form body when requested", async () => {
+      const expectedResponse = {
+        email: "mark@gmail.com",
+        score: 10,
+      };
+
+      jest.spyOn(global, "fetch").mockImplementationOnce((url, init) => {
+        expect(String(url)).toContain("/scoring");
+        expect(String(url)).not.toContain("api_key=");
+        expect(init.method).toBe("POST");
+        expect(init.body).toBeInstanceOf(URLSearchParams);
+        expect(init.body.get("email")).toBe(email);
+        expect(init.body.get("api_key")).toBe("valid-api-key");
+        return Promise.resolve({
+          json: () => Promise.resolve(expectedResponse),
+          text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+        });
+      });
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      const response = await zeroBounceSDK.scoreEmail(email, { method: "POST" });
+      expect(response).toEqual(expectedResponse);
+    });
   });
 
 
@@ -396,6 +497,32 @@ describe("ZeroBounceSDK", () => {
       );
       expect(String(fetch.mock.calls[0][0])).not.toContain("bulkapi");
       expect(response).toEqual(expectedResponse);
+    });
+
+    it("should include batch options in POST body", async () => {
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve({ email_batch: [], errors: [] }),
+        text: () => Promise.resolve('{"email_batch":[],"errors":[]}'),
+      }));
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.validateBatch(emailBatch, {
+        timeout: 60,
+        activityData: true,
+        verifyPlus: true,
+      });
+      const init = fetch.mock.calls[0][1];
+      const body = JSON.parse(init.body);
+      expect(body.timeout).toBe(60);
+      expect(body.activity_data).toBe(true);
+      expect(body.verify_plus).toBe(true);
+    });
+
+    it("should throw an error if batch timeout is out of range", async () => {
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.validateBatch(emailBatch, { timeout: 9 });
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining("timeout parameter is invalid")
+      );
     });
   });
 
@@ -1031,6 +1158,130 @@ describe("ZeroBounceSDK", () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
       const response = await zeroBounceSDK.findEmailFormatByDomain(payload);
       expect(response).toEqual(expectedResponse);
+    });
+  });
+
+  describe("Priority 3 bulk APIs", () => {
+    class File {}
+    const file = new File();
+
+    const jsonOk = (data) =>
+      Promise.resolve({
+        json: () => Promise.resolve(data),
+        text: () => Promise.resolve(JSON.stringify(data)),
+        ok: true,
+        headers: { get: () => "application/json" },
+      });
+
+    beforeEach(() => {
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+    });
+
+    it("sendEmailFinderFile targets bulkapi email-finder sendfile", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ success: true, file_id: "fid" })
+      );
+      await zeroBounceSDK.sendEmailFinderFile({ file, domain_column: 1 });
+      expect(String(fetch.mock.calls[0][0])).toContain(
+        "https://bulkapi.zerobounce.net/email-finder/sendfile"
+      );
+    });
+
+    it("getDomainSearchFileStatus uses domain-search filestatus on bulk root", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ success: true, file_status: "Complete" })
+      );
+      await zeroBounceSDK.getDomainSearchFileStatus("file-123");
+      expect(String(fetch.mock.calls[0][0])).toContain(
+        "https://bulkapi.zerobounce.net/domain-search/filestatus"
+      );
+      expect(String(fetch.mock.calls[0][0])).toContain("file_id=file-123");
+    });
+
+    it("sendListEvaluatorFile posts to v2 listevaluator", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ file_id: "le-1" })
+      );
+      await zeroBounceSDK.sendListEvaluatorFile({ file, email_address_column: 2 });
+      expect(String(fetch.mock.calls[0][0])).toBe(
+        "https://bulkapi.zerobounce.net/v2/listevaluator/"
+      );
+    });
+
+    it("getListEvaluatorResult GETs file id path on bulk v2", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ file_status: "Complete" })
+      );
+      await zeroBounceSDK.getListEvaluatorResult("abc-def");
+      expect(String(fetch.mock.calls[0][0])).toContain(
+        "https://bulkapi.zerobounce.net/v2/listevaluator/abc-def/"
+      );
+    });
+
+    it("addFilter POSTs to main API filters/add", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ Message: "Filter successfully added" })
+      );
+      await zeroBounceSDK.addFilter({
+        rule: "allow",
+        target: "domain",
+        value: "example.com",
+      });
+      const [url, init] = fetch.mock.calls[0];
+      expect(String(url)).toContain("https://api.zerobounce.net/v2/filters/add");
+      expect(init.method).toBe("POST");
+    });
+
+    it("listFilters supports POST method option", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk([])
+      );
+      await zeroBounceSDK.listFilters({ method: "POST" });
+      const [url, init] = fetch.mock.calls[0];
+      expect(String(url)).toContain("/filters/list");
+      expect(init.method).toBe("POST");
+    });
+
+    it("listS3files GETs bulkapi listS3files with optional bucket and search", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk([{ name: "uploads/list.csv", size: 100, last_modified: "2024-01-01T00:00:00Z" }])
+      );
+      await zeroBounceSDK.listS3files({
+        bucket: "my-bucket",
+        search: "list",
+      });
+      const calledUrl = String(fetch.mock.calls[0][0]);
+      expect(calledUrl).toBe(
+        "https://bulkapi.zerobounce.net/listS3files?api_key=valid-api-key&bucket=my-bucket&search=list"
+      );
+      expect(fetch.mock.calls[0][1].method).toBe("GET");
+    });
+
+    it("validateS3file posts to bulkapi validateS3file", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ success: true, file_id: "s3-job" })
+      );
+      await zeroBounceSDK.validateS3file({
+        file_name: "emails/list.csv",
+        has_header_row: true,
+        remove_duplicates: true,
+      });
+      expect(String(fetch.mock.calls[0][0])).toBe(
+        "https://bulkapi.zerobounce.net/validateS3file"
+      );
+    });
+
+    it("exportS3file posts file_id and export_bucket", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk({ success: true })
+      );
+      await zeroBounceSDK.exportS3file({
+        file_id: "job-1",
+        export_bucket: "my-bucket",
+      });
+      const body = fetch.mock.calls[0][1].body;
+      expect(body.get("file_id")).toBe("job-1");
+      expect(body.get("export_bucket")).toBe("my-bucket");
     });
   });
 });

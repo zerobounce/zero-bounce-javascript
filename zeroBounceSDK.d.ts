@@ -69,6 +69,10 @@ export interface EmailValidationResult {
   account?: string | null;
   domain?: string | null;
   domain_age_days?: string | null;
+  /** Last activity bucket when activity_data was requested (e.g. 30, 365+). */
+  active_in_days?: string | null;
+  /** First date activity was detected for this email (YYYY-MM-DD). */
+  active_first_seen?: string | null;
   smtp_provider?: string | null;
   /** [true/false or null] Is the domain a catch-all? */
   catchall_domain?: boolean | null;
@@ -136,6 +140,23 @@ export interface ApiUsageResponse {
 export interface EmailActivityResponse {
   found: boolean;
   active_in_days?: string;
+}
+
+/** Successful GET/POST /scoring response. */
+export interface EmailScoringResult {
+  email: string;
+  score: number;
+}
+
+/** Unsuccessful /scoring response (invalid email, missing params, etc.). */
+export interface EmailScoringError {
+  error: string;
+}
+
+/** Options for scoreEmail. */
+export interface ScoreEmailOptions {
+  /** When `"POST"`, sends `api_key` and `email` as `application/x-www-form-urlencoded` (default GET). */
+  method?: "GET" | "POST";
 }
 
 /** Bulk sendfile success (validation or scoring). */
@@ -231,11 +252,28 @@ export interface ValidateEmailOptions {
   ip_address?: string;
   /** Validation timeout in seconds, 3–60. If exceeded, API may return unknown/greylisted. */
   timeout?: number;
+  /** Maps to `activity_data` on GET /validate. */
+  activityData?: boolean;
+  /** Maps to `verify_plus` on GET /validate. */
+  verifyPlus?: boolean;
+  /** Use form-encoded POST instead of GET (same parameters). */
+  method?: "GET" | "POST";
 }
 
 /** Single item for validateBatch (email_batch array). */
 export interface ValidateBatchEmailItem {
   email_address: string;
+  ip_address?: string | null;
+}
+
+/** Options for validateBatch (timeout, activity_data, verify_plus). */
+export interface ValidateBatchOptions {
+  /** Validation timeout in seconds, 10–120 for the whole batch. */
+  timeout?: number;
+  /** Maps to `activity_data` on POST /validatebatch. */
+  activityData?: boolean;
+  /** Maps to `verify_plus` on POST /validatebatch. */
+  verifyPlus?: boolean;
 }
 
 /** Bulk `getfile` query values for `download_type` (validation and scoring). */
@@ -310,6 +348,134 @@ export interface SendScoringFileStreamOptions {
   remove_duplicate?: boolean;
 }
 
+/** Options for bulk email finder sendfile. */
+export interface SendEmailFinderFileOptions {
+  file: File;
+  domain_column: number;
+  first_name_column?: number | false;
+  last_name_column?: number | false;
+  middle_name_column?: number | false;
+  full_name_column?: number | false;
+  has_header_row?: boolean;
+}
+
+export interface SendEmailFinderFileStreamOptions {
+  domain_column: number;
+  first_name_column?: number | false;
+  last_name_column?: number | false;
+  middle_name_column?: number | false;
+  full_name_column?: number | false;
+  has_header_row?: boolean;
+}
+
+/** Options for bulk domain search sendfile. */
+export interface SendDomainSearchFileOptions {
+  file: File;
+  domain_column: number;
+  has_header_row?: boolean;
+}
+
+export interface SendDomainSearchFileStreamOptions {
+  domain_column: number;
+  has_header_row?: boolean;
+}
+
+/** POST /v2/listevaluator/ success (201). */
+export interface ListEvaluatorSubmitResponse {
+  file_id?: string;
+  message?: string;
+  success?: boolean;
+}
+
+/** GET /v2/listevaluator/{file_id}/ while processing or complete. */
+export interface ListEvaluatorResultResponse {
+  file_status?: string;
+  success?: boolean;
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface SendListEvaluatorFileOptions {
+  file: File;
+  email_address_column: number;
+}
+
+export interface SendListEvaluatorFileStreamOptions {
+  email_address_column: number;
+}
+
+export interface SendEvaluatedFileOptions {
+  file: File;
+}
+
+export type FilterRule = "allow" | "block";
+export type FilterTarget = "email" | "domain" | "mx" | "tld";
+
+export interface FilterRuleParams {
+  rule: FilterRule;
+  target: FilterTarget;
+  value: string;
+}
+
+export interface FilterListItem {
+  rule: FilterRule;
+  target: FilterTarget;
+  value: string;
+}
+
+export interface FilterMessageResponse {
+  Message?: string;
+  Error?: string;
+}
+
+export interface ListFiltersOptions {
+  /** When `"POST"`, uses form-encoded POST (supported from Sep 2026). */
+  method?: "GET" | "POST";
+}
+
+export interface ValidateS3FileOptions {
+  file_name: string;
+  has_header_row?: boolean;
+  /** Postman field name for duplicate removal. */
+  remove_duplicates?: boolean;
+  /** Alternate field name used by some bulk endpoints. */
+  remove_duplicate?: boolean;
+  email_address_column?: number;
+  return_url?: string | false;
+  first_name_column?: number | false;
+  last_name_column?: number | false;
+  gender_column?: number | false;
+  ip_address_column?: number | false;
+  allowPhase2?: boolean | null;
+}
+
+export interface ScoreS3FileOptions {
+  file_name: string;
+  has_header_row?: boolean;
+  remove_duplicates?: boolean;
+  remove_duplicate?: boolean;
+  email_address_column?: number;
+}
+
+export interface ExportS3FileOptions {
+  file_id: string;
+  export_bucket: string;
+}
+
+/** Single entry from GET /listS3files. */
+export interface S3ListFileEntry {
+  name: string;
+  size: number;
+  last_modified: string;
+}
+
+export interface S3BulkJobResponse {
+  success?: boolean;
+  message?: string;
+  file_id?: string;
+  export_path?: string;
+}
+
 /** Options for findEmailByDomain / Email Finder. */
 export interface FindEmailByDomainOptions {
   domain: string;
@@ -365,7 +531,7 @@ export class ZeroBounceSDK {
   /**
    * Validate a single email address.
    * @param email - Email to validate
-   * @param options - Optional ip_address and/or timeout (3–60 seconds), or ip_address string for backwards compatibility
+   * @param options - Optional ip_address, timeout (3–60), activityData, verifyPlus, or ip_address string for backwards compatibility
    */
   validateEmail(
     email: string,
@@ -384,10 +550,12 @@ export class ZeroBounceSDK {
 
   /**
    * Validate a batch of emails.
-   * @param emailBatch - Array of objects with email_address
+   * @param emailBatch - Array of objects with email_address (and optional ip_address)
+   * @param options - Optional timeout (10–120), activityData, verifyPlus
    */
   validateBatch(
-    emailBatch: ValidateBatchEmailItem[]
+    emailBatch: ValidateBatchEmailItem[],
+    options?: ValidateBatchOptions | null
   ): Promise<ValidateBatchResponse | undefined>;
 
   /**
@@ -395,6 +563,16 @@ export class ZeroBounceSDK {
    * @param email - Valid email address
    */
   getEmailActivity(email: string): Promise<EmailActivityResponse | undefined>;
+
+  /**
+   * Real-time AI scoring for a single email (GET or POST /scoring).
+   * @param email - Email to score
+   * @param options - Optional `{ method: "POST" }` for form-encoded POST
+   */
+  scoreEmail(
+    email: string,
+    options?: ScoreEmailOptions | null
+  ): Promise<EmailScoringResult | EmailScoringError | undefined>;
 
   /**
    * Submit a file for bulk email validation.
@@ -483,6 +661,96 @@ export class ZeroBounceSDK {
   deleteScoringFile(
     fileId: string
   ): Promise<BulkFileDeletedResponse | undefined>;
+
+  sendEmailFinderFile(
+    options: SendEmailFinderFileOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  sendEmailFinderFileStream(
+    fileStreamOrBlob: File | Blob,
+    fileName: string,
+    options?: SendEmailFinderFileStreamOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  getEmailFinderFileStatus(
+    fileId: string
+  ): Promise<ValidationFileStatusResponse | undefined>;
+
+  getEmailFinderFile(
+    fileId: string
+  ): Promise<string | Blob | GetFileJsonErrorPayload | undefined>;
+
+  deleteEmailFinderFile(
+    fileId: string
+  ): Promise<BulkFileDeletedResponse | undefined>;
+
+  sendDomainSearchFile(
+    options: SendDomainSearchFileOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  sendDomainSearchFileStream(
+    fileStreamOrBlob: File | Blob,
+    fileName: string,
+    options?: SendDomainSearchFileStreamOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  getDomainSearchFileStatus(
+    fileId: string
+  ): Promise<ValidationFileStatusResponse | undefined>;
+
+  getDomainSearchFile(
+    fileId: string
+  ): Promise<string | Blob | GetFileJsonErrorPayload | undefined>;
+
+  deleteDomainSearchFile(
+    fileId: string
+  ): Promise<BulkFileDeletedResponse | undefined>;
+
+  sendListEvaluatorFile(
+    options: SendListEvaluatorFileOptions
+  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+
+  sendListEvaluatorFileStream(
+    fileStreamOrBlob: File | Blob,
+    fileName: string,
+    options?: SendListEvaluatorFileStreamOptions
+  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+
+  getListEvaluatorResult(
+    fileId: string
+  ): Promise<ListEvaluatorResultResponse | undefined>;
+
+  sendEvaluatedFile(
+    options: SendEvaluatedFileOptions
+  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+
+  addFilter(
+    options: FilterRuleParams
+  ): Promise<FilterMessageResponse | undefined>;
+
+  listFilters(
+    options?: ListFiltersOptions | null
+  ): Promise<FilterListItem[] | FilterMessageResponse | undefined>;
+
+  deleteFilter(
+    options: FilterRuleParams
+  ): Promise<FilterMessageResponse | undefined>;
+
+  listS3files(
+    options?: { bucket?: string | null; search?: string | null } | null
+  ): Promise<S3ListFileEntry[] | undefined>;
+
+  validateS3file(
+    options: ValidateS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  scoreS3file(
+    options: ScoreS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  exportS3file(
+    options: ExportS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
 
   /**
    * Email Finder: find email by domain and name.

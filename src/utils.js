@@ -1,5 +1,6 @@
 // Constants
 export const API_BULK_BASE_URL = "https://bulkapi.zerobounce.net/v2";
+export const API_BULK_ROOT_URL = "https://bulkapi.zerobounce.net";
 export const HTTP_TIMEOUT_MS = 120000;
 export const HEADERS = {
   Accept: "*/*",
@@ -97,19 +98,31 @@ function processGetFileResponseBody(finalResult, response, scoring) {
   return saveFile(blob, `result${scoring ? "-scoring" : ""}.csv`);
 }
 
+function bulkApiBase(bulkBase) {
+  return bulkBase === "root" ? API_BULK_ROOT_URL : API_BULK_BASE_URL;
+}
+
+function buildRequestUrl({ batch, bulkBase, apiBaseURL, path, params }) {
+  const base = batch ? bulkApiBase(bulkBase) : apiBaseURL;
+  const query =
+    params != null && Object.keys(params).length > 0
+      ? `?${new URLSearchParams(params)}`
+      : "";
+  return `${base}${path}${query}`;
+}
+
 export async function createRequest({
   requestType,
   body = null,
   params = null,
   path,
   batch = false,
+  bulkBase = "v2",
   returnText = false,
   scoring = false,
   apiBaseURL
 }) {
-  const url = `${
-    batch ? API_BULK_BASE_URL : apiBaseURL
-  }${path}?${new URLSearchParams(params)}`;
+  const url = buildRequestUrl({ batch, bulkBase, apiBaseURL, path, params });
 
   try {
     const response = await fetch(url, {
