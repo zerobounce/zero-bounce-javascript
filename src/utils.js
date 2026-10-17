@@ -129,7 +129,8 @@ export async function createRequest({
       return finalResult;
     }
   } catch (error) {
-    throw new Error(error);
+    // Some fetch polyfills (e.g. node-fetch) embed the request URL, including api_key, in errors.
+    throw new Error(String(error).replace(/([?&]api_key=)[^&\s"']+/gi, "$1***"));
   }
 }
 
