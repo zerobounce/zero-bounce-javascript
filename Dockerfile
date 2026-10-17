@@ -8,4 +8,7 @@ RUN npm ci --ignore-scripts || npm install
 
 COPY . .
 
+
+USER 65532:65532
+
 CMD ["npm", "run", "test:coverage"]
