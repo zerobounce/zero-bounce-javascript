@@ -69,6 +69,10 @@ export interface EmailValidationResult {
   account?: string | null;
   domain?: string | null;
   domain_age_days?: string | null;
+  /** Last activity bucket when activity_data was requested (e.g. 30, 365+). */
+  active_in_days?: string | null;
+  /** First date activity was detected for this email (YYYY-MM-DD). */
+  active_first_seen?: string | null;
   smtp_provider?: string | null;
   /** [true/false or null] Is the domain a catch-all? */
   catchall_domain?: boolean | null;
@@ -231,11 +235,26 @@ export interface ValidateEmailOptions {
   ip_address?: string;
   /** Validation timeout in seconds, 3–60. If exceeded, API may return unknown/greylisted. */
   timeout?: number;
+  /** Maps to `activity_data` on GET /validate. */
+  activityData?: boolean;
+  /** Maps to `verify_plus` on GET /validate. */
+  verifyPlus?: boolean;
 }
 
 /** Single item for validateBatch (email_batch array). */
 export interface ValidateBatchEmailItem {
   email_address: string;
+  ip_address?: string | null;
+}
+
+/** Options for validateBatch (timeout, activity_data, verify_plus). */
+export interface ValidateBatchOptions {
+  /** Validation timeout in seconds, 10–120 for the whole batch. */
+  timeout?: number;
+  /** Maps to `activity_data` on POST /validatebatch. */
+  activityData?: boolean;
+  /** Maps to `verify_plus` on POST /validatebatch. */
+  verifyPlus?: boolean;
 }
 
 /** Bulk `getfile` query values for `download_type` (validation and scoring). */
@@ -365,7 +384,7 @@ export class ZeroBounceSDK {
   /**
    * Validate a single email address.
    * @param email - Email to validate
-   * @param options - Optional ip_address and/or timeout (3–60 seconds), or ip_address string for backwards compatibility
+   * @param options - Optional ip_address, timeout (3–60), activityData, verifyPlus, or ip_address string for backwards compatibility
    */
   validateEmail(
     email: string,
@@ -384,10 +403,12 @@ export class ZeroBounceSDK {
 
   /**
    * Validate a batch of emails.
-   * @param emailBatch - Array of objects with email_address
+   * @param emailBatch - Array of objects with email_address (and optional ip_address)
+   * @param options - Optional timeout (10–120), activityData, verifyPlus
    */
   validateBatch(
-    emailBatch: ValidateBatchEmailItem[]
+    emailBatch: ValidateBatchEmailItem[],
+    options?: ValidateBatchOptions | null
   ): Promise<ValidateBatchResponse | undefined>;
 
   /**

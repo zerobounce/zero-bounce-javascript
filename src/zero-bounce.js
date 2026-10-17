@@ -115,6 +115,8 @@ export class ZeroBounceSDK {
    * @param options - options object or ip_address string for backwards compatibility
    * @param options.ip_address - IP address (optional)
    * @param options.timeout - validation timeout in seconds, 3-60 (optional). If met, the API will return unknown/greylisted.
+   * @param options.activityData - when true/false, sends activity_data query param (optional)
+   * @param options.verifyPlus - when true/false, sends verify_plus query param (optional)
    * */
   validateEmail(email, options = null) {
     if (!this._initialized) {
@@ -127,11 +129,15 @@ export class ZeroBounceSDK {
 
     let ip_address;
     let timeout;
+    let activityData;
+    let verifyPlus;
     if (typeof options === "string") {
       ip_address = options;
     } else if (options && typeof options === "object") {
       ip_address = options.ip_address;
       timeout = options.timeout;
+      activityData = options.activityData;
+      verifyPlus = options.verifyPlus;
     }
 
     if (timeout != null && (timeout < 3 || timeout > 60)) {
@@ -145,6 +151,8 @@ export class ZeroBounceSDK {
     };
     if (ip_address != null) params.ip_address = ip_address;
     if (timeout != null) params.timeout = timeout;
+    if (activityData != null) params.activity_data = activityData ? "true" : "false";
+    if (verifyPlus != null) params.verify_plus = verifyPlus ? "true" : "false";
 
     return createRequest({ requestType: "GET", params, path: "/validate", apiBaseURL: this._api_base_url });
   }
@@ -180,9 +188,10 @@ export class ZeroBounceSDK {
 
   /**
    * @param emailBatch: an array containing a list of email objects {email_address: "example@example.com"}
+   * @param options - optional timeout (10-120 seconds), activityData, verifyPlus
    * */
 
-  validateBatch(emailBatch) {
+  validateBatch(emailBatch, options = null) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -191,10 +200,27 @@ export class ZeroBounceSDK {
       return;
     }
 
+    let timeout;
+    let activityData;
+    let verifyPlus;
+    if (options && typeof options === "object") {
+      timeout = options.timeout;
+      activityData = options.activityData;
+      verifyPlus = options.verifyPlus;
+    }
+
+    if (timeout != null && (timeout < 10 || timeout > 120)) {
+      parameterIsInvalid("timeout", "Must be between 10 and 120 seconds.");
+      return;
+    }
+
     const body = {
       api_key: this._api_key,
       email_batch: emailBatch,
     };
+    if (timeout != null) body.timeout = timeout;
+    if (activityData != null) body.activity_data = activityData;
+    if (verifyPlus != null) body.verify_plus = verifyPlus;
     return createRequest({
       requestType: "POST",
       path: "/validatebatch",

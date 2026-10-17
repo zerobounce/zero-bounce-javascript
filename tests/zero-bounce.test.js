@@ -303,6 +303,21 @@ describe("ZeroBounceSDK", () => {
         expect.stringContaining("timeout parameter is invalid")
       );
     });
+
+    it("should pass activity_data and verify_plus via options object", async () => {
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve({ status: "valid" }),
+        text: () => Promise.resolve('{"status":"valid"}'),
+      }));
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.validateEmail(email, {
+        activityData: true,
+        verifyPlus: false,
+      });
+      const calledUrl = String(fetch.mock.calls[0][0]);
+      expect(calledUrl).toContain("activity_data=true");
+      expect(calledUrl).toContain("verify_plus=false");
+    });
   });
 
 
@@ -396,6 +411,32 @@ describe("ZeroBounceSDK", () => {
       );
       expect(String(fetch.mock.calls[0][0])).not.toContain("bulkapi");
       expect(response).toEqual(expectedResponse);
+    });
+
+    it("should include batch options in POST body", async () => {
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve({ email_batch: [], errors: [] }),
+        text: () => Promise.resolve('{"email_batch":[],"errors":[]}'),
+      }));
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.validateBatch(emailBatch, {
+        timeout: 60,
+        activityData: true,
+        verifyPlus: true,
+      });
+      const init = fetch.mock.calls[0][1];
+      const body = JSON.parse(init.body);
+      expect(body.timeout).toBe(60);
+      expect(body.activity_data).toBe(true);
+      expect(body.verify_plus).toBe(true);
+    });
+
+    it("should throw an error if batch timeout is out of range", async () => {
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.validateBatch(emailBatch, { timeout: 9 });
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining("timeout parameter is invalid")
+      );
     });
   });
 

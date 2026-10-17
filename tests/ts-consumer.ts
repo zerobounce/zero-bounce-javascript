@@ -5,6 +5,7 @@
 
 import ZeroBounceSDK, {
   type ValidateEmailOptions,
+  type ValidateBatchOptions,
   type ValidateBatchEmailItem,
   type SendFileOptions,
   type SendFileStreamOptions,
@@ -46,6 +47,14 @@ const downloadCombined: string = ZeroBounceSDK.ZBDownloadType.COMBINED;
 const validateOpts: ValidateEmailOptions = {
   ip_address: "127.0.0.1",
   timeout: 10,
+  activityData: true,
+  verifyPlus: false,
+};
+
+const batchOpts: ValidateBatchOptions = {
+  timeout: 30,
+  activityData: true,
+  verifyPlus: true,
 };
 
 const batchItems: ValidateBatchEmailItem[] = [
@@ -82,7 +91,7 @@ const usagePromise: Promise<ApiUsageResponse | undefined> =
   zb.getApiUsage("2024-01-01", "2024-12-31");
 
 const batchPromise: Promise<ValidateBatchResponse | undefined> =
-  zb.validateBatch(batchItems);
+  zb.validateBatch(batchItems, batchOpts);
 
 const activityPromise: Promise<EmailActivityResponse | undefined> =
   zb.getEmailActivity("test@example.com");
