@@ -117,6 +117,7 @@ export class ZeroBounceSDK {
    * @param options.timeout - validation timeout in seconds, 3-60 (optional). If met, the API will return unknown/greylisted.
    * @param options.activityData - when true/false, sends activity_data query param (optional)
    * @param options.verifyPlus - when true/false, sends verify_plus query param (optional)
+   * @param options.method - `"POST"` for form-encoded POST (default GET)
    * */
   validateEmail(email, options = null) {
     if (!this._initialized) {
@@ -153,6 +154,19 @@ export class ZeroBounceSDK {
     if (timeout != null) params.timeout = timeout;
     if (activityData != null) params.activity_data = activityData ? "true" : "false";
     if (verifyPlus != null) params.verify_plus = verifyPlus ? "true" : "false";
+
+    const usePost =
+      options && typeof options === "object" && options.method === "POST";
+
+    if (usePost) {
+      return createRequest({
+        requestType: "POST",
+        path: "/validate",
+        body: new URLSearchParams(params),
+        params: {},
+        apiBaseURL: this._api_base_url,
+      });
+    }
 
     return createRequest({ requestType: "GET", params, path: "/validate", apiBaseURL: this._api_base_url });
   }
@@ -984,6 +998,24 @@ export class ZeroBounceSDK {
   }
 
   // AMAZON S3 BULK HELPERS (bulkapi root)
+
+  listS3files({ bucket = null, search = null } = {}) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    }
+    const params = { api_key: this._api_key };
+    if (bucket != null) params.bucket = bucket;
+    if (search != null) params.search = search;
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/listS3files",
+      batch: true,
+      bulkBase: "root",
+      apiBaseURL: this._api_base_url,
+    });
+  }
 
   validateS3file({
     file_name,

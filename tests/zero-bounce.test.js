@@ -318,6 +318,31 @@ describe("ZeroBounceSDK", () => {
       expect(calledUrl).toContain("activity_data=true");
       expect(calledUrl).toContain("verify_plus=false");
     });
+
+    it("should send POST with form body when method is POST", async () => {
+      const expectedResponse = { status: "valid", address: email };
+
+      jest.spyOn(global, "fetch").mockImplementationOnce((url, init) => {
+        expect(String(url)).toContain("/validate");
+        expect(String(url)).not.toContain("api_key=");
+        expect(init.method).toBe("POST");
+        expect(init.body).toBeInstanceOf(URLSearchParams);
+        expect(init.body.get("email")).toBe(email);
+        expect(init.body.get("api_key")).toBe("valid-api-key");
+        expect(init.body.get("ip_address")).toBe(ip_address);
+        return Promise.resolve({
+          json: () => Promise.resolve(expectedResponse),
+          text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+        });
+      });
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      const response = await zeroBounceSDK.validateEmail(email, {
+        ip_address,
+        method: "POST",
+      });
+      expect(response).toEqual(expectedResponse);
+    });
   });
 
   describe("scoreEmail", () => {
@@ -1215,6 +1240,21 @@ describe("ZeroBounceSDK", () => {
       const [url, init] = fetch.mock.calls[0];
       expect(String(url)).toContain("/filters/list");
       expect(init.method).toBe("POST");
+    });
+
+    it("listS3files GETs bulkapi listS3files with optional bucket and search", async () => {
+      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        jsonOk([{ name: "uploads/list.csv", size: 100, last_modified: "2024-01-01T00:00:00Z" }])
+      );
+      await zeroBounceSDK.listS3files({
+        bucket: "my-bucket",
+        search: "list",
+      });
+      const calledUrl = String(fetch.mock.calls[0][0]);
+      expect(calledUrl).toBe(
+        "https://bulkapi.zerobounce.net/listS3files?api_key=valid-api-key&bucket=my-bucket&search=list"
+      );
+      expect(fetch.mock.calls[0][1].method).toBe("GET");
     });
 
     it("validateS3file posts to bulkapi validateS3file", async () => {

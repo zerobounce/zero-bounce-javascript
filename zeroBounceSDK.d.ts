@@ -256,6 +256,8 @@ export interface ValidateEmailOptions {
   activityData?: boolean;
   /** Maps to `verify_plus` on GET /validate. */
   verifyPlus?: boolean;
+  /** Use form-encoded POST instead of GET (same parameters). */
+  method?: "GET" | "POST";
 }
 
 /** Single item for validateBatch (email_batch array). */
@@ -458,6 +460,13 @@ export interface ScoreS3FileOptions {
 export interface ExportS3FileOptions {
   file_id: string;
   export_bucket: string;
+}
+
+/** Single entry from GET /listS3files. */
+export interface S3ListFileEntry {
+  name: string;
+  size: number;
+  last_modified: string;
 }
 
 export interface S3BulkJobResponse {
@@ -726,6 +735,10 @@ export class ZeroBounceSDK {
   deleteFilter(
     options: FilterRuleParams
   ): Promise<FilterMessageResponse | undefined>;
+
+  listS3files(
+    options?: { bucket?: string | null; search?: string | null } | null
+  ): Promise<S3ListFileEntry[] | undefined>;
 
   validateS3file(
     options: ValidateS3FileOptions

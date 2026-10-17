@@ -52,6 +52,7 @@ const validateOpts: ValidateEmailOptions = {
   timeout: 10,
   activityData: true,
   verifyPlus: false,
+  method: "POST",
 };
 
 const batchOpts: ValidateBatchOptions = {
