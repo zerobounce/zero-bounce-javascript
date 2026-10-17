@@ -22,6 +22,9 @@ import ZeroBounceSDK, {
   type ValidateBatchResponse,
   type ApiUsageResponse,
   type EmailActivityResponse,
+  type EmailScoringResult,
+  type EmailScoringError,
+  type ScoreEmailOptions,
   type SendFileResponse,
   type ValidationFileStatusResponse,
   type ScoringFileStatusResponse,
@@ -95,6 +98,12 @@ const batchPromise: Promise<ValidateBatchResponse | undefined> =
 
 const activityPromise: Promise<EmailActivityResponse | undefined> =
   zb.getEmailActivity("test@example.com");
+
+const scoreOpts: ScoreEmailOptions = { method: "POST" };
+const scorePromise: Promise<EmailScoringResult | EmailScoringError | undefined> =
+  zb.scoreEmail("test@example.com");
+const scorePostPromise: Promise<EmailScoringResult | EmailScoringError | undefined> =
+  zb.scoreEmail("test@example.com", scoreOpts);
 
 const findDomainPromise: Promise<EmailFinderResponse | undefined> =
   zb.findEmailByDomain(findByDomainOpts);
@@ -207,6 +216,8 @@ function assertTypes(): void {
   void usagePromise;
   void batchPromise;
   void activityPromise;
+  void scorePromise;
+  void scorePostPromise;
   void findDomainPromise;
   void findCompanyPromise;
   void formatDomainPromise;

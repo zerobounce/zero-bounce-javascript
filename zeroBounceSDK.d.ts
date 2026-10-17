@@ -142,6 +142,23 @@ export interface EmailActivityResponse {
   active_in_days?: string;
 }
 
+/** Successful GET/POST /scoring response. */
+export interface EmailScoringResult {
+  email: string;
+  score: number;
+}
+
+/** Unsuccessful /scoring response (invalid email, missing params, etc.). */
+export interface EmailScoringError {
+  error: string;
+}
+
+/** Options for scoreEmail. */
+export interface ScoreEmailOptions {
+  /** When `"POST"`, sends `api_key` and `email` as `application/x-www-form-urlencoded` (default GET). */
+  method?: "GET" | "POST";
+}
+
 /** Bulk sendfile success (validation or scoring). */
 export interface BulkSendFileSuccessResponse {
   success: true;
@@ -416,6 +433,16 @@ export class ZeroBounceSDK {
    * @param email - Valid email address
    */
   getEmailActivity(email: string): Promise<EmailActivityResponse | undefined>;
+
+  /**
+   * Real-time AI scoring for a single email (GET or POST /scoring).
+   * @param email - Email to score
+   * @param options - Optional `{ method: "POST" }` for form-encoded POST
+   */
+  scoreEmail(
+    email: string,
+    options?: ScoreEmailOptions | null
+  ): Promise<EmailScoringResult | EmailScoringError | undefined>;
 
   /**
    * Submit a file for bulk email validation.

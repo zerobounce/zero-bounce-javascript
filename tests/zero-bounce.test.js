@@ -320,6 +320,66 @@ describe("ZeroBounceSDK", () => {
     });
   });
 
+  describe("scoreEmail", () => {
+    const email = "mark@gmail.com";
+
+    it("should throw an error if not initialized", async () => {
+      await zeroBounceSDK.scoreEmail(email);
+      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+    });
+
+    it("should throw an error if email is missing", async () => {
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      await zeroBounceSDK.scoreEmail(null);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining(missingParamMessage)
+      );
+    });
+
+    it("should return scoring data via GET", async () => {
+      const expectedResponse = {
+        email: "mark@gmail.com",
+        score: 10,
+      };
+
+      jest.spyOn(global, "fetch").mockImplementationOnce((url, init) => {
+        expect(String(url)).toContain("/scoring?");
+        expect(init.method).toBe("GET");
+        return Promise.resolve({
+          json: () => Promise.resolve(expectedResponse),
+          text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+        });
+      });
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      const response = await zeroBounceSDK.scoreEmail(email);
+      expect(response).toEqual(expectedResponse);
+    });
+
+    it("should send POST with form body when requested", async () => {
+      const expectedResponse = {
+        email: "mark@gmail.com",
+        score: 10,
+      };
+
+      jest.spyOn(global, "fetch").mockImplementationOnce((url, init) => {
+        expect(String(url)).toContain("/scoring?");
+        expect(init.method).toBe("POST");
+        expect(init.body).toBeInstanceOf(URLSearchParams);
+        expect(init.body.get("email")).toBe(email);
+        expect(init.body.get("api_key")).toBe("valid-api-key");
+        return Promise.resolve({
+          json: () => Promise.resolve(expectedResponse),
+          text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+        });
+      });
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      const response = await zeroBounceSDK.scoreEmail(email, { method: "POST" });
+      expect(response).toEqual(expectedResponse);
+    });
+  });
+
 
   describe("validateBatch", () => {
     const emailBatch = [

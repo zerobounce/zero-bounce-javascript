@@ -253,6 +253,46 @@ export class ZeroBounceSDK {
   }
 
   /**
+   * Real-time AI scoring for a single email (GET or POST /scoring).
+   * @param email - email to score
+   * @param options - optional `{ method: "POST" }` to use form-encoded POST (default GET)
+   * */
+  scoreEmail(email, options = null) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (!email) {
+      parameterIsMissing("Email");
+      return;
+    }
+
+    const params = {
+      api_key: this._api_key,
+      email,
+    };
+
+    const usePost =
+      options && typeof options === "object" && options.method === "POST";
+
+    if (usePost) {
+      return createRequest({
+        requestType: "POST",
+        path: "/scoring",
+        body: new URLSearchParams(params),
+        params: {},
+        apiBaseURL: this._api_base_url,
+      });
+    }
+
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/scoring",
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
+  /**
    * @param file: File - The csv or txt file to be submitted.
    * @param email_address_column: number - The column index of the email address in the file. Index starts from 1.
    * @param return_url: str or null - The URL will be used to call back when the validation is completed.
