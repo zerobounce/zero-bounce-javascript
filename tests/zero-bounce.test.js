@@ -48,8 +48,7 @@ describe("ZeroBounceSDK", () => {
 
   describe("getCredits", () => {
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.getCredits();
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.getCredits()).rejects.toThrow(initErrorMessage);
     });
 
     it("should return error response with invalid API key", async () => {
@@ -83,24 +82,17 @@ describe("ZeroBounceSDK", () => {
     const endDate = "2023-12-12";
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.getApiUsage(startDate, endDate);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.getApiUsage(startDate, endDate)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if stardDate is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.getApiUsage(null, endDate);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.getApiUsage(null, endDate)).rejects.toThrow(missingParamMessage)
     });
 
     it("should throw an error if endDate is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.getApiUsage(startDate, null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.getApiUsage(startDate, null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
@@ -170,16 +162,12 @@ describe("ZeroBounceSDK", () => {
     const ip_address = "127.0.0.1";
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.validateEmail(email, ip_address);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.validateEmail(email, ip_address)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if email is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.validateEmail(null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.validateEmail(null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
@@ -290,18 +278,12 @@ describe("ZeroBounceSDK", () => {
 
     it("should throw an error if timeout is less than 3", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.validateEmail(email, { timeout: 2 });
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining("timeout parameter is invalid")
-      );
+      await expect(zeroBounceSDK.validateEmail(email, { timeout: 2 })).rejects.toThrow("timeout parameter is invalid")
     });
 
     it("should throw an error if timeout is greater than 60", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.validateEmail(email, { timeout: 61 });
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining("timeout parameter is invalid")
-      );
+      await expect(zeroBounceSDK.validateEmail(email, { timeout: 61 })).rejects.toThrow("timeout parameter is invalid")
     });
 
     it("should pass activity_data and verify_plus via options object", async () => {
@@ -349,16 +331,12 @@ describe("ZeroBounceSDK", () => {
     const email = "mark@gmail.com";
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.scoreEmail(email);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.scoreEmail(email)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if email is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.scoreEmail(null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.scoreEmail(null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return scoring data via GET", async () => {
@@ -414,25 +392,32 @@ describe("ZeroBounceSDK", () => {
     ];
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.validateBatch(emailBatch);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.validateBatch(emailBatch)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if email list is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.validateBatch(null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.validateBatch(null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
+      const body = {
+        email_batch: [],
+        errors: [{ email_address: "all", error: "Invalid API Key or your account ran out of credits" }],
+      };
+      jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        Promise.resolve({
+          status: 200,
+          ok: true,
+          headers: { get: () => "application/json" },
+          text: () => Promise.resolve(JSON.stringify(body)),
+          json: () => Promise.resolve(body),
+        })
+      );
       zeroBounceSDK.init("invalid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      try {
-        await zeroBounceSDK.validateBatch(emailBatch);
-      } catch (error) {
-        expect(error.message).toEqual('TypeError: Network request failed');
-      }
+      await expect(zeroBounceSDK.validateBatch(emailBatch)).rejects.toThrow(
+        "Invalid API Key or your account ran out of credits"
+      );
     });
 
     it("should return the validated emails data", async () => {
@@ -519,10 +504,7 @@ describe("ZeroBounceSDK", () => {
 
     it("should throw an error if batch timeout is out of range", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.validateBatch(emailBatch, { timeout: 9 });
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining("timeout parameter is invalid")
-      );
+      await expect(zeroBounceSDK.validateBatch(emailBatch, { timeout: 9 })).rejects.toThrow("timeout parameter is invalid")
     });
   });
 
@@ -531,16 +513,12 @@ describe("ZeroBounceSDK", () => {
     const email = "valid@example.com";
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.getEmailActivity(email);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.getEmailActivity(email)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if email is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.getEmailActivity(null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.getEmailActivity(null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
@@ -580,8 +558,7 @@ describe("ZeroBounceSDK", () => {
     };
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.sendFile(payload);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.sendFile(payload)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if file is missing", async () => {
@@ -590,10 +567,7 @@ describe("ZeroBounceSDK", () => {
       };
 
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.sendFile(payload);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.sendFile(payload)).rejects.toThrow(missingParamMessage)
     });
 
     it("should throw an error if email address column is missing", async () => {
@@ -602,21 +576,26 @@ describe("ZeroBounceSDK", () => {
       };
 
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.sendFile(payload);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.sendFile(payload)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
+      const expected = {
+        success: "False",
+        message: ["api_key is invalid"],
+      };
+      jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        Promise.resolve({
+          status: 200,
+          ok: true,
+          headers: { get: () => "application/json" },
+          text: () => Promise.resolve(JSON.stringify(expected)),
+          json: () => Promise.resolve(expected),
+        })
+      );
       zeroBounceSDK.init("invalid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
       const response = await zeroBounceSDK.sendFile(payload);
-      expect(response).toEqual({
-        "success": "False",
-        "message": [
-            "api_key is invalid"
-        ]
-      });
+      expect(response).toEqual(expected);
     });
 
     it("should return the data regarding sent file", async () => {
@@ -663,8 +642,7 @@ describe("ZeroBounceSDK", () => {
     };
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.sendScoringFile(payload);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.sendScoringFile(payload)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if file is missing", async () => {
@@ -673,10 +651,7 @@ describe("ZeroBounceSDK", () => {
       };
 
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.sendScoringFile(payload);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.sendScoringFile(payload)).rejects.toThrow(missingParamMessage)
     });
 
     it("should throw an error if email address column is missing", async () => {
@@ -685,21 +660,26 @@ describe("ZeroBounceSDK", () => {
       };
 
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.sendScoringFile(payload);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.sendScoringFile(payload)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
+      const expected = {
+        success: "False",
+        message: ["api_key is invalid"],
+      };
+      jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+        Promise.resolve({
+          status: 200,
+          ok: true,
+          headers: { get: () => "application/json" },
+          text: () => Promise.resolve(JSON.stringify(expected)),
+          json: () => Promise.resolve(expected),
+        })
+      );
       zeroBounceSDK.init("invalid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
       const response = await zeroBounceSDK.sendScoringFile(payload);
-      expect(response).toEqual({
-        "success": "False",
-        "message": [
-            "api_key is invalid"
-        ]
-      });
+      expect(response).toEqual(expected);
     });
 
     it("should return the data regarding sent scoring file", async () => {
@@ -726,16 +706,12 @@ describe("ZeroBounceSDK", () => {
     const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.getFileStatus(fileId);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.getFileStatus(fileId)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if file id is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.getFileStatus(null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.getFileStatus(null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
@@ -776,16 +752,12 @@ describe("ZeroBounceSDK", () => {
     const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.getScoringFileStatus(fileId);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.getScoringFileStatus(fileId)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if file id is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.getScoringFileStatus(null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.getScoringFileStatus(null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
@@ -829,16 +801,12 @@ describe("ZeroBounceSDK", () => {
     });
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.getFile(fileId);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.getFile(fileId)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if file id is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.getFile(null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.getFile(null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
@@ -933,16 +901,12 @@ describe("ZeroBounceSDK", () => {
     const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.getScoringFile(fileId);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.getScoringFile(fileId)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if file id is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.getScoringFile(null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.getScoringFile(null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
@@ -973,16 +937,12 @@ describe("ZeroBounceSDK", () => {
     const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.deleteFile(fileId);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.deleteFile(fileId)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if file id is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.deleteFile(null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.deleteFile(null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
@@ -1018,16 +978,12 @@ describe("ZeroBounceSDK", () => {
     const fileId = "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff";
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.deleteScoringFile(fileId);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.deleteScoringFile(fileId)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if file id is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.deleteScoringFile(null);
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.deleteScoringFile(null)).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
@@ -1067,16 +1023,12 @@ describe("ZeroBounceSDK", () => {
     }
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.findEmailByDomain(payload);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.findEmailByDomain(payload)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if domain is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.findEmailByDomain({domain: null});
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.findEmailByDomain({domain: null})).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {
@@ -1118,16 +1070,12 @@ describe("ZeroBounceSDK", () => {
     }
 
     it("should throw an error if not initialized", async () => {
-      await zeroBounceSDK.findEmailFormatByDomain(payload);
-      expect(console.error).toHaveBeenCalledWith(initErrorMessage);
+      await expect(zeroBounceSDK.findEmailFormatByDomain(payload)).rejects.toThrow(initErrorMessage);
     });
 
     it("should throw an error if domain is missing", async () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      await zeroBounceSDK.findEmailFormatByDomain({domain: null});
-      expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining(missingParamMessage)
-      );
+      await expect(zeroBounceSDK.findEmailFormatByDomain({domain: null})).rejects.toThrow(missingParamMessage)
     });
 
     it("should return error response with invalid API key", async () => {

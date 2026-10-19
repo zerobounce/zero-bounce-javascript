@@ -28,5 +28,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run tests and typecheck
+        run: npm test
+
       - name: Run tests with coverage
         run: npm run test:coverage
+
+      - name: Typecheck declarations
+        run: npm run dts-check

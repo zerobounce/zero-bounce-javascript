@@ -65,6 +65,18 @@ export const ZBDownloadType = Object.freeze({
   COMBINED: "combined"
 });
 
+function isMissing(value) {
+  return value == null || (typeof value === "string" && value.trim() === "");
+}
+
+function booleanText(value) {
+  return value ? "true" : "false";
+}
+
+function optionalColumn(value) {
+  return value ? value : null;
+}
+
 export class ZeroBounceSDK {
   static ApiURL = Object.freeze({
     DEFAULT_API_URL: "https://api.zerobounce.net/v2",
@@ -90,16 +102,15 @@ export class ZeroBounceSDK {
    * @param apiBaseURL - your preferred API, possible values being ApiURL.DEFAULT_API_URL, ApiURL.USAAPIURL, ApiURL.EUAPIURL
    * */
   init(apiKey, apiBaseURL = ZeroBounceSDK.ApiURL.DEFAULT_API_URL) {
-    if (!apiKey) {
-      parameterIsMissing("Api key", "Please provide a valid API key.");
-    } else {
-      this._api_key = apiKey;
-      this._api_base_url = requireHttpsUrl(apiBaseURL);
-      this._initialized = true;
+    if (apiKey == null || String(apiKey).trim() === "") {
+      throw new Error("ZeroBounce: Api key parameter is missing. Please provide a valid API key.");
     }
+    this._api_key = apiKey;
+    this._api_base_url = requireHttpsUrl(apiBaseURL);
+    this._initialized = true;
   }
 
-  getCredits() {
+  async getCredits() {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -119,11 +130,11 @@ export class ZeroBounceSDK {
    * @param options.verifyPlus - when true/false, sends verify_plus query param (optional)
    * @param options.method - `"POST"` for form-encoded POST (default GET)
    * */
-  validateEmail(email, options = null) {
+  async validateEmail(email, options = null) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!email) {
+    } else if (isMissing(email)) {
       parameterIsMissing("Email");
       return;
     }
@@ -175,14 +186,14 @@ export class ZeroBounceSDK {
    * @param startDate - The start date
    * @param endDate - The end date
    * */
-  getApiUsage(startDate, endDate) {
+  async getApiUsage(startDate, endDate) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!startDate) {
+    } else if (isMissing(startDate)) {
       parameterIsMissing("Start date", "Format: YYYY-MM-DD");
       return;
-    } else if (!endDate) {
+    } else if (isMissing(endDate)) {
       parameterIsMissing("End date", "Format: YYYY-MM-DD");
       return;
     }
@@ -205,11 +216,11 @@ export class ZeroBounceSDK {
    * @param options - optional timeout (10-120 seconds), activityData, verifyPlus
    * */
 
-  validateBatch(emailBatch, options = null) {
+  async validateBatch(emailBatch, options = null) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!emailBatch) {
+    } else if (emailBatch == null) {
       parameterIsMissing("Email list");
       return;
     }
@@ -246,11 +257,11 @@ export class ZeroBounceSDK {
   /**
    * @param email - a valid email address
    * */
-  getEmailActivity(email) {
+  async getEmailActivity(email) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!email) {
+    } else if (isMissing(email)) {
       parameterIsMissing("Email");
       return;
     }
@@ -271,11 +282,11 @@ export class ZeroBounceSDK {
    * @param email - email to score
    * @param options - optional `{ method: "POST" }` to use form-encoded POST (default GET)
    * */
-  scoreEmail(email, options = null) {
+  async scoreEmail(email, options = null) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!email) {
+    } else if (isMissing(email)) {
       parameterIsMissing("Email");
       return;
     }
@@ -318,7 +329,7 @@ export class ZeroBounceSDK {
    * @param remove_duplicate: Boolean - If you want the system to remove duplicate emails.
    * @param allowPhase2: Boolean|null - Optional. When set, sends {@code allow_phase_2} (validation bulk only; see v2 send file API).
    * */
-  sendFile({
+  async sendFile({
     file,
     email_address_column,
     first_name_column = false,
@@ -336,7 +347,7 @@ export class ZeroBounceSDK {
     } else if (!file) {
       parameterIsMissing("file");
       return;
-    } else if (!email_address_column) {
+    } else if (isMissing(email_address_column)) {
       parameterIsMissing("email_address_column");
       return;
     }
@@ -360,11 +371,11 @@ export class ZeroBounceSDK {
 
     body.append("email_address_column", email_address_column);
     body.append("file", file);
-    body.append("has_header_row", has_header_row);
-    body.append("remove_duplicate", remove_duplicate);
+    body.append("has_header_row", booleanText(has_header_row));
+    body.append("remove_duplicate", booleanText(remove_duplicate));
     body.append("api_key", this._api_key);
     if (allowPhase2 != null) {
-      body.append("allow_phase_2", String(allowPhase2));
+      body.append("allow_phase_2", booleanText(allowPhase2));
     }
 
     return createRequest({
@@ -382,7 +393,7 @@ export class ZeroBounceSDK {
    * @param fileName: string - The file name to use for the upload (e.g. "emails.csv").
    * @param options: object - Same options as sendFile (email_address_column, return_url, etc.).
    * */
-  sendFileStream(fileStreamOrBlob, fileName, {
+  async sendFileStream(fileStreamOrBlob, fileName, {
     email_address_column,
     first_name_column = false,
     return_url = false,
@@ -399,10 +410,10 @@ export class ZeroBounceSDK {
     } else if (!fileStreamOrBlob) {
       parameterIsMissing("fileStreamOrBlob");
       return;
-    } else if (!fileName) {
+    } else if (isMissing(fileName)) {
       parameterIsMissing("fileName");
       return;
-    } else if (!email_address_column) {
+    } else if (isMissing(email_address_column)) {
       parameterIsMissing("email_address_column");
       return;
     }
@@ -415,11 +426,11 @@ export class ZeroBounceSDK {
     if (ip_address_column) body.append("ip_address_column", ip_address_column);
     body.append("email_address_column", email_address_column);
     body.append("file", fileStreamOrBlob, fileName);
-    body.append("has_header_row", has_header_row);
-    body.append("remove_duplicate", remove_duplicate);
+    body.append("has_header_row", booleanText(has_header_row));
+    body.append("remove_duplicate", booleanText(remove_duplicate));
     body.append("api_key", this._api_key);
     if (allowPhase2 != null) {
-      body.append("allow_phase_2", String(allowPhase2));
+      body.append("allow_phase_2", booleanText(allowPhase2));
     }
 
     return createRequest({
@@ -438,7 +449,7 @@ export class ZeroBounceSDK {
    * @param has_header_row: Boolean - If the first row from the submitted file is a header row.
    * @param remove_duplicate: Boolean - If you want the system to remove duplicate emails.
    * */
-  sendScoringFile({
+  async sendScoringFile({
     file,
     email_address_column,
     return_url = false,
@@ -451,7 +462,7 @@ export class ZeroBounceSDK {
     } else if (!file) {
       parameterIsMissing("file: File");
       return;
-    } else if (!email_address_column) {
+    } else if (isMissing(email_address_column)) {
       parameterIsMissing("email_address_column: number");
       return;
     }
@@ -464,9 +475,9 @@ export class ZeroBounceSDK {
 
     body.append("file", file);
     body.append("email_address_column", email_address_column);
-    body.append("has_header_row", has_header_row);
+    body.append("has_header_row", booleanText(has_header_row));
     body.append("api_key", this._api_key);
-    body.append("remove_duplicate", remove_duplicate);
+    body.append("remove_duplicate", booleanText(remove_duplicate));
 
     return createRequest({
       requestType: "POST",
@@ -483,7 +494,7 @@ export class ZeroBounceSDK {
    * @param fileName: string - e.g. "emails.csv"
    * @param options: object - email_address_column, return_url, has_header_row, remove_duplicate
    * */
-  sendScoringFileStream(fileStreamOrBlob, fileName, {
+  async sendScoringFileStream(fileStreamOrBlob, fileName, {
     email_address_column,
     return_url = false,
     has_header_row = false,
@@ -495,10 +506,10 @@ export class ZeroBounceSDK {
     } else if (!fileStreamOrBlob) {
       parameterIsMissing("fileStreamOrBlob");
       return;
-    } else if (!fileName) {
+    } else if (isMissing(fileName)) {
       parameterIsMissing("fileName");
       return;
-    } else if (!email_address_column) {
+    } else if (isMissing(email_address_column)) {
       parameterIsMissing("email_address_column");
       return;
     }
@@ -507,9 +518,9 @@ export class ZeroBounceSDK {
     if (return_url) body.append("return_url", return_url);
     body.append("file", fileStreamOrBlob, fileName);
     body.append("email_address_column", email_address_column);
-    body.append("has_header_row", has_header_row);
+    body.append("has_header_row", booleanText(has_header_row));
     body.append("api_key", this._api_key);
-    body.append("remove_duplicate", remove_duplicate);
+    body.append("remove_duplicate", booleanText(remove_duplicate));
 
     return createRequest({
       requestType: "POST",
@@ -520,11 +531,11 @@ export class ZeroBounceSDK {
     });
   }
 
-  _getStatusUtil(fileId, path, { bulkRoot = false } = {}) {
+  async _getStatusUtil(fileId, path, { bulkRoot = false } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!fileId) {
+    } else if (isMissing(fileId)) {
       parameterIsMissing("File id");
       return;
     }
@@ -546,22 +557,22 @@ export class ZeroBounceSDK {
   /**
    * @param fileId - the id of a previously submmitted and accepted file
    * */
-  getFileStatus(fileId) {
+  async getFileStatus(fileId) {
     return this._getStatusUtil(fileId, "/filestatus");
   }
 
   /**
    * @param fileId - the id of a previously submmitted and accepted file
    * */
-  getScoringFileStatus(fileId) {
+  async getScoringFileStatus(fileId) {
     return this._getStatusUtil(fileId, "/scoring/filestatus");
   }
 
-  _getFileUtil(fileId, path, scoring = false, getFileOptions = null, { bulkRoot = false } = {}) {
+  async _getFileUtil(fileId, path, scoring = false, getFileOptions = null, { bulkRoot = false } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!fileId) {
+    } else if (isMissing(fileId)) {
       parameterIsMissing("File id");
       return;
     }
@@ -593,7 +604,7 @@ export class ZeroBounceSDK {
    * @param fileId - the id of a previously submmitted and accepted file
    * @param getFileOptions - optional {@code downloadType} ({@link ZBDownloadType} values) and {@code activityData} (validation only)
    * */
-  getFile(fileId, getFileOptions = null) {
+  async getFile(fileId, getFileOptions = null) {
     return this._getFileUtil(fileId, "/getfile", false, getFileOptions);
   }
 
@@ -601,15 +612,15 @@ export class ZeroBounceSDK {
    * @param fileId - the id of a previously submmitted and accepted file
    * @param getFileOptions - optional {@code downloadType}; {@code activityData} is not sent for scoring getfile
    * */
-  getScoringFile(fileId, getFileOptions = null) {
+  async getScoringFile(fileId, getFileOptions = null) {
     return this._getFileUtil(fileId, "/scoring/getfile", true, getFileOptions);
   }
 
-  _deleteFileUtil(fileId, path, scoring = false, { bulkRoot = false } = {}) {
+  async _deleteFileUtil(fileId, path, scoring = false, { bulkRoot = false } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!fileId) {
+    } else if (isMissing(fileId)) {
       parameterIsMissing("File id");
       return;
     }
@@ -628,12 +639,11 @@ export class ZeroBounceSDK {
     });
   }
 
-  _sendBulkRootMultipartFile(path, { file, fileName = null, fields = {} }) {
+  async _sendBulkRootMultipartFile(path, { file, fileName = null, fields = {} }) {
     const body = new FormData();
     for (const [key, value] of Object.entries(fields)) {
-      if (value != null && value !== false) {
-        body.append(key, value);
-      }
+      if (value == null) continue;
+      body.append(key, typeof value === "boolean" ? booleanText(value) : value);
     }
     if (fileName != null) {
       body.append("file", file, fileName);
@@ -651,7 +661,7 @@ export class ZeroBounceSDK {
     });
   }
 
-  _sendBulkRootFormPost(path, fields) {
+  async _sendBulkRootFormPost(path, fields) {
     const params = {
       api_key: this._api_key,
       ...fields,
@@ -670,20 +680,20 @@ export class ZeroBounceSDK {
   /**
    * @param fileId - the id of a previously submmitted and accepted file
    * */
-  deleteFile(fileId) {
+  async deleteFile(fileId) {
     return this._deleteFileUtil(fileId, "/deletefile");
   }
 
   /**
    * @param fileId - the id of a previously submmitted and accepted file
    * */
-  deleteScoringFile(fileId) {
+  async deleteScoringFile(fileId) {
     return this._deleteFileUtil(fileId, "/scoring/deletefile", true);
   }
 
   // BULK EMAIL FINDER (bulkapi.zerobounce.net/email-finder/*)
 
-  sendEmailFinderFile({
+  async sendEmailFinderFile({
     file,
     domain_column,
     first_name_column = false,
@@ -698,7 +708,7 @@ export class ZeroBounceSDK {
     } else if (!file) {
       parameterIsMissing("file");
       return;
-    } else if (!domain_column) {
+    } else if (isMissing(domain_column)) {
       parameterIsMissing("domain_column");
       return;
     }
@@ -706,16 +716,16 @@ export class ZeroBounceSDK {
       file,
       fields: {
         domain_column,
-        first_name_column,
-        last_name_column,
-        middle_name_column,
-        full_name_column,
-        has_header_row,
+        first_name_column: optionalColumn(first_name_column),
+        last_name_column: optionalColumn(last_name_column),
+        middle_name_column: optionalColumn(middle_name_column),
+        full_name_column: optionalColumn(full_name_column),
+        has_header_row: Boolean(has_header_row),
       },
     });
   }
 
-  sendEmailFinderFileStream(fileStreamOrBlob, fileName, {
+  async sendEmailFinderFileStream(fileStreamOrBlob, fileName, {
     domain_column,
     first_name_column = false,
     last_name_column = false,
@@ -729,10 +739,10 @@ export class ZeroBounceSDK {
     } else if (!fileStreamOrBlob) {
       parameterIsMissing("fileStreamOrBlob");
       return;
-    } else if (!fileName) {
+    } else if (isMissing(fileName)) {
       parameterIsMissing("fileName");
       return;
-    } else if (!domain_column) {
+    } else if (isMissing(domain_column)) {
       parameterIsMissing("domain_column");
       return;
     }
@@ -741,30 +751,30 @@ export class ZeroBounceSDK {
       fileName,
       fields: {
         domain_column,
-        first_name_column,
-        last_name_column,
-        middle_name_column,
-        full_name_column,
-        has_header_row,
+        first_name_column: optionalColumn(first_name_column),
+        last_name_column: optionalColumn(last_name_column),
+        middle_name_column: optionalColumn(middle_name_column),
+        full_name_column: optionalColumn(full_name_column),
+        has_header_row: Boolean(has_header_row),
       },
     });
   }
 
-  getEmailFinderFileStatus(fileId) {
+  async getEmailFinderFileStatus(fileId) {
     return this._getStatusUtil(fileId, "/email-finder/filestatus", { bulkRoot: true });
   }
 
-  getEmailFinderFile(fileId) {
+  async getEmailFinderFile(fileId) {
     return this._getFileUtil(fileId, "/email-finder/getfile", false, null, { bulkRoot: true });
   }
 
-  deleteEmailFinderFile(fileId) {
+  async deleteEmailFinderFile(fileId) {
     return this._deleteFileUtil(fileId, "/email-finder/deletefile", false, { bulkRoot: true });
   }
 
   // BULK DOMAIN SEARCH (bulkapi.zerobounce.net/domain-search/*)
 
-  sendDomainSearchFile({
+  async sendDomainSearchFile({
     file,
     domain_column,
     has_header_row = false,
@@ -775,17 +785,17 @@ export class ZeroBounceSDK {
     } else if (!file) {
       parameterIsMissing("file");
       return;
-    } else if (!domain_column) {
+    } else if (isMissing(domain_column)) {
       parameterIsMissing("domain_column");
       return;
     }
     return this._sendBulkRootMultipartFile("/domain-search/sendfile", {
       file,
-      fields: { domain_column, has_header_row },
+      fields: { domain_column, has_header_row: Boolean(has_header_row) },
     });
   }
 
-  sendDomainSearchFileStream(fileStreamOrBlob, fileName, {
+  async sendDomainSearchFileStream(fileStreamOrBlob, fileName, {
     domain_column,
     has_header_row = false,
   } = {}) {
@@ -795,42 +805,42 @@ export class ZeroBounceSDK {
     } else if (!fileStreamOrBlob) {
       parameterIsMissing("fileStreamOrBlob");
       return;
-    } else if (!fileName) {
+    } else if (isMissing(fileName)) {
       parameterIsMissing("fileName");
       return;
-    } else if (!domain_column) {
+    } else if (isMissing(domain_column)) {
       parameterIsMissing("domain_column");
       return;
     }
     return this._sendBulkRootMultipartFile("/domain-search/sendfile", {
       file: fileStreamOrBlob,
       fileName,
-      fields: { domain_column, has_header_row },
+      fields: { domain_column, has_header_row: Boolean(has_header_row) },
     });
   }
 
-  getDomainSearchFileStatus(fileId) {
+  async getDomainSearchFileStatus(fileId) {
     return this._getStatusUtil(fileId, "/domain-search/filestatus", { bulkRoot: true });
   }
 
-  getDomainSearchFile(fileId) {
+  async getDomainSearchFile(fileId) {
     return this._getFileUtil(fileId, "/domain-search/getfile", false, null, { bulkRoot: true });
   }
 
-  deleteDomainSearchFile(fileId) {
+  async deleteDomainSearchFile(fileId) {
     return this._deleteFileUtil(fileId, "/domain-search/deletefile", false, { bulkRoot: true });
   }
 
   // LIST EVALUATOR (bulkapi.zerobounce.net/v2/listevaluator/)
 
-  sendListEvaluatorFile({ file, email_address_column }) {
+  async sendListEvaluatorFile({ file, email_address_column }) {
     if (!this._initialized) {
       notInitialized();
       return;
     } else if (!file) {
       parameterIsMissing("file");
       return;
-    } else if (!email_address_column) {
+    } else if (isMissing(email_address_column)) {
       parameterIsMissing("email_address_column");
       return;
     }
@@ -847,17 +857,17 @@ export class ZeroBounceSDK {
     });
   }
 
-  sendListEvaluatorFileStream(fileStreamOrBlob, fileName, { email_address_column } = {}) {
+  async sendListEvaluatorFileStream(fileStreamOrBlob, fileName, { email_address_column } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
     } else if (!fileStreamOrBlob) {
       parameterIsMissing("fileStreamOrBlob");
       return;
-    } else if (!fileName) {
+    } else if (isMissing(fileName)) {
       parameterIsMissing("fileName");
       return;
-    } else if (!email_address_column) {
+    } else if (isMissing(email_address_column)) {
       parameterIsMissing("email_address_column");
       return;
     }
@@ -874,11 +884,11 @@ export class ZeroBounceSDK {
     });
   }
 
-  getListEvaluatorResult(fileId) {
+  async getListEvaluatorResult(fileId) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!fileId) {
+    } else if (isMissing(fileId)) {
       parameterIsMissing("File id");
       return;
     }
@@ -892,7 +902,7 @@ export class ZeroBounceSDK {
     });
   }
 
-  sendEvaluatedFile({ file }) {
+  async sendEvaluatedFile({ file }) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -914,17 +924,17 @@ export class ZeroBounceSDK {
 
   // CUSTOM FILTERS (main API /v2/filters/*)
 
-  addFilter({ rule, target, value }) {
+  async addFilter({ rule, target, value }) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!rule) {
+    } else if (isMissing(rule)) {
       parameterIsMissing("rule");
       return;
-    } else if (!target) {
+    } else if (isMissing(target)) {
       parameterIsMissing("target");
       return;
-    } else if (!value) {
+    } else if (isMissing(value)) {
       parameterIsMissing("value");
       return;
     }
@@ -943,7 +953,7 @@ export class ZeroBounceSDK {
     });
   }
 
-  listFilters(options = null) {
+  async listFilters(options = null) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -968,17 +978,17 @@ export class ZeroBounceSDK {
     });
   }
 
-  deleteFilter({ rule, target, value }) {
+  async deleteFilter({ rule, target, value }) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!rule) {
+    } else if (isMissing(rule)) {
       parameterIsMissing("rule");
       return;
-    } else if (!target) {
+    } else if (isMissing(target)) {
       parameterIsMissing("target");
       return;
-    } else if (!value) {
+    } else if (isMissing(value)) {
       parameterIsMissing("value");
       return;
     }
@@ -999,7 +1009,7 @@ export class ZeroBounceSDK {
 
   // AMAZON S3 BULK HELPERS (bulkapi root)
 
-  listS3files({ bucket = null, search = null } = {}) {
+  async listS3files({ bucket = null, search = null } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -1017,7 +1027,7 @@ export class ZeroBounceSDK {
     });
   }
 
-  validateS3file({
+  async validateS3file({
     file_name,
     has_header_row,
     remove_duplicates,
@@ -1033,7 +1043,7 @@ export class ZeroBounceSDK {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!file_name) {
+    } else if (isMissing(file_name)) {
       parameterIsMissing("file_name");
       return;
     }
@@ -1051,7 +1061,7 @@ export class ZeroBounceSDK {
     return this._sendBulkRootFormPost("/validateS3file", fields);
   }
 
-  scoreS3file({
+  async scoreS3file({
     file_name,
     has_header_row,
     remove_duplicates,
@@ -1061,7 +1071,7 @@ export class ZeroBounceSDK {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!file_name) {
+    } else if (isMissing(file_name)) {
       parameterIsMissing("file_name");
       return;
     }
@@ -1073,14 +1083,14 @@ export class ZeroBounceSDK {
     return this._sendBulkRootFormPost("/scoreS3file", fields);
   }
 
-  exportS3file({ file_id, export_bucket }) {
+  async exportS3file({ file_id, export_bucket }) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!file_id) {
+    } else if (isMissing(file_id)) {
       parameterIsMissing("file_id");
       return;
-    } else if (!export_bucket) {
+    } else if (isMissing(export_bucket)) {
       parameterIsMissing("export_bucket");
       return;
     }
@@ -1098,7 +1108,7 @@ export class ZeroBounceSDK {
    * @param middle_name str or null - middle name
    * @param last_name str or null - last name
    * */
-  findEmailByDomain({
+  async findEmailByDomain({
     domain, 
     first_name, 
     middle_name = null, 
@@ -1118,7 +1128,7 @@ export class ZeroBounceSDK {
    * @param middle_name str or null - middle name
    * @param last_name str or null - last name
    * */
-  findEmailByCompanyName({
+  async findEmailByCompanyName({
     company_name, 
     first_name, 
     middle_name = null, 
@@ -1132,7 +1142,7 @@ export class ZeroBounceSDK {
     });
   }
 
-  _findEmail({
+  async _findEmail({
     domain = null,
     company_name = null,
     first_name,
@@ -1142,11 +1152,11 @@ export class ZeroBounceSDK {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!domain && !company_name) {
+    } else if (isMissing(domain) && isMissing(company_name)) {
       parameterIsMissing("domain");
       parameterIsMissing("company_name");
       return;
-    } else if (!first_name) {
+    } else if (isMissing(first_name)) {
       parameterIsMissing("first_name");
       return;
     }
@@ -1154,9 +1164,9 @@ export class ZeroBounceSDK {
     const params = {
       api_key: this._api_key,
       first_name: first_name,
-      middle_name: middle_name,
-      last_name: last_name,
     };
+    if (!isMissing(middle_name)) params.middle_name = middle_name;
+    if (!isMissing(last_name)) params.last_name = last_name;
 
     if (domain != null) {
       params["domain"] = domain;
@@ -1178,7 +1188,7 @@ export class ZeroBounceSDK {
   /**
    * @param domain str - domain name
    * */
-  findEmailFormatByDomain({
+  async findEmailFormatByDomain({
     domain
   }) {
     return this._findEmailFormat({
@@ -1189,7 +1199,7 @@ export class ZeroBounceSDK {
   /**
    * @param company_name str - company name
    * */
-  findEmailFormatByCompanyName({
+  async findEmailFormatByCompanyName({
     company_name
   }) {
     return this._findEmailFormat({
@@ -1197,14 +1207,14 @@ export class ZeroBounceSDK {
     });
   }
 
-  _findEmailFormat({
+  async _findEmailFormat({
     domain = null,
     company_name = null
   }) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!domain && !company_name) {
+    } else if (isMissing(domain) && isMissing(company_name)) {
       parameterIsMissing("domain");
       parameterIsMissing("company_name");
       return;
@@ -1236,7 +1246,7 @@ export class ZeroBounceSDK {
    * @param middle_name str or null - middle name
    * @param last_name str or null - last name
    * */
-  guessFormat ({
+  async guessFormat ({
     domain, 
     first_name = null, 
     middle_name = null, 
@@ -1246,7 +1256,7 @@ export class ZeroBounceSDK {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!domain) {
+    } else if (isMissing(domain)) {
       parameterIsMissing("domain");
       return;
     }
@@ -1254,10 +1264,10 @@ export class ZeroBounceSDK {
     const params = {
       api_key: this._api_key,
       domain: domain,
-      first_name: first_name,
-      middle_name: middle_name,
-      last_name: last_name,
     };
+    if (!isMissing(first_name)) params.first_name = first_name;
+    if (!isMissing(middle_name)) params.middle_name = middle_name;
+    if (!isMissing(last_name)) params.last_name = last_name;
 
     return createRequest({
       requestType: "GET",
