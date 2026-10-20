@@ -52,7 +52,8 @@ export const ZBValidateSubStatus = Object.freeze({
   ALLOWED: "allowed",
   ACCEPT_ALL: "accept_all",
   ROLE_BASED_ACCEPT_ALL: "role_based_accept_all",
-  GOLD: "gold"
+  GOLD: "gold",
+  AI_AGENT_MAILBOX: "ai_agent_mailbox"
 });
 
 /**

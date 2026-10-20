@@ -1,4 +1,4 @@
-import { ZeroBounceSDK } from "../src/zero-bounce.js";
+import { ZeroBounceSDK, ZBValidateSubStatus } from "../src/zero-bounce.js";
 import * as utils from "../src/utils.js";
 import 'whatwg-fetch'
 
@@ -211,6 +211,61 @@ describe("ZeroBounceSDK", () => {
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
       const response = await zeroBounceSDK.validateEmail(email, ip_address);
       expect(response).toEqual(expectedResponse);
+    });
+
+    it("returns ai_agent_mailbox under the valid status", async () => {
+      const expectedResponse = {
+        address: "agent@example.com",
+        status: "valid",
+        sub_status: "ai_agent_mailbox",
+      };
+
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      const response = await zeroBounceSDK.validateEmail("agent@example.com");
+      expect(response.status).toEqual("valid");
+      expect(response.sub_status).toEqual(ZBValidateSubStatus.AI_AGENT_MAILBOX);
+    });
+
+    it("returns ai_agent_mailbox under the catch-all status", async () => {
+      const expectedResponse = {
+        address: "agent@example.com",
+        status: "catch-all",
+        sub_status: "ai_agent_mailbox",
+      };
+
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      const response = await zeroBounceSDK.validateEmail("agent@example.com");
+      expect(response.status).toEqual("catch-all");
+      expect(response.sub_status).toEqual(ZBValidateSubStatus.AI_AGENT_MAILBOX);
+    });
+
+    it("passes an unknown sub_status through untouched", async () => {
+      // sub_status is forwarded as a raw string, so a value the SDK has never
+      // heard of must survive rather than being dropped or throwing.
+      const expectedResponse = {
+        address: "future@example.com",
+        status: "valid",
+        sub_status: "some_future_sub_status",
+      };
+
+      jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
+        json: () => Promise.resolve(expectedResponse),
+        text: () => Promise.resolve(JSON.stringify(expectedResponse)),
+      }));
+
+      zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+      const response = await zeroBounceSDK.validateEmail("future@example.com");
+      expect(response.sub_status).toEqual("some_future_sub_status");
     });
 
     it("should pass options object to the API", async () => {
