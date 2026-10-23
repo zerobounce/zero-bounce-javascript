@@ -914,4 +914,119 @@ export class ZeroBounceSDK {
   }): Promise<EmailFinderResponse | DomainFormatResponse | undefined>;
 }
 
+/** An error from the API, carrying the HTTP status of the failed response. */
+export class ZBApiError extends Error {
+  statusCode: number;
+}
+
+/** `self_managed` runs your own mailbox; `zb_managed` has ZeroBounce provision one. */
+export type WarmupOnboardingModel = "self_managed" | "zb_managed";
+
+export type WarmupEmailType = "transactional" | "newsletter" | "marketing";
+
+export interface WarmupEmailContent {
+  company_name?: string;
+  company_website?: string;
+  company_description?: string;
+  types_of_emails?: WarmupEmailType[];
+  example_email?: string;
+}
+
+export interface WarmupManagedSending {
+  weekdays_only?: boolean;
+  timezone?: string;
+  /** -11 to 14. */
+  timezone_offset?: number;
+  /** YYYY-MM-DD, or a Date. */
+  warmup_start_date?: string | Date;
+}
+
+/**
+ * The ZeroBounce Warmup API (https://www.zerobounce.net/docs/warmup-api).
+ *
+ * A separate product from email validation: its own team-scoped key, its own
+ * host, and an `API-Key` header. One instance per Warmup key.
+ */
+export class ZeroBounceWarmup {
+  static DEFAULT_BASE_URL: string;
+
+  constructor(apiKey: string, baseURL?: string);
+
+  listSendingAccounts(): Promise<unknown>;
+  getSendingAccount(fromAddress: string): Promise<unknown>;
+  addSendingAccount(options: {
+    fromAddress: string;
+    onboardingModel: WarmupOnboardingModel;
+    /** 0 to 4. Required for self_managed. */
+    engagementRuleId?: number | null;
+    ignoreConflict?: boolean | null;
+    emailContent?: WarmupEmailContent | null;
+    managedSending?: WarmupManagedSending | null;
+  }): Promise<unknown>;
+  updateSendingAccount(options: {
+    fromAddress: string;
+    /** 0 to 4. */
+    engagementRuleId: number;
+    /** 0 to 8 (4 Paused, 5 Disabled). */
+    statusId: number;
+    autoEnable: boolean;
+  }): Promise<unknown>;
+  deleteSendingAccount(fromAddress: string): Promise<null>;
+  changeFromAddress(oldFromAddress: string, newFromAddress: string): Promise<unknown>;
+  listFromAddresses(options?: {
+    /** Letters, digits and `. - _ @ +` only. */
+    searchFrom?: string | null;
+    offset?: number | null;
+    limit?: number | null;
+  }): Promise<unknown>;
+
+  getEngagementRules(): Promise<unknown>;
+  setEngagementRule(cFrom: string, ruleId: number): Promise<unknown>;
+  getCustomEngagement(cFrom: string): Promise<unknown>;
+  createCustomEngagement(options: {
+    cFrom: string;
+    /** 5 to 45. */
+    replyPct: number;
+    /** 5 to 40. */
+    importantPct: number;
+    /** 0 to 70, and at most importantPct x 1.75. */
+    clickPct: number;
+  }): Promise<unknown>;
+  updateCustomEngagement(options: {
+    cFrom: string;
+    replyPct: number;
+    importantPct: number;
+    clickPct: number;
+  }): Promise<unknown>;
+  deleteCustomEngagement(cFrom: string, engagementRuleId: number): Promise<unknown>;
+
+  getSeeds(): Promise<unknown>;
+  /** CSV text (columns `seed,provider`). */
+  downloadSeeds(): Promise<string>;
+  getSeedCount(): Promise<unknown>;
+  getProgressToday(): Promise<unknown>;
+  getSentToday(): Promise<unknown>;
+  getEmailsPerDay(): Promise<unknown>;
+  getStatistics(fromAddress: string): Promise<unknown>;
+  getStatisticsPerDay(options: {
+    fromAddress: string;
+    startDate: string | Date;
+    endDate: string | Date;
+  }): Promise<unknown>;
+  getStatisticsDetailed(cFrom: string): Promise<unknown>;
+  /** CSV text. */
+  downloadStatistics(cFrom: string): Promise<string>;
+  getFromAddressStatistics(fromAddress: string): Promise<unknown>;
+  /** Pass an email address: the live API rejects a bare domain. */
+  checkDomainDmarc(fromAddress: string, dkimSelector?: string | null): Promise<unknown>;
+  /** The live API answers a failed SMTP login with HTTP 500. */
+  testSmtpConfiguration(options: {
+    fromAddress: string;
+    username: string;
+    password: string;
+    server: string;
+    port: number;
+  }): Promise<unknown>;
+}
+
 export default ZeroBounceSDK;
