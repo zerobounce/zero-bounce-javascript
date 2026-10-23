@@ -78,6 +78,10 @@ function optionalColumn(value) {
   return value ? value : null;
 }
 
+/** Documented filter rules and targets, checked before a request is sent. */
+const FILTER_RULES = ["allow", "block"];
+const FILTER_TARGETS = ["email", "domain", "mx", "tld"];
+
 export class ZeroBounceSDK {
   static ApiURL = Object.freeze({
     DEFAULT_API_URL: "https://api.zerobounce.net/v2",
@@ -1016,8 +1020,14 @@ export class ZeroBounceSDK {
     } else if (isMissing(rule)) {
       parameterIsMissing("rule");
       return;
+    } else if (!FILTER_RULES.includes(rule)) {
+      parameterIsInvalid("rule", `Must be one of ${FILTER_RULES.join(", ")}.`);
+      return;
     } else if (isMissing(target)) {
       parameterIsMissing("target");
+      return;
+    } else if (!FILTER_TARGETS.includes(target)) {
+      parameterIsInvalid("target", `Must be one of ${FILTER_TARGETS.join(", ")}.`);
       return;
     } else if (isMissing(value)) {
       parameterIsMissing("value");
@@ -1070,8 +1080,14 @@ export class ZeroBounceSDK {
     } else if (isMissing(rule)) {
       parameterIsMissing("rule");
       return;
+    } else if (!FILTER_RULES.includes(rule)) {
+      parameterIsInvalid("rule", `Must be one of ${FILTER_RULES.join(", ")}.`);
+      return;
     } else if (isMissing(target)) {
       parameterIsMissing("target");
+      return;
+    } else if (!FILTER_TARGETS.includes(target)) {
+      parameterIsInvalid("target", `Must be one of ${FILTER_TARGETS.join(", ")}.`);
       return;
     } else if (isMissing(value)) {
       parameterIsMissing("value");
@@ -1193,16 +1209,23 @@ export class ZeroBounceSDK {
    *
    * @param fileNameRequired - false for validateSFTPfile, whose file_name is optional
    * */
-  async _bulkRootFileJob(path, { file_name, has_header_row, remove_duplicates, return_url }, fileNameRequired = true) {
+  /**
+   * One of the six documented S3 / SFTP file jobs on the bulkapi root.
+   *
+   * LIVE: `return_url` is required, although the docs mark it optional —
+   * without it the API answers "Provided return URL is not permitted: None".
+   * `file_name` is required for every job including validateSFTPfile, which
+   * the docs also mark optional ("file_name: This field is required").
+   * All three are checked here so no request goes out without them.
+   *
+   * The documented success is {success, message} with no file ID.
+   */
+  async _bulkRootFileJob(path, { file_name, has_header_row, remove_duplicates, return_url }) {
     if (!this._initialized) {
       notInitialized();
       return;
     }
-    if (fileNameRequired && isMissing(file_name)) {
-      parameterIsMissing("file_name");
-      return;
-    }
-    if (file_name != null && String(file_name).trim() === "") {
+    if (isMissing(file_name) || String(file_name).trim() === "") {
       parameterIsMissing("file_name");
       return;
     }
@@ -1210,11 +1233,17 @@ export class ZeroBounceSDK {
       parameterIsMissing("has_header_row");
       return;
     }
+    if (isMissing(return_url) || String(return_url).trim() === "") {
+      parameterIsMissing("return_url", "The API rejects a job without it.");
+      return;
+    }
 
-    const fields = { has_header_row: booleanText(has_header_row) };
-    if (file_name != null) fields.file_name = file_name;
+    const fields = {
+      file_name,
+      has_header_row: booleanText(has_header_row),
+      return_url,
+    };
     if (remove_duplicates != null) fields.remove_duplicates = booleanText(remove_duplicates);
-    if (return_url != null) fields.return_url = return_url;
     return this._sendBulkRootFormPost(path, fields);
   }
 

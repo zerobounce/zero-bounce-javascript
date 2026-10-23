@@ -326,15 +326,15 @@ describe("offline API", () => {
       ["sendListEvaluatorFileStream", () => sdk.sendListEvaluatorFileStream(file, "emails.csv", { email_address_column: 1 }), "POST", "bulkapi.zerobounce.net", "/v2/listevaluator/"],
       ["getListEvaluatorResult", () => sdk.getListEvaluatorResult(id), "GET", "bulkapi.zerobounce.net", "/v2/listevaluator/file-1/"],
       ["listS3files", () => sdk.listS3files(), "GET", "bulkapi.zerobounce.net", "/listS3files"],
-      ["validateS3file", () => sdk.validateS3file({ file_name: "f.csv" }), "POST", "bulkapi.zerobounce.net", "/validateS3file"],
-      ["scoreS3file", () => sdk.scoreS3file({ file_name: "f.csv" }), "POST", "bulkapi.zerobounce.net", "/scoreS3file"],
+      ["validateS3file", () => sdk.validateS3file({ file_name: "f.csv", has_header_row: true, return_url: "https://example.com/done" }), "POST", "bulkapi.zerobounce.net", "/validateS3file"],
+      ["scoreS3file", () => sdk.scoreS3file({ file_name: "f.csv", has_header_row: true, return_url: "https://example.com/done" }), "POST", "bulkapi.zerobounce.net", "/scoreS3file"],
       ["exportS3file", () => sdk.exportS3file({ file_id: id, export_bucket: "bucket" }), "POST", "bulkapi.zerobounce.net", "/exportS3file"],
-      ["emailFinderS3file", () => sdk.emailFinderS3file({ file_name: "f.csv", has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/emailFinderS3file"],
-      ["domainSearchS3file", () => sdk.domainSearchS3file({ file_name: "f.csv", has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/domainSearchS3file"],
-      ["validateSFTPfile", () => sdk.validateSFTPfile({ has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/validateSFTPfile"],
-      ["scoreSFTPfile", () => sdk.scoreSFTPfile({ file_name: "f.csv", has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/scoreSFTPfile"],
-      ["emailFinderSFTPfile", () => sdk.emailFinderSFTPfile({ file_name: "f.csv", has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/emailFinderSFTPfile"],
-      ["domainSearchSFTPfile", () => sdk.domainSearchSFTPfile({ file_name: "f.csv", has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/domainSearchSFTPfile"],
+      ["emailFinderS3file", () => sdk.emailFinderS3file({ file_name: "f.csv", has_header_row: true, return_url: "https://example.com/done" }), "POST", "bulkapi.zerobounce.net", "/emailFinderS3file"],
+      ["domainSearchS3file", () => sdk.domainSearchS3file({ file_name: "f.csv", has_header_row: true, return_url: "https://example.com/done" }), "POST", "bulkapi.zerobounce.net", "/domainSearchS3file"],
+      ["validateSFTPfile", () => sdk.validateSFTPfile({ file_name: "f.csv", has_header_row: true, return_url: "https://example.com/done" }), "POST", "bulkapi.zerobounce.net", "/validateSFTPfile"],
+      ["scoreSFTPfile", () => sdk.scoreSFTPfile({ file_name: "f.csv", has_header_row: true, return_url: "https://example.com/done" }), "POST", "bulkapi.zerobounce.net", "/scoreSFTPfile"],
+      ["emailFinderSFTPfile", () => sdk.emailFinderSFTPfile({ file_name: "f.csv", has_header_row: true, return_url: "https://example.com/done" }), "POST", "bulkapi.zerobounce.net", "/emailFinderSFTPfile"],
+      ["domainSearchSFTPfile", () => sdk.domainSearchSFTPfile({ file_name: "f.csv", has_header_row: true, return_url: "https://example.com/done" }), "POST", "bulkapi.zerobounce.net", "/domainSearchSFTPfile"],
       ["exportSFTPfile", () => sdk.exportSFTPfile({ file_id: "fid" }), "POST", "bulkapi.zerobounce.net", "/exportSFTPfile"],
       ["getInboxPlacementProviders", () => sdk.getInboxPlacementProviders(), "GET", "bulkapi.zerobounce.net", "/api/ipt/providers"],
       ["getInboxPlacementTestTypes", () => sdk.getInboxPlacementTestTypes(), "GET", "bulkapi.zerobounce.net", "/api/ipt/test-types"],
@@ -345,9 +345,9 @@ describe("offline API", () => {
       ["getInboxPlacementWebhook", () => sdk.getInboxPlacementWebhook(), "GET", "bulkapi.zerobounce.net", "/api/ipt/webhook"],
       ["setInboxPlacementWebhook", () => sdk.setInboxPlacementWebhook("https://example.com/hook"), "PUT", "bulkapi.zerobounce.net", "/api/ipt/webhook"],
       ["sendEvaluatedFile", () => sdk.sendEvaluatedFile("eval-file-1"), "POST", "bulkapi.zerobounce.net", "/v2/send-evaluated-file/"],
-      ["addFilter", () => sdk.addFilter({ rule: "exclude", target: "domain", value: "spam.com" }), "POST", "api.zerobounce.net", "/v2/filters/add"],
+      ["addFilter", () => sdk.addFilter({ rule: "allow", target: "domain", value: "spam.com" }), "POST", "api.zerobounce.net", "/v2/filters/add"],
       ["listFilters", () => sdk.listFilters(), "GET", "api.zerobounce.net", "/v2/filters/list"],
-      ["deleteFilter", () => sdk.deleteFilter({ rule: "exclude", target: "domain", value: "spam.com" }), "POST", "api.zerobounce.net", "/v2/filters/delete"],
+      ["deleteFilter", () => sdk.deleteFilter({ rule: "allow", target: "domain", value: "spam.com" }), "POST", "api.zerobounce.net", "/v2/filters/delete"],
       ["findEmailByDomain", () => sdk.findEmailByDomain({ domain: "example.com", first_name: "Ada" }), "GET", "api.zerobounce.net", "/v2/guessformat"],
       ["findEmailByCompanyName", () => sdk.findEmailByCompanyName({ company_name: "Ada Inc", first_name: "Ada" }), "GET", "api.zerobounce.net", "/v2/guessformat"],
       ["findEmailFormatByDomain", () => sdk.findEmailFormatByDomain({ domain: "example.com" }), "GET", "api.zerobounce.net", "/v2/guessformat"],
@@ -628,10 +628,10 @@ describe("offline API", () => {
     expect(fake.only().fields.bucket).toBe("inbox");
     expect(fake.records[0].fields.search).toBe("a.csv");
     fake.records.length = 0;
-    await sdk.addFilter({ rule: "include", target: "email", value: "a@example.com" });
+    await sdk.addFilter({ rule: "allow", target: "email", value: "a@example.com" });
     expect(fake.only().body).toEqual({
       api_key: "parity-key",
-      rule: "include",
+      rule: "allow",
       target: "email",
       value: "a@example.com",
     });
@@ -667,6 +667,13 @@ describe("offline API", () => {
     await expectRejected(sdk.emailFinderS3file({ has_header_row: true }));
     await expectRejected(sdk.scoreSFTPfile({ file_name: "  ", has_header_row: true }));
     await expectRejected(sdk.domainSearchSFTPfile({ file_name: "f.csv" }));
+    // LIVE: return_url is required even though the docs mark it optional.
+    await expectRejected(
+      sdk.emailFinderSFTPfile({ file_name: "f.csv", has_header_row: true })
+    );
+    await expectRejected(
+      sdk.validateSFTPfile({ has_header_row: true, return_url: "https://example.com/done" })
+    );
     await expectRejected(sdk.exportSFTPfile({}));
     await expectRejected(sdk.exportSFTPfile({ file_id: "fid", export_path: "  " }));
     await expectRejected(sdk.validateEmail("a@example.com", { callbackUrl: "https://example.com/cb" }));
@@ -804,13 +811,18 @@ describe("offline API", () => {
 
   it("sends the documented S3 and SFTP job fields and omits unset ones", async () => {
     const sdk = client("parity-key");
-    await sdk.emailFinderS3file({ file_name: "inbox.csv", has_header_row: false });
+    await sdk.emailFinderS3file({
+      file_name: "inbox.csv",
+      has_header_row: false,
+      return_url: "https://example.com/done",
+    });
     let request = fake.only();
     expect(request.path).toBe("/emailFinderS3file");
     expect(request.body.file_name).toBe("inbox.csv");
     expect(request.body.has_header_row).toBe("false");
+    expect(request.body.return_url).toBe("https://example.com/done");
+    // remove_duplicates is the only one of the four that stays optional.
     expect(request.body.remove_duplicates).toBeUndefined();
-    expect(request.body.return_url).toBeUndefined();
 
     fake.records.length = 0;
     await sdk.domainSearchS3file({
@@ -824,12 +836,13 @@ describe("offline API", () => {
     expect(request.body.remove_duplicates).toBe("false");
     expect(request.body.return_url).toBe("https://example.com/done");
 
-    // validateSFTPfile is the one job whose file_name the docs mark optional.
+    // LIVE: validateSFTPfile needs file_name too, although the docs mark it
+    // optional ("file_name: This field is required").
     fake.records.length = 0;
-    await sdk.validateSFTPfile({ has_header_row: true });
+    await sdk.validateSFTPfile({ file_name: "f.csv", has_header_row: true, return_url: "https://example.com/done" });
     request = fake.only();
     expect(request.path).toBe("/validateSFTPfile");
-    expect(request.body.file_name).toBeUndefined();
+    expect(request.body.file_name).toBe("f.csv");
 
     fake.records.length = 0;
     await sdk.exportSFTPfile({ file_id: "fid" });
