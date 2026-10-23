@@ -87,6 +87,12 @@ export interface EmailValidationResult {
   city?: string | null;
   zipcode?: string | null;
   processed_at?: string | null;
+  /** With domainInfo: whether the domain has a website ("True", "False" or "unchecked"). */
+  domain_website_exists?: string | null;
+  /** With domainInfo: WHOIS registrant company, "Registrant info not found" or "unchecked". */
+  domain_registrant_company_name?: string | null;
+  /** Read from the API's "Message" key. Set while greylist processing is still running. */
+  message?: string | null;
 }
 
 /** POST /validatebatch response body. */
@@ -256,6 +262,12 @@ export interface ValidateEmailOptions {
   activityData?: boolean;
   /** Maps to `verify_plus` on GET /validate. */
   verifyPlus?: boolean;
+  /** Maps to `domain_info`. Adds domain_website_exists and domain_registrant_company_name. */
+  domainInfo?: boolean;
+  /** Maps to `greylist_processing`. Reprocesses a greylisted address instead of returning unknown. */
+  greylistProcessing?: boolean;
+  /** Maps to `callback_url`. Only allowed with `greylistProcessing: true`. */
+  callbackUrl?: string;
   /** Use form-encoded POST instead of GET (same parameters). */
   method?: "GET" | "POST";
 }
@@ -433,47 +445,38 @@ export interface ListFiltersOptions {
   method?: "GET" | "POST";
 }
 
-export interface ValidateS3FileOptions {
-  file_name: string;
-  has_header_row?: boolean;
-  /** Postman field name for duplicate removal. */
-  remove_duplicates?: boolean;
-  /** Alternate field name used by some bulk endpoints. */
-  remove_duplicate?: boolean;
-  email_address_column?: number;
-  return_url?: string | false;
-  first_name_column?: number | false;
-  last_name_column?: number | false;
-  gender_column?: number | false;
-  ip_address_column?: number | false;
-  allowPhase2?: boolean | null;
+/** Per-provider seed cap for createInboxPlacementTest. */
+export interface InboxPlacementProviderSelection {
+  id: number;
+  /** At least 1 when given. */
+  maxSeeds?: number;
 }
 
-export interface ScoreS3FileOptions {
-  file_name: string;
-  has_header_row?: boolean;
-  remove_duplicates?: boolean;
-  remove_duplicate?: boolean;
-  email_address_column?: number;
-}
-
-export interface ExportS3FileOptions {
-  file_id: string;
-  export_bucket: string;
-}
-
-/** Single entry from GET /listS3files. */
-export interface S3ListFileEntry {
+/** Options for createInboxPlacementTest (POST /api/ipt/test). */
+export interface CreateInboxPlacementTestOptions {
+  /** Unique test name, at most 64 characters. */
   name: string;
-  size: number;
-  last_modified: string;
+  /** 1 (Email, needs senderEmail), 2 (Unique ID) or 3 (Auto Alias). */
+  testType?: 1 | 2 | 3;
+  /** The From address to match. Required when testType is 1. */
+  senderEmail?: string;
+  providerIds?: number[];
+  seedIds?: number[];
+  providers?: InboxPlacementProviderSelection[];
+  webhookUrl?: string;
 }
 
-export interface S3BulkJobResponse {
-  success?: boolean;
-  message?: string;
-  file_id?: string;
-  export_path?: string;
+/** Options for listInboxPlacementTests (GET /api/ipt/tests). */
+export interface ListInboxPlacementTestsOptions {
+  status?: "running" | "finished";
+  /** ISO 8601 date or datetime. */
+  createdAfter?: string;
+  /** ISO 8601 date or datetime. */
+  createdBefore?: string;
+  /** From 1. */
+  page?: number;
+  /** 1 to 100. Sent as page_size. */
+  pageSize?: number;
 }
 
 /** Options for findEmailByDomain / Email Finder. */
@@ -521,7 +524,16 @@ export class ZeroBounceSDK {
    * @param apiKey - Your private API key
    * @param apiBaseURL - Preferred API base (e.g. ZeroBounceSDK.ApiURL.DEFAULT_API_URL)
    */
-  init(apiKey: string, apiBaseURL?: ApiURL): void;
+  init(
+    apiKey: string,
+    apiBaseURL?: ApiURL,
+    options?: {
+      /** Defaults to https://bulkapi.zerobounce.net/v2/listevaluator */
+      listEvaluatorBaseURL?: string;
+      /** Defaults to https://bulkapi.zerobounce.net/api/ipt */
+      inboxPlacementBaseURL?: string;
+    } | null
+  ): void;
 
   /**
    * Get remaining credits for your account.
@@ -736,21 +748,29 @@ export class ZeroBounceSDK {
     options: FilterRuleParams
   ): Promise<FilterMessageResponse | undefined>;
 
-  listS3files(
-    options?: { bucket?: string | null; search?: string | null } | null
-  ): Promise<S3ListFileEntry[] | undefined>;
+  /** Inbox Placement Tester: seed providers. GET /api/ipt/providers */
+  getInboxPlacementProviders(): Promise<unknown>;
 
-  validateS3file(
-    options: ValidateS3FileOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  /** Inbox Placement Tester: supported test types. GET /api/ipt/test-types */
+  getInboxPlacementTestTypes(): Promise<unknown>;
 
-  scoreS3file(
-    options: ScoreS3FileOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  /** Inbox Placement Tester: create a test. POST /api/ipt/test */
+  createInboxPlacementTest(options: CreateInboxPlacementTestOptions): Promise<unknown>;
 
-  exportS3file(
-    options: ExportS3FileOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  /** Inbox Placement Tester: a test and its results. GET /api/ipt/test/{id} */
+  getInboxPlacementTest(testId: string | number): Promise<unknown>;
+
+  /** Inbox Placement Tester: list tests, newest first. GET /api/ipt/tests */
+  listInboxPlacementTests(options?: ListInboxPlacementTestsOptions | null): Promise<unknown>;
+
+  /** Inbox Placement Tester: delete a finished test. DELETE /api/ipt/test/{id} */
+  deleteInboxPlacementTest(testId: string | number): Promise<unknown>;
+
+  /** Inbox Placement Tester: the webhook saved on this API key. GET /api/ipt/webhook */
+  getInboxPlacementWebhook(): Promise<unknown>;
+
+  /** Inbox Placement Tester: save the result webhook. PUT /api/ipt/webhook */
+  setInboxPlacementWebhook(webhookUrl: string): Promise<unknown>;
 
   /**
    * Email Finder: find email by domain and name.

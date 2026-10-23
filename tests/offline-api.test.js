@@ -159,6 +159,14 @@ function answer(request) {
   if (key.startsWith("double-error-")) {
     return httpResponse(400, "Error: Error: api_key is invalid", "text/plain");
   }
+  if (key.startsWith("ipt-detail-")) {
+    // The Inbox Placement Tester (Django REST framework) reports errors as "detail".
+    return httpResponse(
+      404,
+      JSON.stringify({ detail: "Inbox placement test not found." }),
+      "application/json"
+    );
+  }
   if (key.startsWith("invalid-key-")) {
     return httpResponse(200, JSON.stringify({ error: "Invalid API Key" }), "application/json");
   }
@@ -309,14 +317,18 @@ describe("offline API", () => {
       ["sendListEvaluatorFile", () => sdk.sendListEvaluatorFile({ file, email_address_column: 1 }), "POST", "bulkapi.zerobounce.net", "/v2/listevaluator/"],
       ["sendListEvaluatorFileStream", () => sdk.sendListEvaluatorFileStream(file, "emails.csv", { email_address_column: 1 }), "POST", "bulkapi.zerobounce.net", "/v2/listevaluator/"],
       ["getListEvaluatorResult", () => sdk.getListEvaluatorResult(id), "GET", "bulkapi.zerobounce.net", "/v2/listevaluator/file-1/"],
+      ["getInboxPlacementProviders", () => sdk.getInboxPlacementProviders(), "GET", "bulkapi.zerobounce.net", "/api/ipt/providers"],
+      ["getInboxPlacementTestTypes", () => sdk.getInboxPlacementTestTypes(), "GET", "bulkapi.zerobounce.net", "/api/ipt/test-types"],
+      ["createInboxPlacementTest", () => sdk.createInboxPlacementTest({ name: "t" }), "POST", "bulkapi.zerobounce.net", "/api/ipt/test"],
+      ["getInboxPlacementTest", () => sdk.getInboxPlacementTest(id), "GET", "bulkapi.zerobounce.net", "/api/ipt/test/file-1"],
+      ["listInboxPlacementTests", () => sdk.listInboxPlacementTests(), "GET", "bulkapi.zerobounce.net", "/api/ipt/tests"],
+      ["deleteInboxPlacementTest", () => sdk.deleteInboxPlacementTest(id), "DELETE", "bulkapi.zerobounce.net", "/api/ipt/test/file-1"],
+      ["getInboxPlacementWebhook", () => sdk.getInboxPlacementWebhook(), "GET", "bulkapi.zerobounce.net", "/api/ipt/webhook"],
+      ["setInboxPlacementWebhook", () => sdk.setInboxPlacementWebhook("https://example.com/hook"), "PUT", "bulkapi.zerobounce.net", "/api/ipt/webhook"],
       ["sendEvaluatedFile", () => sdk.sendEvaluatedFile({ file }), "POST", "bulkapi.zerobounce.net", "/v2/send-evaluated-file/"],
       ["addFilter", () => sdk.addFilter({ rule: "exclude", target: "domain", value: "spam.com" }), "POST", "api.zerobounce.net", "/v2/filters/add"],
       ["listFilters", () => sdk.listFilters(), "GET", "api.zerobounce.net", "/v2/filters/list"],
       ["deleteFilter", () => sdk.deleteFilter({ rule: "exclude", target: "domain", value: "spam.com" }), "POST", "api.zerobounce.net", "/v2/filters/delete"],
-      ["listS3files", () => sdk.listS3files(), "GET", "bulkapi.zerobounce.net", "/listS3files"],
-      ["validateS3file", () => sdk.validateS3file({ file_name: "f.csv" }), "POST", "bulkapi.zerobounce.net", "/validateS3file"],
-      ["scoreS3file", () => sdk.scoreS3file({ file_name: "f.csv" }), "POST", "bulkapi.zerobounce.net", "/scoreS3file"],
-      ["exportS3file", () => sdk.exportS3file({ file_id: id, export_bucket: "bucket" }), "POST", "bulkapi.zerobounce.net", "/exportS3file"],
       ["findEmailByDomain", () => sdk.findEmailByDomain({ domain: "example.com", first_name: "Ada" }), "GET", "api.zerobounce.net", "/v2/guessformat"],
       ["findEmailByCompanyName", () => sdk.findEmailByCompanyName({ company_name: "Ada Inc", first_name: "Ada" }), "GET", "api.zerobounce.net", "/v2/guessformat"],
       ["findEmailFormatByDomain", () => sdk.findEmailFormatByDomain({ domain: "example.com" }), "GET", "api.zerobounce.net", "/v2/guessformat"],
@@ -515,20 +527,6 @@ describe("offline API", () => {
     await sdk.sendListEvaluatorFile({ file, email_address_column: 0 });
     expect(fake.only().fields.email_address_column).toBe("0");
 
-    fake.records.length = 0;
-    await sdk.validateS3file({
-      file_name: "f.csv",
-      email_address_column: 0,
-      first_name_column: 0,
-      has_header_row: false,
-      remove_duplicate: false,
-    });
-    request = fake.only();
-    expect(request.fields.email_address_column).toBe("0");
-    expect(request.fields.first_name_column).toBeUndefined();
-    expect(request.fields.has_header_row).toBe("false");
-    expect(request.fields.remove_duplicate).toBe("false");
-    expect(request.fields.allow_phase_2).toBeUndefined();
   });
 
   it("sends getFile download_type and activity_data only when set, and not for scoring", async () => {
@@ -587,16 +585,8 @@ describe("offline API", () => {
     expect(request.fields.last_name).toBeUndefined();
   });
 
-  it("omits unset listS3files and filter fields", async () => {
+  it("omits unset filter fields", async () => {
     const sdk = client("parity-key");
-    await sdk.listS3files();
-    expect(fake.only().fields.bucket).toBeUndefined();
-    expect(fake.records[0].fields.search).toBeUndefined();
-    fake.records.length = 0;
-    await sdk.listS3files({ bucket: "inbox", search: "a.csv" });
-    expect(fake.only().fields.bucket).toBe("inbox");
-    expect(fake.records[0].fields.search).toBe("a.csv");
-    fake.records.length = 0;
     await sdk.addFilter({ rule: "include", target: "email", value: "a@example.com" });
     expect(fake.only().body).toEqual({
       api_key: "parity-key",
@@ -632,8 +622,134 @@ describe("offline API", () => {
     await expectRejected(sdk.findEmailByDomain({ domain: "example.com" }));
     await expectRejected(sdk.addFilter({ rule: "", target: "domain", value: "spam.com" }));
     await expectRejected(sdk.getFile(""));
-    await expectRejected(sdk.exportS3file({ file_id: "id" }));
+    await expectRejected(sdk.validateEmail("a@example.com", { callbackUrl: "https://example.com/cb" }));
+    await expectRejected(
+      sdk.validateEmail("a@example.com", { greylistProcessing: true, callbackUrl: "   " })
+    );
+    await expectRejected(sdk.createInboxPlacementTest({ name: "" }));
+    await expectRejected(sdk.createInboxPlacementTest({ name: "x".repeat(65) }));
+    await expectRejected(sdk.createInboxPlacementTest({ name: "t", testType: 4 }));
+    await expectRejected(sdk.createInboxPlacementTest({ name: "t", testType: 1 }));
+    await expectRejected(
+      sdk.createInboxPlacementTest({ name: "t", providers: [{ maxSeeds: 2 }] })
+    );
+    await expectRejected(
+      sdk.createInboxPlacementTest({ name: "t", providers: [{ id: 1, maxSeeds: 0 }] })
+    );
+    await expectRejected(sdk.listInboxPlacementTests({ status: "queued" }));
+    await expectRejected(sdk.listInboxPlacementTests({ page: 0 }));
+    await expectRejected(sdk.listInboxPlacementTests({ pageSize: 101 }));
+    await expectRejected(sdk.getInboxPlacementTest(""));
+    await expectRejected(sdk.deleteInboxPlacementTest(""));
+    await expectRejected(sdk.setInboxPlacementWebhook(""));
     expect(fake.records).toHaveLength(0);
+  });
+
+  it("omits the new validate options until set and sends booleans as true or false", async () => {
+    const sdk = client("parity-key");
+    await sdk.validateEmail("a@example.com");
+    let request = fake.only();
+    expect(request.query.domain_info).toBeUndefined();
+    expect(request.query.greylist_processing).toBeUndefined();
+    expect(request.query.callback_url).toBeUndefined();
+
+    fake.records.length = 0;
+    await sdk.validateEmail("a@example.com", {
+      domainInfo: true,
+      greylistProcessing: false,
+    });
+    request = fake.only();
+    expect(request.query.domain_info).toBe("true");
+    expect(request.query.greylist_processing).toBe("false");
+
+    fake.records.length = 0;
+    await sdk.validateEmail("a@example.com", {
+      greylistProcessing: true,
+      callbackUrl: "https://example.com/cb",
+      method: "POST",
+    });
+    request = fake.only();
+    expect(request.method).toBe("POST");
+    expect(request.body.greylist_processing).toBe("true");
+    expect(request.body.callback_url).toBe("https://example.com/cb");
+  });
+
+  it("sends inbox placement bodies as camelCase JSON and leaves unset fields out", async () => {
+    const sdk = client("parity-key");
+    await sdk.createInboxPlacementTest({ name: "basic" });
+    let request = fake.only();
+    expect(request.json).toEqual({ name: "basic" });
+    expect(request.query.api_key).toBe("parity-key");
+
+    fake.records.length = 0;
+    await sdk.createInboxPlacementTest({
+      name: "full",
+      testType: 1,
+      senderEmail: "from@example.com",
+      providerIds: [1, 2],
+      seedIds: [3],
+      providers: [{ id: 4, maxSeeds: 2 }],
+      webhookUrl: "https://example.com/hook",
+    });
+    expect(fake.only().json).toEqual({
+      name: "full",
+      testType: 1,
+      senderEmail: "from@example.com",
+      providerIds: [1, 2],
+      seedIds: [3],
+      providers: [{ id: 4, maxSeeds: 2 }],
+      webhookUrl: "https://example.com/hook",
+    });
+
+    fake.records.length = 0;
+    await sdk.setInboxPlacementWebhook("https://example.com/hook");
+    request = fake.only();
+    expect(request.method).toBe("PUT");
+    expect(request.json).toEqual({ webhookUrl: "https://example.com/hook" });
+  });
+
+  it("sends only the inbox placement list filters that are set", async () => {
+    const sdk = client("parity-key");
+    await sdk.listInboxPlacementTests();
+    expect(Object.keys(fake.only().query)).toEqual(["api_key"]);
+
+    fake.records.length = 0;
+    await sdk.listInboxPlacementTests({
+      status: "finished",
+      createdAfter: "2026-01-01",
+      createdBefore: "2026-02-01",
+      page: 2,
+      pageSize: 50,
+    });
+    const query = fake.only().query;
+    expect(query.status).toBe("finished");
+    expect(query.createdAfter).toBe("2026-01-01");
+    expect(query.createdBefore).toBe("2026-02-01");
+    expect(query.page).toBe("2");
+    expect(query.page_size).toBe("50");
+  });
+
+  it("uses the list evaluator base URL and encodes the file id", async () => {
+    const sdk = client("parity-key");
+    await sdk.getListEvaluatorResult("a b/c");
+    const request = fake.only();
+    expect(request.host).toBe("bulkapi.zerobounce.net");
+    expect(request.path).toBe("/v2/listevaluator/a%20b%2Fc/");
+
+    fake.records.length = 0;
+    const overridden = new ZeroBounceSDK();
+    overridden.init("parity-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL, {
+      listEvaluatorBaseURL: "https://example.com/custom/listevaluator",
+    });
+    await overridden.getListEvaluatorResult("file-1");
+    expect(fake.only().url).toBe(
+      "https://example.com/custom/listevaluator/file-1/?api_key=parity-key"
+    );
+  });
+
+  it("turns a detail error body into a short message", async () => {
+    const error = await expectRejected(client("ipt-detail-key").getInboxPlacementProviders());
+    expect(error.message).toContain("Inbox placement test not found");
   });
 
   it("turns a 403 HTML access-denied page into a short error", async () => {

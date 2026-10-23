@@ -1190,46 +1190,5 @@ describe("ZeroBounceSDK", () => {
       expect(init.method).toBe("POST");
     });
 
-    it("listS3files GETs bulkapi listS3files with optional bucket and search", async () => {
-      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
-        jsonOk([{ name: "uploads/list.csv", size: 100, last_modified: "2024-01-01T00:00:00Z" }])
-      );
-      await zeroBounceSDK.listS3files({
-        bucket: "my-bucket",
-        search: "list",
-      });
-      const calledUrl = String(fetch.mock.calls[0][0]);
-      expect(calledUrl).toBe(
-        "https://bulkapi.zerobounce.net/listS3files?api_key=valid-api-key&bucket=my-bucket&search=list"
-      );
-      expect(fetch.mock.calls[0][1].method).toBe("GET");
-    });
-
-    it("validateS3file posts to bulkapi validateS3file", async () => {
-      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
-        jsonOk({ success: true, file_id: "s3-job" })
-      );
-      await zeroBounceSDK.validateS3file({
-        file_name: "emails/list.csv",
-        has_header_row: true,
-        remove_duplicates: true,
-      });
-      expect(String(fetch.mock.calls[0][0])).toBe(
-        "https://bulkapi.zerobounce.net/validateS3file"
-      );
-    });
-
-    it("exportS3file posts file_id and export_bucket", async () => {
-      const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
-        jsonOk({ success: true })
-      );
-      await zeroBounceSDK.exportS3file({
-        file_id: "job-1",
-        export_bucket: "my-bucket",
-      });
-      const body = fetch.mock.calls[0][1].body;
-      expect(body.get("file_id")).toBe("job-1");
-      expect(body.get("export_bucket")).toBe("my-bucket");
-    });
   });
 });

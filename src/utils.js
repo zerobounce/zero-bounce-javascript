@@ -112,6 +112,8 @@ function readableJsonMessage(parsed) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   if (typeof parsed.error === "string" && parsed.error.trim()) return parsed.error.trim();
   if (typeof parsed.message === "string" && parsed.message.trim()) return parsed.message.trim();
+  // "detail" is how the Inbox Placement Tester (Django REST framework) reports errors.
+  if (typeof parsed.detail === "string" && parsed.detail.trim()) return parsed.detail.trim();
   if (Array.isArray(parsed.message)) {
     const parts = parsed.message.filter((item) => typeof item === "string" && item.trim());
     if (parts.length) return parts.join("; ");
@@ -236,6 +238,7 @@ function buildRequestUrl({ batch, bulkBase, apiBaseURL, path, params }) {
 export async function createRequest({
   requestType,
   body = null,
+  jsonBody = null,
   params = null,
   path,
   batch = false,
@@ -250,8 +253,10 @@ export async function createRequest({
   try {
     response = await fetch(url, {
       method: requestType,
-      headers: HEADERS,
-      body,
+      // The Inbox Placement Tester takes JSON; everything else sends query,
+      // form, or multipart bodies, which must not carry a JSON content type.
+      headers: jsonBody != null ? { ...HEADERS, "Content-Type": "application/json" } : HEADERS,
+      body: jsonBody != null ? JSON.stringify(jsonBody) : body,
       signal: fetchTimeoutSignal(),
       redirect: "error",
     });

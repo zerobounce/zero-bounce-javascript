@@ -16,9 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bulk domain search: `sendDomainSearchFile`, `sendDomainSearchFileStream`, `getDomainSearchFileStatus`, `getDomainSearchFile`, `deleteDomainSearchFile`.
 - List evaluator: `sendListEvaluatorFile`, `sendListEvaluatorFileStream`, `getListEvaluatorResult`, `sendEvaluatedFile`.
 - Filters: `addFilter`, `listFilters` (GET, or POST when `method` is `"POST"`), `deleteFilter`.
-- S3 bulk: `validateS3file`, `scoreS3file`, `exportS3file`, `listS3files`.
+- `validateEmail` accepts `domainInfo` (adds `domain_website_exists` and `domain_registrant_company_name` to the response), `greylistProcessing`, and `callbackUrl`. `callbackUrl` needs `greylistProcessing: true` and is rejected without it.
+- The validate response carries `message`, read from the API's `Message` key, which a greylist pickup returns while the retry is still running.
+- Inbox Placement Tester on `https://bulkapi.zerobounce.net/api/ipt`: `getInboxPlacementProviders`, `getInboxPlacementTestTypes`, `createInboxPlacementTest`, `getInboxPlacementTest`, `listInboxPlacementTests`, `deleteInboxPlacementTest`, `getInboxPlacementWebhook`, `setInboxPlacementWebhook`.
+- `init` takes a third argument to override the list evaluator and Inbox Placement Tester base URLs.
 
 ### Changed
+
+- List evaluator requests use their own base URL (`https://bulkapi.zerobounce.net/v2/listevaluator`) instead of building the path from the bulk base, and the file id is URL-encoded as one path segment. `sendEvaluatedFile` stays on the bulk base.
 
 - `init` rejects an `apiBaseURL` that is not `https://`.
 - API requests abort after 120 seconds and do not follow redirects.
@@ -26,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An error body whose JSON carries a `detail` string (the Inbox Placement Tester, Django REST framework) rejects with that text instead of a generic message.
 - A 403 HTML "Access denied" page is a short error. `getFile` no longer puts the page in the error (about 1.4 MB from the live API). An HTML page with status 200 is an error as well, including `getFile`, `getEmailFinderFile`, and `getDomainSearchFile`, instead of a saved CSV or a JSON parse.
 - Empty and non-JSON bodies are a short error. The message is no longer `SyntaxError: …` text, and a repeated `Error:` / `[Error]:` prefix is removed.
 - `validateBatch` rejects an account-level failure (HTTP 200, error for address `all`, such as an invalid API key or no credits). An error for one address stays on the resolved result. A top-level `error` string for an invalid API key or no credits also rejects. A per-email scoring error such as `{ error: "invalid email" }` stays on the resolved result.

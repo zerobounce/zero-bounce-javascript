@@ -91,22 +91,40 @@ export class ZeroBounceSDK {
 
   static ZBDownloadType = ZBDownloadType;
 
+  /** Base URLs for APIs that do not sit under the main or bulk /v2 path. */
+  static ListEvaluatorURL = Object.freeze({
+    DEFAULT_URL: "https://bulkapi.zerobounce.net/v2/listevaluator",
+  });
+
+  static InboxPlacementURL = Object.freeze({
+    DEFAULT_URL: "https://bulkapi.zerobounce.net/api/ipt",
+  });
+
   constructor() {
     this._initialized = false;
     this._api_key = null;
     this._api_base_url = ZeroBounceSDK.ApiURL.DEFAULT_API_URL;
+    this._list_evaluator_base_url = ZeroBounceSDK.ListEvaluatorURL.DEFAULT_URL;
+    this._inbox_placement_base_url = ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL;
   }
 
   /**
    * @param apiKey - your private API key
    * @param apiBaseURL - your preferred API, possible values being ApiURL.DEFAULT_API_URL, ApiURL.USAAPIURL, ApiURL.EUAPIURL
    * */
-  init(apiKey, apiBaseURL = ZeroBounceSDK.ApiURL.DEFAULT_API_URL) {
+  init(apiKey, apiBaseURL = ZeroBounceSDK.ApiURL.DEFAULT_API_URL, options = null) {
     if (apiKey == null || String(apiKey).trim() === "") {
       throw new Error("ZeroBounce: Api key parameter is missing. Please provide a valid API key.");
     }
     this._api_key = apiKey;
     this._api_base_url = requireHttpsUrl(apiBaseURL);
+    const { listEvaluatorBaseURL, inboxPlacementBaseURL } = options || {};
+    this._list_evaluator_base_url = requireHttpsUrl(
+      listEvaluatorBaseURL ?? ZeroBounceSDK.ListEvaluatorURL.DEFAULT_URL
+    );
+    this._inbox_placement_base_url = requireHttpsUrl(
+      inboxPlacementBaseURL ?? ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL
+    );
     this._initialized = true;
   }
 
@@ -143,6 +161,9 @@ export class ZeroBounceSDK {
     let timeout;
     let activityData;
     let verifyPlus;
+    let domainInfo;
+    let greylistProcessing;
+    let callbackUrl;
     if (typeof options === "string") {
       ip_address = options;
     } else if (options && typeof options === "object") {
@@ -150,10 +171,23 @@ export class ZeroBounceSDK {
       timeout = options.timeout;
       activityData = options.activityData;
       verifyPlus = options.verifyPlus;
+      domainInfo = options.domainInfo;
+      greylistProcessing = options.greylistProcessing;
+      callbackUrl = options.callbackUrl;
     }
 
     if (timeout != null && (timeout < 3 || timeout > 60)) {
       parameterIsInvalid("timeout", "Must be between 3 and 60 seconds.");
+      return;
+    }
+
+    if (callbackUrl != null && greylistProcessing !== true) {
+      parameterIsInvalid("callbackUrl", "Requires greylistProcessing: true.");
+      return;
+    }
+
+    if (callbackUrl != null && String(callbackUrl).trim() === "") {
+      parameterIsMissing("callbackUrl");
       return;
     }
 
@@ -165,6 +199,11 @@ export class ZeroBounceSDK {
     if (timeout != null) params.timeout = timeout;
     if (activityData != null) params.activity_data = activityData ? "true" : "false";
     if (verifyPlus != null) params.verify_plus = verifyPlus ? "true" : "false";
+    if (domainInfo != null) params.domain_info = domainInfo ? "true" : "false";
+    if (greylistProcessing != null) {
+      params.greylist_processing = greylistProcessing ? "true" : "false";
+    }
+    if (callbackUrl != null) params.callback_url = callbackUrl;
 
     const usePost =
       options && typeof options === "object" && options.method === "POST";
@@ -661,22 +700,6 @@ export class ZeroBounceSDK {
     });
   }
 
-  async _sendBulkRootFormPost(path, fields) {
-    const params = {
-      api_key: this._api_key,
-      ...fields,
-    };
-    return createRequest({
-      requestType: "POST",
-      path,
-      body: new URLSearchParams(params),
-      params: {},
-      batch: true,
-      bulkBase: "root",
-      apiBaseURL: this._api_base_url,
-    });
-  }
-
   /**
    * @param fileId - the id of a previously submmitted and accepted file
    * */
@@ -850,10 +873,9 @@ export class ZeroBounceSDK {
     body.append("api_key", this._api_key);
     return createRequest({
       requestType: "POST",
-      path: "/listevaluator/",
+      path: "/",
       body,
-      batch: true,
-      apiBaseURL: this._api_base_url,
+      apiBaseURL: this._list_evaluator_base_url,
     });
   }
 
@@ -877,10 +899,9 @@ export class ZeroBounceSDK {
     body.append("api_key", this._api_key);
     return createRequest({
       requestType: "POST",
-      path: "/listevaluator/",
+      path: "/",
       body,
-      batch: true,
-      apiBaseURL: this._api_base_url,
+      apiBaseURL: this._list_evaluator_base_url,
     });
   }
 
@@ -896,9 +917,8 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "GET",
       params,
-      path: `/listevaluator/${fileId}/`,
-      batch: true,
-      apiBaseURL: this._api_base_url,
+      path: `/${encodeURIComponent(fileId)}/`,
+      apiBaseURL: this._list_evaluator_base_url,
     });
   }
 
@@ -1007,97 +1027,187 @@ export class ZeroBounceSDK {
     });
   }
 
-  // AMAZON S3 BULK HELPERS (bulkapi root)
 
-  async listS3files({ bucket = null, search = null } = {}) {
-    if (!this._initialized) {
-      notInitialized();
-      return;
-    }
-    const params = { api_key: this._api_key };
-    if (bucket != null) params.bucket = bucket;
-    if (search != null) params.search = search;
+  // INBOX PLACEMENT TESTER (bulkapi.zerobounce.net/api/ipt)
+  // The API key goes on the query string and bodies are JSON with camelCase fields.
+
+  _iptRequest(requestType, path, { params = null, jsonBody = null } = {}) {
     return createRequest({
-      requestType: "GET",
-      params,
-      path: "/listS3files",
-      batch: true,
-      bulkBase: "root",
-      apiBaseURL: this._api_base_url,
+      requestType,
+      path,
+      params: { api_key: this._api_key, ...(params || {}) },
+      jsonBody,
+      apiBaseURL: this._inbox_placement_base_url,
     });
   }
 
-  async validateS3file({
-    file_name,
-    has_header_row,
-    remove_duplicates,
-    email_address_column = null,
-    return_url = false,
-    first_name_column = false,
-    last_name_column = false,
-    gender_column = false,
-    ip_address_column = false,
-    remove_duplicate = null,
-    allowPhase2 = null,
-  }) {
+  /** Seed providers available for new tests. GET /providers */
+  async getInboxPlacementProviders() {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (isMissing(file_name)) {
-      parameterIsMissing("file_name");
-      return;
     }
-    const fields = { file_name };
-    if (has_header_row != null) fields.has_header_row = has_header_row;
-    if (remove_duplicates != null) fields.remove_duplicates = remove_duplicates;
-    if (remove_duplicate != null) fields.remove_duplicate = remove_duplicate;
-    if (email_address_column != null) fields.email_address_column = email_address_column;
-    if (return_url) fields.return_url = return_url;
-    if (first_name_column) fields.first_name_column = first_name_column;
-    if (last_name_column) fields.last_name_column = last_name_column;
-    if (gender_column) fields.gender_column = gender_column;
-    if (ip_address_column) fields.ip_address_column = ip_address_column;
-    if (allowPhase2 != null) fields.allow_phase_2 = String(allowPhase2);
-    return this._sendBulkRootFormPost("/validateS3file", fields);
+    return this._iptRequest("GET", "/providers");
   }
 
-  async scoreS3file({
-    file_name,
-    has_header_row,
-    remove_duplicates,
-    email_address_column = null,
-    remove_duplicate = null,
-  }) {
+  /** Supported test types and the default one. GET /test-types */
+  async getInboxPlacementTestTypes() {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (isMissing(file_name)) {
-      parameterIsMissing("file_name");
-      return;
     }
-    const fields = { file_name };
-    if (has_header_row != null) fields.has_header_row = has_header_row;
-    if (remove_duplicates != null) fields.remove_duplicates = remove_duplicates;
-    if (remove_duplicate != null) fields.remove_duplicate = remove_duplicate;
-    if (email_address_column != null) fields.email_address_column = email_address_column;
-    return this._sendBulkRootFormPost("/scoreS3file", fields);
+    return this._iptRequest("GET", "/test-types");
   }
 
-  async exportS3file({ file_id, export_bucket }) {
+  /**
+   * Create an inbox placement test. POST /test
+   *
+   * @param options.name - unique test name, at most 64 characters (required)
+   * @param options.testType - 1 (Email, needs senderEmail), 2 (Unique ID) or 3 (Auto Alias)
+   * @param options.senderEmail - the From address to match; required when testType is 1
+   * @param options.providerIds - use every active seed of these providers
+   * @param options.seedIds - use these seed mailboxes
+   * @param options.providers - [{ id, maxSeeds }] to cap seeds per provider (maxSeeds >= 1)
+   * @param options.webhookUrl - where the finished result is posted
+   * */
+  async createInboxPlacementTest({
+    name,
+    testType = null,
+    senderEmail = null,
+    providerIds = null,
+    seedIds = null,
+    providers = null,
+    webhookUrl = null,
+  } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (isMissing(file_id)) {
-      parameterIsMissing("file_id");
-      return;
-    } else if (isMissing(export_bucket)) {
-      parameterIsMissing("export_bucket");
+    }
+    if (isMissing(name)) {
+      parameterIsMissing("name");
       return;
     }
-    return this._sendBulkRootFormPost("/exportS3file", {
-      file_id,
-      export_bucket,
-    });
+    if (String(name).length > 64) {
+      parameterIsInvalid("name", "Must be at most 64 characters.");
+      return;
+    }
+    if (testType != null && ![1, 2, 3].includes(testType)) {
+      parameterIsInvalid("testType", "Must be 1, 2 or 3.");
+      return;
+    }
+    if (testType === 1 && isMissing(senderEmail)) {
+      parameterIsMissing("senderEmail", "Required when testType is 1.");
+      return;
+    }
+    for (const provider of providers || []) {
+      if (!provider || typeof provider !== "object" || provider.id == null) {
+        parameterIsInvalid("providers", "Each entry needs an id.");
+        return;
+      }
+      if (provider.maxSeeds != null && provider.maxSeeds < 1) {
+        parameterIsInvalid("providers", "maxSeeds must be at least 1.");
+        return;
+      }
+    }
+
+    const body = { name };
+    if (testType != null) body.testType = testType;
+    if (senderEmail != null) body.senderEmail = senderEmail;
+    if (providerIds != null) body.providerIds = providerIds;
+    if (seedIds != null) body.seedIds = seedIds;
+    if (providers != null) body.providers = providers;
+    if (webhookUrl != null) body.webhookUrl = webhookUrl;
+    return this._iptRequest("POST", "/test", { jsonBody: body });
+  }
+
+  /** A test and its placement results. GET /test/{id} */
+  async getInboxPlacementTest(testId) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    }
+    if (isMissing(testId)) {
+      parameterIsMissing("testId");
+      return;
+    }
+    return this._iptRequest("GET", `/test/${encodeURIComponent(String(testId).trim())}`);
+  }
+
+  /**
+   * List tests, newest first. GET /tests
+   *
+   * @param options.status - "running" or "finished"
+   * @param options.createdAfter - ISO 8601 date or datetime
+   * @param options.createdBefore - ISO 8601 date or datetime
+   * @param options.page - page number, from 1
+   * @param options.pageSize - tests per page, 1 to 100
+   * */
+  async listInboxPlacementTests({
+    status = null,
+    createdAfter = null,
+    createdBefore = null,
+    page = null,
+    pageSize = null,
+  } = {}) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    }
+    if (status != null && !["running", "finished"].includes(status)) {
+      parameterIsInvalid("status", "Must be running or finished.");
+      return;
+    }
+    if (page != null && page < 1) {
+      parameterIsInvalid("page", "Must be at least 1.");
+      return;
+    }
+    if (pageSize != null && (pageSize < 1 || pageSize > 100)) {
+      parameterIsInvalid("pageSize", "Must be between 1 and 100.");
+      return;
+    }
+
+    const params = {};
+    if (status != null) params.status = status;
+    if (createdAfter != null) params.createdAfter = createdAfter;
+    if (createdBefore != null) params.createdBefore = createdBefore;
+    if (page != null) params.page = page;
+    if (pageSize != null) params.page_size = pageSize;
+    return this._iptRequest("GET", "/tests", { params });
+  }
+
+  /** Delete a finished test. DELETE /test/{id} */
+  async deleteInboxPlacementTest(testId) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    }
+    if (isMissing(testId)) {
+      parameterIsMissing("testId");
+      return;
+    }
+    return this._iptRequest("DELETE", `/test/${encodeURIComponent(String(testId).trim())}`);
+  }
+
+  /** The webhook URL saved on this API key. GET /webhook */
+  async getInboxPlacementWebhook() {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    }
+    return this._iptRequest("GET", "/webhook");
+  }
+
+  /** Save the URL finished results are posted to. PUT /webhook */
+  async setInboxPlacementWebhook(webhookUrl) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    }
+    if (isMissing(webhookUrl)) {
+      parameterIsMissing("webhookUrl");
+      return;
+    }
+    return this._iptRequest("PUT", "/webhook", { jsonBody: { webhookUrl } });
   }
 
   // EMAIL FINDER
