@@ -317,6 +317,10 @@ describe("offline API", () => {
       ["sendListEvaluatorFile", () => sdk.sendListEvaluatorFile({ file, email_address_column: 1 }), "POST", "bulkapi.zerobounce.net", "/v2/listevaluator/"],
       ["sendListEvaluatorFileStream", () => sdk.sendListEvaluatorFileStream(file, "emails.csv", { email_address_column: 1 }), "POST", "bulkapi.zerobounce.net", "/v2/listevaluator/"],
       ["getListEvaluatorResult", () => sdk.getListEvaluatorResult(id), "GET", "bulkapi.zerobounce.net", "/v2/listevaluator/file-1/"],
+      ["listS3files", () => sdk.listS3files(), "GET", "bulkapi.zerobounce.net", "/listS3files"],
+      ["validateS3file", () => sdk.validateS3file({ file_name: "f.csv" }), "POST", "bulkapi.zerobounce.net", "/validateS3file"],
+      ["scoreS3file", () => sdk.scoreS3file({ file_name: "f.csv" }), "POST", "bulkapi.zerobounce.net", "/scoreS3file"],
+      ["exportS3file", () => sdk.exportS3file({ file_id: id, export_bucket: "bucket" }), "POST", "bulkapi.zerobounce.net", "/exportS3file"],
       ["getInboxPlacementProviders", () => sdk.getInboxPlacementProviders(), "GET", "bulkapi.zerobounce.net", "/api/ipt/providers"],
       ["getInboxPlacementTestTypes", () => sdk.getInboxPlacementTestTypes(), "GET", "bulkapi.zerobounce.net", "/api/ipt/test-types"],
       ["createInboxPlacementTest", () => sdk.createInboxPlacementTest({ name: "t" }), "POST", "bulkapi.zerobounce.net", "/api/ipt/test"],
@@ -526,6 +530,20 @@ describe("offline API", () => {
     fake.records.length = 0;
     await sdk.sendListEvaluatorFile({ file, email_address_column: 0 });
     expect(fake.only().fields.email_address_column).toBe("0");
+    fake.records.length = 0;
+    await sdk.validateS3file({
+      file_name: "f.csv",
+      email_address_column: 0,
+      first_name_column: 0,
+      has_header_row: false,
+      remove_duplicate: false,
+    });
+    request = fake.only();
+    expect(request.fields.email_address_column).toBe("0");
+    expect(request.fields.first_name_column).toBeUndefined();
+    expect(request.fields.has_header_row).toBe("false");
+    expect(request.fields.remove_duplicate).toBe("false");
+    expect(request.fields.allow_phase_2).toBeUndefined();
 
   });
 
@@ -585,8 +603,16 @@ describe("offline API", () => {
     expect(request.fields.last_name).toBeUndefined();
   });
 
-  it("omits unset filter fields", async () => {
+  it("omits unset listS3files and filter fields", async () => {
     const sdk = client("parity-key");
+    await sdk.listS3files();
+    expect(fake.only().fields.bucket).toBeUndefined();
+    expect(fake.records[0].fields.search).toBeUndefined();
+    fake.records.length = 0;
+    await sdk.listS3files({ bucket: "inbox", search: "a.csv" });
+    expect(fake.only().fields.bucket).toBe("inbox");
+    expect(fake.records[0].fields.search).toBe("a.csv");
+    fake.records.length = 0;
     await sdk.addFilter({ rule: "include", target: "email", value: "a@example.com" });
     expect(fake.only().body).toEqual({
       api_key: "parity-key",
@@ -622,6 +648,7 @@ describe("offline API", () => {
     await expectRejected(sdk.findEmailByDomain({ domain: "example.com" }));
     await expectRejected(sdk.addFilter({ rule: "", target: "domain", value: "spam.com" }));
     await expectRejected(sdk.getFile(""));
+    await expectRejected(sdk.exportS3file({ file_id: "id" }));
     await expectRejected(sdk.validateEmail("a@example.com", { callbackUrl: "https://example.com/cb" }));
     await expectRejected(
       sdk.validateEmail("a@example.com", { greylistProcessing: true, callbackUrl: "   " })

@@ -593,6 +593,22 @@ export class ZeroBounceSDK {
     });
   }
 
+  async _sendBulkRootFormPost(path, fields) {
+    const params = {
+      api_key: this._api_key,
+      ...fields,
+    };
+    return createRequest({
+      requestType: "POST",
+      path,
+      body: new URLSearchParams(params),
+      params: {},
+      batch: true,
+      bulkBase: "root",
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
   /**
    * @param fileId - the id of a previously submmitted and accepted file
    * */
@@ -1027,6 +1043,99 @@ export class ZeroBounceSDK {
     });
   }
 
+
+  // AMAZON S3 BULK HELPERS (bulkapi root)
+
+  async listS3files({ bucket = null, search = null } = {}) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    }
+    const params = { api_key: this._api_key };
+    if (bucket != null) params.bucket = bucket;
+    if (search != null) params.search = search;
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/listS3files",
+      batch: true,
+      bulkBase: "root",
+      apiBaseURL: this._api_base_url,
+    });
+  }
+
+  async validateS3file({
+    file_name,
+    has_header_row,
+    remove_duplicates,
+    email_address_column = null,
+    return_url = false,
+    first_name_column = false,
+    last_name_column = false,
+    gender_column = false,
+    ip_address_column = false,
+    remove_duplicate = null,
+    allowPhase2 = null,
+  }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (isMissing(file_name)) {
+      parameterIsMissing("file_name");
+      return;
+    }
+    const fields = { file_name };
+    if (has_header_row != null) fields.has_header_row = has_header_row;
+    if (remove_duplicates != null) fields.remove_duplicates = remove_duplicates;
+    if (remove_duplicate != null) fields.remove_duplicate = remove_duplicate;
+    if (email_address_column != null) fields.email_address_column = email_address_column;
+    if (return_url) fields.return_url = return_url;
+    if (first_name_column) fields.first_name_column = first_name_column;
+    if (last_name_column) fields.last_name_column = last_name_column;
+    if (gender_column) fields.gender_column = gender_column;
+    if (ip_address_column) fields.ip_address_column = ip_address_column;
+    if (allowPhase2 != null) fields.allow_phase_2 = String(allowPhase2);
+    return this._sendBulkRootFormPost("/validateS3file", fields);
+  }
+
+  async scoreS3file({
+    file_name,
+    has_header_row,
+    remove_duplicates,
+    email_address_column = null,
+    remove_duplicate = null,
+  }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (isMissing(file_name)) {
+      parameterIsMissing("file_name");
+      return;
+    }
+    const fields = { file_name };
+    if (has_header_row != null) fields.has_header_row = has_header_row;
+    if (remove_duplicates != null) fields.remove_duplicates = remove_duplicates;
+    if (remove_duplicate != null) fields.remove_duplicate = remove_duplicate;
+    if (email_address_column != null) fields.email_address_column = email_address_column;
+    return this._sendBulkRootFormPost("/scoreS3file", fields);
+  }
+
+  async exportS3file({ file_id, export_bucket }) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    } else if (isMissing(file_id)) {
+      parameterIsMissing("file_id");
+      return;
+    } else if (isMissing(export_bucket)) {
+      parameterIsMissing("export_bucket");
+      return;
+    }
+    return this._sendBulkRootFormPost("/exportS3file", {
+      file_id,
+      export_bucket,
+    });
+  }
 
   // INBOX PLACEMENT TESTER (bulkapi.zerobounce.net/api/ipt)
   // The API key goes on the query string and bodies are JSON with camelCase fields.

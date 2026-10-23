@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bulk domain search: `sendDomainSearchFile`, `sendDomainSearchFileStream`, `getDomainSearchFileStatus`, `getDomainSearchFile`, `deleteDomainSearchFile`.
 - List evaluator: `sendListEvaluatorFile`, `sendListEvaluatorFileStream`, `getListEvaluatorResult`, `sendEvaluatedFile`.
 - Filters: `addFilter`, `listFilters` (GET, or POST when `method` is `"POST"`), `deleteFilter`.
+- S3 bulk: `validateS3file`, `scoreS3file`, `exportS3file`, `listS3files`.
 - `validateEmail` accepts `domainInfo` (adds `domain_website_exists` and `domain_registrant_company_name` to the response), `greylistProcessing`, and `callbackUrl`. `callbackUrl` needs `greylistProcessing: true` and is rejected without it.
 - The validate response carries `message`, read from the API's `Message` key, which a greylist pickup returns while the retry is still running.
 - Inbox Placement Tester on `https://bulkapi.zerobounce.net/api/ipt`: `getInboxPlacementProviders`, `getInboxPlacementTestTypes`, `createInboxPlacementTest`, `getInboxPlacementTest`, `listInboxPlacementTests`, `deleteInboxPlacementTest`, `getInboxPlacementWebhook`, `setInboxPlacementWebhook`.

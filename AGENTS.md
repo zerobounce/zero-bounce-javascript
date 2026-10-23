@@ -30,12 +30,12 @@ There is no separate lint command. CI (`.github/workflows/sdk_ci.yml`) runs `npm
 
 ## Conventions
 
-- **Only endpoints documented at https://www.zerobounce.net/docs/.** Do not add a method for an endpoint that the public docs do not describe, even if it exists on the server.
+- **Only endpoints documented at https://www.zerobounce.net/docs/.** Do not add a method for an endpoint that the public docs do not describe, even if it exists on the server. Check before concluding something is undocumented: the S3 bulk endpoints live under https://www.zerobounce.net/docs/api-integrations/amazon-s3-bulk-api, not the main API reference.
 - **One `ZeroBounceSDK` per API key.** The key is stored on the instance. Do not reuse one instance across users or requests. Construct a separate object per key. The offline concurrency test does this.
 - **Column indexes are 1-based and are not converted.** Optional name, gender, and IP columns use `0` or `false` to mean "leave this field out". Required `email_address_column` and `domain_column` are sent as given, including `0`. `0` is not "missing".
 - **Optional parameters are omitted when unset.** `timeout`, `activityData`, `verifyPlus`, `allowPhase2`, `downloadType`, `ip_address`, and email-finder name fields are not sent until the caller sets them. Explicit `false` is sent as the string `false` on query, form, and multipart bodies, and as a JSON boolean on `validateBatch`.
 - **Do not use boolean `false` as the "omit this column" sentinel inside `_sendBulkRootMultipartFile`.** `false` is a real `has_header_row` value and must be appended as `"false"`. Optional columns that are unset are `null`, and `null` is omitted. `optionalColumn` turns `0` and `false` into `null` for those optional columns only.
-- **`allow_phase_2` is validation bulk only** (`sendFile`, `sendFileStream`), and only when `allowPhase2` is set. Scoring `sendFile` ignores it. `activity_data` on get-file is validation `getFile` only.
+- **`allow_phase_2` is validation bulk only** (`sendFile`, `sendFileStream`, `validateS3file`), and only when `allowPhase2` is set. Scoring `sendFile` ignores it. `activity_data` on get-file is validation `getFile` only.
 - **List evaluator and the Inbox Placement Tester have their own base URLs**, set on the instance by `init`'s third argument: `https://bulkapi.zerobounce.net/v2/listevaluator` and `https://bulkapi.zerobounce.net/api/ipt`. They are not built from the bulk base. `sendEvaluatedFile` stays on the bulk `/v2` base.
 - **The Inbox Placement Tester takes the API key as the `api_key` query parameter and JSON bodies with camelCase fields.** Only fields the caller set are sent. Its error bodies use `detail`.
 - **`validateBatch` uses `api.zerobounce.net`**, not `bulkapi.zerobounce.net`. Bulk email finder and domain search use the bulk host root (`/email-finder/…`, `/domain-search/…`) with no `/v2`. List evaluator and validation/scoring file methods use `https://bulkapi.zerobounce.net/v2`.

@@ -445,6 +445,49 @@ export interface ListFiltersOptions {
   method?: "GET" | "POST";
 }
 
+export interface ValidateS3FileOptions {
+  file_name: string;
+  has_header_row?: boolean;
+  /** Postman field name for duplicate removal. */
+  remove_duplicates?: boolean;
+  /** Alternate field name used by some bulk endpoints. */
+  remove_duplicate?: boolean;
+  email_address_column?: number;
+  return_url?: string | false;
+  first_name_column?: number | false;
+  last_name_column?: number | false;
+  gender_column?: number | false;
+  ip_address_column?: number | false;
+  allowPhase2?: boolean | null;
+}
+
+export interface ScoreS3FileOptions {
+  file_name: string;
+  has_header_row?: boolean;
+  remove_duplicates?: boolean;
+  remove_duplicate?: boolean;
+  email_address_column?: number;
+}
+
+export interface ExportS3FileOptions {
+  file_id: string;
+  export_bucket: string;
+}
+
+/** Single entry from GET /listS3files. */
+export interface S3ListFileEntry {
+  name: string;
+  size: number;
+  last_modified: string;
+}
+
+export interface S3BulkJobResponse {
+  success?: boolean;
+  message?: string;
+  file_id?: string;
+  export_path?: string;
+}
+
 /** Per-provider seed cap for createInboxPlacementTest. */
 export interface InboxPlacementProviderSelection {
   id: number;
@@ -747,6 +790,22 @@ export class ZeroBounceSDK {
   deleteFilter(
     options: FilterRuleParams
   ): Promise<FilterMessageResponse | undefined>;
+
+  listS3files(
+    options?: { bucket?: string | null; search?: string | null } | null
+  ): Promise<S3ListFileEntry[] | undefined>;
+
+  validateS3file(
+    options: ValidateS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  scoreS3file(
+    options: ScoreS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  exportS3file(
+    options: ExportS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
 
   /** Inbox Placement Tester: seed providers. GET /api/ipt/providers */
   getInboxPlacementProviders(): Promise<unknown>;
