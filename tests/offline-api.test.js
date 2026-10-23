@@ -321,6 +321,13 @@ describe("offline API", () => {
       ["validateS3file", () => sdk.validateS3file({ file_name: "f.csv" }), "POST", "bulkapi.zerobounce.net", "/validateS3file"],
       ["scoreS3file", () => sdk.scoreS3file({ file_name: "f.csv" }), "POST", "bulkapi.zerobounce.net", "/scoreS3file"],
       ["exportS3file", () => sdk.exportS3file({ file_id: id, export_bucket: "bucket" }), "POST", "bulkapi.zerobounce.net", "/exportS3file"],
+      ["emailFinderS3file", () => sdk.emailFinderS3file({ file_name: "f.csv", has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/emailFinderS3file"],
+      ["domainSearchS3file", () => sdk.domainSearchS3file({ file_name: "f.csv", has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/domainSearchS3file"],
+      ["validateSFTPfile", () => sdk.validateSFTPfile({ has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/validateSFTPfile"],
+      ["scoreSFTPfile", () => sdk.scoreSFTPfile({ file_name: "f.csv", has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/scoreSFTPfile"],
+      ["emailFinderSFTPfile", () => sdk.emailFinderSFTPfile({ file_name: "f.csv", has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/emailFinderSFTPfile"],
+      ["domainSearchSFTPfile", () => sdk.domainSearchSFTPfile({ file_name: "f.csv", has_header_row: true }), "POST", "bulkapi.zerobounce.net", "/domainSearchSFTPfile"],
+      ["exportSFTPfile", () => sdk.exportSFTPfile({ file_id: "fid" }), "POST", "bulkapi.zerobounce.net", "/exportSFTPfile"],
       ["getInboxPlacementProviders", () => sdk.getInboxPlacementProviders(), "GET", "bulkapi.zerobounce.net", "/api/ipt/providers"],
       ["getInboxPlacementTestTypes", () => sdk.getInboxPlacementTestTypes(), "GET", "bulkapi.zerobounce.net", "/api/ipt/test-types"],
       ["createInboxPlacementTest", () => sdk.createInboxPlacementTest({ name: "t" }), "POST", "bulkapi.zerobounce.net", "/api/ipt/test"],
@@ -649,6 +656,11 @@ describe("offline API", () => {
     await expectRejected(sdk.addFilter({ rule: "", target: "domain", value: "spam.com" }));
     await expectRejected(sdk.getFile(""));
     await expectRejected(sdk.exportS3file({ file_id: "id" }));
+    await expectRejected(sdk.emailFinderS3file({ has_header_row: true }));
+    await expectRejected(sdk.scoreSFTPfile({ file_name: "  ", has_header_row: true }));
+    await expectRejected(sdk.domainSearchSFTPfile({ file_name: "f.csv" }));
+    await expectRejected(sdk.exportSFTPfile({}));
+    await expectRejected(sdk.exportSFTPfile({ file_id: "fid", export_path: "  " }));
     await expectRejected(sdk.validateEmail("a@example.com", { callbackUrl: "https://example.com/cb" }));
     await expectRejected(
       sdk.validateEmail("a@example.com", { greylistProcessing: true, callbackUrl: "   " })
@@ -777,6 +789,47 @@ describe("offline API", () => {
   it("turns a detail error body into a short message", async () => {
     const error = await expectRejected(client("ipt-detail-key").getInboxPlacementProviders());
     expect(error.message).toContain("Inbox placement test not found");
+  });
+
+  it("sends the documented S3 and SFTP job fields and omits unset ones", async () => {
+    const sdk = client("parity-key");
+    await sdk.emailFinderS3file({ file_name: "inbox.csv", has_header_row: false });
+    let request = fake.only();
+    expect(request.path).toBe("/emailFinderS3file");
+    expect(request.body.file_name).toBe("inbox.csv");
+    expect(request.body.has_header_row).toBe("false");
+    expect(request.body.remove_duplicates).toBeUndefined();
+    expect(request.body.return_url).toBeUndefined();
+
+    fake.records.length = 0;
+    await sdk.domainSearchS3file({
+      file_name: "inbox.csv",
+      has_header_row: true,
+      remove_duplicates: false,
+      return_url: "https://example.com/done",
+    });
+    request = fake.only();
+    expect(request.body.has_header_row).toBe("true");
+    expect(request.body.remove_duplicates).toBe("false");
+    expect(request.body.return_url).toBe("https://example.com/done");
+
+    // validateSFTPfile is the one job whose file_name the docs mark optional.
+    fake.records.length = 0;
+    await sdk.validateSFTPfile({ has_header_row: true });
+    request = fake.only();
+    expect(request.path).toBe("/validateSFTPfile");
+    expect(request.body.file_name).toBeUndefined();
+
+    fake.records.length = 0;
+    await sdk.exportSFTPfile({ file_id: "fid" });
+    request = fake.only();
+    expect(request.path).toBe("/exportSFTPfile");
+    expect(request.body.file_id).toBe("fid");
+    expect(request.body.export_path).toBeUndefined();
+
+    fake.records.length = 0;
+    await sdk.exportSFTPfile({ file_id: "fid", export_path: "/out" });
+    expect(fake.only().body.export_path).toBe("/out");
   });
 
   it("turns a 403 HTML access-denied page into a short error", async () => {

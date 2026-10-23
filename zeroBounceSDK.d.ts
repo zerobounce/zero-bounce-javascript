@@ -522,6 +522,22 @@ export interface ListInboxPlacementTestsOptions {
   pageSize?: number;
 }
 
+/** Shared options for the documented S3 and SFTP file jobs. */
+export interface BulkRootFileJobOptions {
+  /** Full path as returned by listS3files. Optional only for validateSFTPfile. */
+  file_name?: string;
+  has_header_row: boolean;
+  remove_duplicates?: boolean;
+  return_url?: string;
+}
+
+/** Options for exportSFTPfile. */
+export interface ExportSFTPFileOptions {
+  file_id: string;
+  /** Defaults to the export path in your ZeroBounce settings. */
+  export_path?: string;
+}
+
 /** Options for findEmailByDomain / Email Finder. */
 export interface FindEmailByDomainOptions {
   domain: string;
@@ -805,6 +821,35 @@ export class ZeroBounceSDK {
 
   exportS3file(
     options: ExportS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  emailFinderS3file(
+    options: BulkRootFileJobOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  domainSearchS3file(
+    options: BulkRootFileJobOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  /** file_name is optional here; omit it to use the configured input bucket. */
+  validateSFTPfile(
+    options: BulkRootFileJobOptions | { has_header_row: boolean; remove_duplicates?: boolean; return_url?: string }
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  scoreSFTPfile(
+    options: BulkRootFileJobOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  emailFinderSFTPfile(
+    options: BulkRootFileJobOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  domainSearchSFTPfile(
+    options: BulkRootFileJobOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  exportSFTPfile(
+    options: ExportSFTPFileOptions
   ): Promise<S3BulkJobResponse | undefined>;
 
   /** Inbox Placement Tester: seed providers. GET /api/ipt/providers */

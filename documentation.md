@@ -92,6 +92,30 @@ try {
 }
 ```
 
+- ##### S3 and SFTP/FTP bulk jobs
+
+```javascript
+// Amazon S3: https://www.zerobounce.net/docs/api-integrations/amazon-s3-bulk-api
+await zeroBounce.emailFinderS3file({ file_name: "lists/leads.csv", has_header_row: true });
+await zeroBounce.domainSearchS3file({
+  file_name: "lists/leads.csv",
+  has_header_row: true,
+  remove_duplicates: true,
+  return_url: "https://example.com/zerobounce-done",
+});
+
+// SFTP/FTP: https://www.zerobounce.net/docs/api-integrations/sftp_bulk_api
+// The server, path and protocol come from your ZeroBounce settings.
+// file_name is optional for validateSFTPfile only.
+await zeroBounce.validateSFTPfile({ has_header_row: true });
+await zeroBounce.scoreSFTPfile({ file_name: "my_file.txt", has_header_row: true });
+await zeroBounce.emailFinderSFTPfile({ file_name: "my_file.txt", has_header_row: true });
+await zeroBounce.domainSearchSFTPfile({ file_name: "my_file.txt", has_header_row: true });
+
+// Without export_path the path from your settings is used.
+await zeroBounce.exportSFTPfile({ file_id: "<FILE_ID>", export_path: "/exports" });
+```
+
 - ##### Inbox Placement Tester
 
 ```javascript

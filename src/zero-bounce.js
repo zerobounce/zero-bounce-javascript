@@ -1137,6 +1137,99 @@ export class ZeroBounceSDK {
     });
   }
 
+
+  /**
+   * Shared shape for the documented S3 and SFTP file jobs on the bulkapi root.
+   * Only fields the caller set are sent; booleans go as the strings true/false.
+   *
+   * @param fileNameRequired - false for validateSFTPfile, whose file_name is optional
+   * */
+  async _bulkRootFileJob(path, { file_name, has_header_row, remove_duplicates, return_url }, fileNameRequired = true) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    }
+    if (fileNameRequired && isMissing(file_name)) {
+      parameterIsMissing("file_name");
+      return;
+    }
+    if (file_name != null && String(file_name).trim() === "") {
+      parameterIsMissing("file_name");
+      return;
+    }
+    if (has_header_row == null) {
+      parameterIsMissing("has_header_row");
+      return;
+    }
+
+    const fields = { has_header_row: booleanText(has_header_row) };
+    if (file_name != null) fields.file_name = file_name;
+    if (remove_duplicates != null) fields.remove_duplicates = booleanText(remove_duplicates);
+    if (return_url != null) fields.return_url = return_url;
+    return this._sendBulkRootFormPost(path, fields);
+  }
+
+  /** Run the email finder on a file in your Amazon S3 bucket. POST /emailFinderS3file */
+  async emailFinderS3file(options) {
+    return this._bulkRootFileJob("/emailFinderS3file", options || {});
+  }
+
+  /** Run domain search on a file in your Amazon S3 bucket. POST /domainSearchS3file */
+  async domainSearchS3file(options) {
+    return this._bulkRootFileJob("/domainSearchS3file", options || {});
+  }
+
+  // SFTP / FTP BULK (bulkapi root)
+  // The server, path and protocol come from your ZeroBounce settings.
+
+  /**
+   * Validate a file from your SFTP/FTP server. POST /validateSFTPfile
+   *
+   * The docs list file_name as optional here; leave it out to use the input
+   * bucket configured in your settings.
+   * */
+  async validateSFTPfile(options) {
+    return this._bulkRootFileJob("/validateSFTPfile", options || {}, false);
+  }
+
+  /** Score a file from your SFTP/FTP server. POST /scoreSFTPfile */
+  async scoreSFTPfile(options) {
+    return this._bulkRootFileJob("/scoreSFTPfile", options || {});
+  }
+
+  /** Run the email finder on a file from your SFTP/FTP server. POST /emailFinderSFTPfile */
+  async emailFinderSFTPfile(options) {
+    return this._bulkRootFileJob("/emailFinderSFTPfile", options || {});
+  }
+
+  /** Run domain search on a file from your SFTP/FTP server. POST /domainSearchSFTPfile */
+  async domainSearchSFTPfile(options) {
+    return this._bulkRootFileJob("/domainSearchSFTPfile", options || {});
+  }
+
+  /**
+   * Export a validated or scored file back to your SFTP/FTP server. POST /exportSFTPfile
+   *
+   * Without export_path the path from your ZeroBounce settings is used.
+   * */
+  async exportSFTPfile({ file_id, export_path = null } = {}) {
+    if (!this._initialized) {
+      notInitialized();
+      return;
+    }
+    if (isMissing(file_id)) {
+      parameterIsMissing("file_id");
+      return;
+    }
+    if (export_path != null && String(export_path).trim() === "") {
+      parameterIsMissing("export_path");
+      return;
+    }
+    const fields = { file_id };
+    if (export_path != null) fields.export_path = export_path;
+    return this._sendBulkRootFormPost("/exportSFTPfile", fields);
+  }
+
   // INBOX PLACEMENT TESTER (bulkapi.zerobounce.net/api/ipt)
   // The API key goes on the query string and bodies are JSON with camelCase fields.
 
