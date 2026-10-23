@@ -215,16 +215,24 @@ function installFakeFetch() {
     const parsed = new URL(String(url));
     const body = await readBody(init.body);
     const query = Object.fromEntries(parsed.searchParams.entries());
+    const headers = init.headers || {};
+    const authorization = String(headers.Authorization || headers.authorization || "");
+    // The Inbox Placement Tester authenticates with a Bearer header rather than
+    // an api_key parameter, so the key can arrive either way.
+    const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
     const recorded = {
       method: String(init.method || "GET").toUpperCase(),
       host: parsed.host,
       path: parsed.pathname,
       url: String(url),
       query,
+      headers,
+      authorization,
+      bearer,
       body: body.fields,
       json: body.json,
       fields: { ...query, ...body.fields },
-      apiKey: body.fields.api_key || query.api_key || "",
+      apiKey: body.fields.api_key || query.api_key || bearer || "",
       redirect: init.redirect,
     };
     records.push(recorded);
@@ -336,7 +344,7 @@ describe("offline API", () => {
       ["deleteInboxPlacementTest", () => sdk.deleteInboxPlacementTest(id), "DELETE", "bulkapi.zerobounce.net", "/api/ipt/test/file-1"],
       ["getInboxPlacementWebhook", () => sdk.getInboxPlacementWebhook(), "GET", "bulkapi.zerobounce.net", "/api/ipt/webhook"],
       ["setInboxPlacementWebhook", () => sdk.setInboxPlacementWebhook("https://example.com/hook"), "PUT", "bulkapi.zerobounce.net", "/api/ipt/webhook"],
-      ["sendEvaluatedFile", () => sdk.sendEvaluatedFile({ file }), "POST", "bulkapi.zerobounce.net", "/v2/send-evaluated-file/"],
+      ["sendEvaluatedFile", () => sdk.sendEvaluatedFile("eval-file-1"), "POST", "bulkapi.zerobounce.net", "/v2/send-evaluated-file/"],
       ["addFilter", () => sdk.addFilter({ rule: "exclude", target: "domain", value: "spam.com" }), "POST", "api.zerobounce.net", "/v2/filters/add"],
       ["listFilters", () => sdk.listFilters(), "GET", "api.zerobounce.net", "/v2/filters/list"],
       ["deleteFilter", () => sdk.deleteFilter({ rule: "exclude", target: "domain", value: "spam.com" }), "POST", "api.zerobounce.net", "/v2/filters/delete"],
@@ -718,7 +726,9 @@ describe("offline API", () => {
     await sdk.createInboxPlacementTest({ name: "basic" });
     let request = fake.only();
     expect(request.json).toEqual({ name: "basic" });
-    expect(request.query.api_key).toBe("parity-key");
+    // The Inbox Placement Tester documents Authorization: Bearer, not a query key.
+    expect(request.authorization).toBe("Bearer parity-key");
+    expect(request.query.api_key).toBeUndefined();
 
     fake.records.length = 0;
     await sdk.createInboxPlacementTest({
@@ -750,7 +760,8 @@ describe("offline API", () => {
   it("sends only the inbox placement list filters that are set", async () => {
     const sdk = client("parity-key");
     await sdk.listInboxPlacementTests();
-    expect(Object.keys(fake.only().query)).toEqual(["api_key"]);
+    // The key travels in the Bearer header, so an unfiltered list sends no query.
+    expect(Object.keys(fake.only().query)).toEqual([]);
 
     fake.records.length = 0;
     await sdk.listInboxPlacementTests({

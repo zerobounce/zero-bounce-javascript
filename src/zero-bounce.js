@@ -1,4 +1,4 @@
-import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid, requireHttpsUrl } from "./utils.js";
+import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid, requireHttpsUrl, checkApiKey, pathSegment } from "./utils.js";
 
 /**
  * Validation status values returned by the API (validate, validateBatch).
@@ -101,12 +101,24 @@ export class ZeroBounceSDK {
     DEFAULT_URL: "https://bulkapi.zerobounce.net/api/ipt",
   });
 
+  static EmailFinderURL = Object.freeze({
+    DEFAULT_URL: "https://bulkapi.zerobounce.net/email-finder",
+  });
+
+  static DomainSearchURL = Object.freeze({
+    DEFAULT_URL: "https://bulkapi.zerobounce.net/domain-search",
+  });
+
   constructor() {
     this._initialized = false;
     this._api_key = null;
     this._api_base_url = ZeroBounceSDK.ApiURL.DEFAULT_API_URL;
     this._list_evaluator_base_url = ZeroBounceSDK.ListEvaluatorURL.DEFAULT_URL;
     this._inbox_placement_base_url = ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL;
+    this._email_finder_base_url = ZeroBounceSDK.EmailFinderURL.DEFAULT_URL;
+    this._domain_search_base_url = ZeroBounceSDK.DomainSearchURL.DEFAULT_URL;
+    // One warning per client: see warnOnRegionalBulkHost.
+    this._regional_warning = { warned: false };
   }
 
   /**
@@ -117,15 +129,32 @@ export class ZeroBounceSDK {
     if (apiKey == null || String(apiKey).trim() === "") {
       throw new Error("ZeroBounce: Api key parameter is missing. Please provide a valid API key.");
     }
+    checkApiKey(apiKey, "Api key");
     this._api_key = apiKey;
     this._api_base_url = requireHttpsUrl(apiBaseURL);
-    const { listEvaluatorBaseURL, inboxPlacementBaseURL } = options || {};
+    const {
+      listEvaluatorBaseURL,
+      inboxPlacementBaseURL,
+      emailFinderBaseURL,
+      domainSearchBaseURL,
+    } = options || {};
     this._list_evaluator_base_url = requireHttpsUrl(
-      listEvaluatorBaseURL ?? ZeroBounceSDK.ListEvaluatorURL.DEFAULT_URL
+      listEvaluatorBaseURL ?? ZeroBounceSDK.ListEvaluatorURL.DEFAULT_URL,
+      "listEvaluatorBaseURL"
     );
     this._inbox_placement_base_url = requireHttpsUrl(
-      inboxPlacementBaseURL ?? ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL
+      inboxPlacementBaseURL ?? ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL,
+      "inboxPlacementBaseURL"
     );
+    this._email_finder_base_url = requireHttpsUrl(
+      emailFinderBaseURL ?? ZeroBounceSDK.EmailFinderURL.DEFAULT_URL,
+      "emailFinderBaseURL"
+    );
+    this._domain_search_base_url = requireHttpsUrl(
+      domainSearchBaseURL ?? ZeroBounceSDK.DomainSearchURL.DEFAULT_URL,
+      "domainSearchBaseURL"
+    );
+    this._regional_warning = { warned: false };
     this._initialized = true;
   }
 
@@ -283,7 +312,11 @@ export class ZeroBounceSDK {
       api_key: this._api_key,
       email_batch: emailBatch,
     };
-    if (timeout != null) body.timeout = timeout;
+    // LIVE: the API requires `timeout` as a JSON string ("30"). Sent as a
+    // number it rejects the whole batch with the account-level
+    // "Invalid API Key or your account ran out of credits" error.
+    // activity_data and verify_plus stay JSON booleans.
+    if (timeout != null) body.timeout = String(timeout);
     if (activityData != null) body.activity_data = activityData;
     if (verifyPlus != null) body.verify_plus = verifyPlus;
     return createRequest({
@@ -939,23 +972,38 @@ export class ZeroBounceSDK {
     });
   }
 
-  async sendEvaluatedFile({ file }) {
+  /**
+   * Submit a finished evaluation for validation. POST /v2/send-evaluated-file/
+   *
+   * LIVE: this takes the list evaluator's `file_id` as a form field, not a file
+   * upload as the docs describe — an upload is rejected with
+   * "file_id: This field is required". It returns a new validation job's
+   * file_id, which answers "File cannot be found" for a short while after it is
+   * accepted.
+   *
+   * @param fileId - the file_id returned by the list evaluator
+   */
+  async sendEvaluatedFile(fileId) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (!file) {
-      parameterIsMissing("file");
+    }
+    const id = typeof fileId === "object" && fileId !== null ? fileId.file_id : fileId;
+    if (isMissing(id)) {
+      parameterIsMissing("File id");
       return;
     }
     const body = new FormData();
-    body.append("file", file);
     body.append("api_key", this._api_key);
+    body.append("file_id", String(id));
     return createRequest({
       requestType: "POST",
       path: "/send-evaluated-file/",
       body,
       batch: true,
+      secrets: [this._api_key],
       apiBaseURL: this._api_base_url,
+      regionalWarningState: this._regional_warning,
     });
   }
 
@@ -1238,9 +1286,14 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType,
       path,
-      params: { api_key: this._api_key, ...(params || {}) },
+      params,
       jsonBody,
-      apiBaseURL: this._inbox_placement_base_url,
+      // Documented auth for this API is a Bearer header, not an api_key query.
+      bearerToken: this._api_key,
+      secrets: [this._api_key],
+      apiBaseURL: this._api_base_url,
+      baseURL: this._inbox_placement_base_url,
+      regionalWarningState: this._regional_warning,
     });
   }
 

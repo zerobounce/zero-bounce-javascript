@@ -552,7 +552,9 @@ describe("ZeroBounceSDK", () => {
       });
       const init = fetch.mock.calls[0][1];
       const body = JSON.parse(init.body);
-      expect(body.timeout).toBe(60);
+      // LIVE: the API requires timeout as a JSON string; a number makes it
+      // reject the whole batch with the account-level credits error.
+      expect(body.timeout).toBe("60");
       expect(body.activity_data).toBe(true);
       expect(body.verify_plus).toBe(true);
     });
@@ -649,8 +651,8 @@ describe("ZeroBounceSDK", () => {
         })
       );
       zeroBounceSDK.init("invalid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      const response = await zeroBounceSDK.sendFile(payload);
-      expect(response).toEqual(expected);
+      // {"success": false} on an HTTP 200 is a failure, not a result.
+      await expect(zeroBounceSDK.sendFile(payload)).rejects.toThrow("api_key is invalid");
     });
 
     it("should return the data regarding sent file", async () => {
@@ -733,8 +735,8 @@ describe("ZeroBounceSDK", () => {
         })
       );
       zeroBounceSDK.init("invalid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
-      const response = await zeroBounceSDK.sendScoringFile(payload);
-      expect(response).toEqual(expected);
+      // {"success": false} on an HTTP 200 is a failure, not a result.
+      await expect(zeroBounceSDK.sendScoringFile(payload)).rejects.toThrow("api_key is invalid");
     });
 
     it("should return the data regarding sent scoring file", async () => {
