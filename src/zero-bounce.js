@@ -78,6 +78,21 @@ function optionalColumn(value) {
   return value ? value : null;
 }
 
+/**
+ * A date for the API, as the documented YYYY-MM-DD.
+ *
+ * A Date left unformatted stringifies to "Fri Oct 24 2026 01:00:00 GMT+0400
+ * (Gulf Standard Time)". In a query string that is long, spaced and
+ * parenthesised, and Cloudflare answers it with an HTML "Access denied" page
+ * rather than the API answering at all. Strings pass through untouched.
+ */
+function apiDate(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  return value;
+}
+
 /** Documented filter rules and targets, checked before a request is sent. */
 const FILTER_RULES = ["allow", "block"];
 const FILTER_TARGETS = ["email", "domain", "mx", "tld"];
@@ -273,14 +288,14 @@ export class ZeroBounceSDK {
 
     const params = {
       api_key: this._api_key,
-      start_date: startDate,
-      end_date: endDate,
+      start_date: apiDate(startDate),
+      end_date: apiDate(endDate),
     };
     return createRequest({
       requestType: "GET",
       params,
-      path: "/getapiusage", 
-      apiBaseURL: this._api_base_url
+      path: "/getapiusage",
+      apiBaseURL: this._api_base_url,
     });
   }
 
