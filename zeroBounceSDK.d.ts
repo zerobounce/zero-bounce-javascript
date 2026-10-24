@@ -48,6 +48,7 @@ export type ZBValidateSubStatusType = Readonly<{
   ACCEPT_ALL: "accept_all";
   ROLE_BASED_ACCEPT_ALL: "role_based_accept_all";
   GOLD: "gold";
+  AI_AGENT_MAILBOX: "ai_agent_mailbox";
 }>;
 
 /** `status` field on validate / validateBatch results (matches {@link ZBValidateStatusType} values). */
@@ -69,6 +70,10 @@ export interface EmailValidationResult {
   account?: string | null;
   domain?: string | null;
   domain_age_days?: string | null;
+  /** Last activity bucket when activity_data was requested (e.g. 30, 365+). */
+  active_in_days?: string | null;
+  /** First date activity was detected for this email (YYYY-MM-DD). */
+  active_first_seen?: string | null;
   smtp_provider?: string | null;
   /** [true/false or null] Is the domain a catch-all? */
   catchall_domain?: boolean | null;
@@ -83,6 +88,12 @@ export interface EmailValidationResult {
   city?: string | null;
   zipcode?: string | null;
   processed_at?: string | null;
+  /** With domainInfo: whether the domain has a website ("True", "False" or "unchecked"). */
+  domain_website_exists?: string | null;
+  /** With domainInfo: WHOIS registrant company, "Registrant info not found" or "unchecked". */
+  domain_registrant_company_name?: string | null;
+  /** Read from the API's "Message" key. Set while greylist processing is still running. */
+  message?: string | null;
 }
 
 /** POST /validatebatch response body. */
@@ -136,6 +147,23 @@ export interface ApiUsageResponse {
 export interface EmailActivityResponse {
   found: boolean;
   active_in_days?: string;
+}
+
+/** Successful GET/POST /scoring response. */
+export interface EmailScoringResult {
+  email: string;
+  score: number;
+}
+
+/** Unsuccessful /scoring response (invalid email, missing params, etc.). */
+export interface EmailScoringError {
+  error: string;
+}
+
+/** Options for scoreEmail. */
+export interface ScoreEmailOptions {
+  /** When `"POST"`, sends `api_key` and `email` as `application/x-www-form-urlencoded` (default GET). */
+  method?: "GET" | "POST";
 }
 
 /** Bulk sendfile success (validation or scoring). */
@@ -231,11 +259,34 @@ export interface ValidateEmailOptions {
   ip_address?: string;
   /** Validation timeout in seconds, 3–60. If exceeded, API may return unknown/greylisted. */
   timeout?: number;
+  /** Maps to `activity_data` on GET /validate. */
+  activityData?: boolean;
+  /** Maps to `verify_plus` on GET /validate. */
+  verifyPlus?: boolean;
+  /** Maps to `domain_info`. Adds domain_website_exists and domain_registrant_company_name. */
+  domainInfo?: boolean;
+  /** Maps to `greylist_processing`. Reprocesses a greylisted address instead of returning unknown. */
+  greylistProcessing?: boolean;
+  /** Maps to `callback_url`. Only allowed with `greylistProcessing: true`. */
+  callbackUrl?: string;
+  /** Use form-encoded POST instead of GET (same parameters). */
+  method?: "GET" | "POST";
 }
 
 /** Single item for validateBatch (email_batch array). */
 export interface ValidateBatchEmailItem {
   email_address: string;
+  ip_address?: string | null;
+}
+
+/** Options for validateBatch (timeout, activity_data, verify_plus). */
+export interface ValidateBatchOptions {
+  /** Validation timeout in seconds, 10–120 for the whole batch. */
+  timeout?: number;
+  /** Maps to `activity_data` on POST /validatebatch. */
+  activityData?: boolean;
+  /** Maps to `verify_plus` on POST /validatebatch. */
+  verifyPlus?: boolean;
 }
 
 /** Bulk `getfile` query values for `download_type` (validation and scoring). */
@@ -310,6 +361,184 @@ export interface SendScoringFileStreamOptions {
   remove_duplicate?: boolean;
 }
 
+/** Options for bulk email finder sendfile. */
+export interface SendEmailFinderFileOptions {
+  file: File;
+  domain_column: number;
+  first_name_column?: number | false;
+  last_name_column?: number | false;
+  middle_name_column?: number | false;
+  full_name_column?: number | false;
+  has_header_row?: boolean;
+}
+
+export interface SendEmailFinderFileStreamOptions {
+  domain_column: number;
+  first_name_column?: number | false;
+  last_name_column?: number | false;
+  middle_name_column?: number | false;
+  full_name_column?: number | false;
+  has_header_row?: boolean;
+}
+
+/** Options for bulk domain search sendfile. */
+export interface SendDomainSearchFileOptions {
+  file: File;
+  domain_column: number;
+  has_header_row?: boolean;
+}
+
+export interface SendDomainSearchFileStreamOptions {
+  domain_column: number;
+  has_header_row?: boolean;
+}
+
+/** POST /v2/listevaluator/ success (201). */
+export interface ListEvaluatorSubmitResponse {
+  file_id?: string;
+  message?: string;
+  success?: boolean;
+}
+
+/** GET /v2/listevaluator/{file_id}/ while processing or complete. */
+export interface ListEvaluatorResultResponse {
+  file_status?: string;
+  success?: boolean;
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface SendListEvaluatorFileOptions {
+  file: File;
+  email_address_column: number;
+}
+
+export interface SendListEvaluatorFileStreamOptions {
+  email_address_column: number;
+}
+
+export interface SendEvaluatedFileOptions {
+  file: File;
+}
+
+export type FilterRule = "allow" | "block";
+export type FilterTarget = "email" | "domain" | "mx" | "tld";
+
+export interface FilterRuleParams {
+  rule: FilterRule;
+  target: FilterTarget;
+  value: string;
+}
+
+export interface FilterListItem {
+  rule: FilterRule;
+  target: FilterTarget;
+  value: string;
+}
+
+export interface FilterMessageResponse {
+  Message?: string;
+  Error?: string;
+}
+
+export interface ListFiltersOptions {
+  /** When `"POST"`, uses form-encoded POST (supported from Sep 2026). */
+  method?: "GET" | "POST";
+}
+
+export interface ValidateS3FileOptions {
+  file_name: string;
+  has_header_row?: boolean;
+  /** Postman field name for duplicate removal. */
+  remove_duplicates?: boolean;
+  /** Alternate field name used by some bulk endpoints. */
+  remove_duplicate?: boolean;
+  email_address_column?: number;
+  return_url?: string | false;
+  first_name_column?: number | false;
+  last_name_column?: number | false;
+  gender_column?: number | false;
+  ip_address_column?: number | false;
+  allowPhase2?: boolean | null;
+}
+
+export interface ScoreS3FileOptions {
+  file_name: string;
+  has_header_row?: boolean;
+  remove_duplicates?: boolean;
+  remove_duplicate?: boolean;
+  email_address_column?: number;
+}
+
+export interface ExportS3FileOptions {
+  file_id: string;
+  export_bucket: string;
+}
+
+/** Single entry from GET /listS3files. */
+export interface S3ListFileEntry {
+  name: string;
+  size: number;
+  last_modified: string;
+}
+
+export interface S3BulkJobResponse {
+  success?: boolean;
+  message?: string;
+  file_id?: string;
+  export_path?: string;
+}
+
+/** Per-provider seed cap for createInboxPlacementTest. */
+export interface InboxPlacementProviderSelection {
+  id: number;
+  /** At least 1 when given. */
+  maxSeeds?: number;
+}
+
+/** Options for createInboxPlacementTest (POST /api/ipt/test). */
+export interface CreateInboxPlacementTestOptions {
+  /** Unique test name, at most 64 characters. */
+  name: string;
+  /** 1 (Email, needs senderEmail), 2 (Unique ID) or 3 (Auto Alias). */
+  testType?: 1 | 2 | 3;
+  /** The From address to match. Required when testType is 1. */
+  senderEmail?: string;
+  providerIds?: number[];
+  seedIds?: number[];
+  providers?: InboxPlacementProviderSelection[];
+  webhookUrl?: string;
+}
+
+/** Options for listInboxPlacementTests (GET /api/ipt/tests). */
+export interface ListInboxPlacementTestsOptions {
+  status?: "running" | "finished";
+  /** ISO 8601 date or datetime. */
+  createdAfter?: string;
+  /** ISO 8601 date or datetime. */
+  createdBefore?: string;
+  /** From 1. */
+  page?: number;
+  /** 1 to 100. Sent as page_size. */
+  pageSize?: number;
+}
+
+/** Shared options for the documented S3 and SFTP file jobs. */
+export interface BulkRootFileJobOptions {
+  /** Full path as returned by listS3files. Optional only for validateSFTPfile. */
+  file_name?: string;
+  has_header_row: boolean;
+  remove_duplicates?: boolean;
+  return_url?: string;
+}
+
+/** Options for exportSFTPfile. */
+export interface ExportSFTPFileOptions {
+  file_id: string;
+  /** Defaults to the export path in your ZeroBounce settings. */
+  export_path?: string;
+}
+
 /** Options for findEmailByDomain / Email Finder. */
 export interface FindEmailByDomainOptions {
   domain: string;
@@ -355,7 +584,16 @@ export class ZeroBounceSDK {
    * @param apiKey - Your private API key
    * @param apiBaseURL - Preferred API base (e.g. ZeroBounceSDK.ApiURL.DEFAULT_API_URL)
    */
-  init(apiKey: string, apiBaseURL?: ApiURL): void;
+  init(
+    apiKey: string,
+    apiBaseURL?: ApiURL,
+    options?: {
+      /** Defaults to https://bulkapi.zerobounce.net/v2/listevaluator */
+      listEvaluatorBaseURL?: string;
+      /** Defaults to https://bulkapi.zerobounce.net/api/ipt */
+      inboxPlacementBaseURL?: string;
+    } | null
+  ): void;
 
   /**
    * Get remaining credits for your account.
@@ -365,7 +603,7 @@ export class ZeroBounceSDK {
   /**
    * Validate a single email address.
    * @param email - Email to validate
-   * @param options - Optional ip_address and/or timeout (3–60 seconds), or ip_address string for backwards compatibility
+   * @param options - Optional ip_address, timeout (3–60), activityData, verifyPlus, or ip_address string for backwards compatibility
    */
   validateEmail(
     email: string,
@@ -384,10 +622,12 @@ export class ZeroBounceSDK {
 
   /**
    * Validate a batch of emails.
-   * @param emailBatch - Array of objects with email_address
+   * @param emailBatch - Array of objects with email_address (and optional ip_address)
+   * @param options - Optional timeout (10–120), activityData, verifyPlus
    */
   validateBatch(
-    emailBatch: ValidateBatchEmailItem[]
+    emailBatch: ValidateBatchEmailItem[],
+    options?: ValidateBatchOptions | null
   ): Promise<ValidateBatchResponse | undefined>;
 
   /**
@@ -395,6 +635,16 @@ export class ZeroBounceSDK {
    * @param email - Valid email address
    */
   getEmailActivity(email: string): Promise<EmailActivityResponse | undefined>;
+
+  /**
+   * Real-time AI scoring for a single email (GET or POST /scoring).
+   * @param email - Email to score
+   * @param options - Optional `{ method: "POST" }` for form-encoded POST
+   */
+  scoreEmail(
+    email: string,
+    options?: ScoreEmailOptions | null
+  ): Promise<EmailScoringResult | EmailScoringError | undefined>;
 
   /**
    * Submit a file for bulk email validation.
@@ -484,6 +734,149 @@ export class ZeroBounceSDK {
     fileId: string
   ): Promise<BulkFileDeletedResponse | undefined>;
 
+  sendEmailFinderFile(
+    options: SendEmailFinderFileOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  sendEmailFinderFileStream(
+    fileStreamOrBlob: File | Blob,
+    fileName: string,
+    options?: SendEmailFinderFileStreamOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  getEmailFinderFileStatus(
+    fileId: string
+  ): Promise<ValidationFileStatusResponse | undefined>;
+
+  getEmailFinderFile(
+    fileId: string
+  ): Promise<string | Blob | GetFileJsonErrorPayload | undefined>;
+
+  deleteEmailFinderFile(
+    fileId: string
+  ): Promise<BulkFileDeletedResponse | undefined>;
+
+  sendDomainSearchFile(
+    options: SendDomainSearchFileOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  sendDomainSearchFileStream(
+    fileStreamOrBlob: File | Blob,
+    fileName: string,
+    options?: SendDomainSearchFileStreamOptions
+  ): Promise<SendFileResponse | undefined>;
+
+  getDomainSearchFileStatus(
+    fileId: string
+  ): Promise<ValidationFileStatusResponse | undefined>;
+
+  getDomainSearchFile(
+    fileId: string
+  ): Promise<string | Blob | GetFileJsonErrorPayload | undefined>;
+
+  deleteDomainSearchFile(
+    fileId: string
+  ): Promise<BulkFileDeletedResponse | undefined>;
+
+  sendListEvaluatorFile(
+    options: SendListEvaluatorFileOptions
+  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+
+  sendListEvaluatorFileStream(
+    fileStreamOrBlob: File | Blob,
+    fileName: string,
+    options?: SendListEvaluatorFileStreamOptions
+  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+
+  getListEvaluatorResult(
+    fileId: string
+  ): Promise<ListEvaluatorResultResponse | undefined>;
+
+  sendEvaluatedFile(
+    options: SendEvaluatedFileOptions
+  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+
+  addFilter(
+    options: FilterRuleParams
+  ): Promise<FilterMessageResponse | undefined>;
+
+  listFilters(
+    options?: ListFiltersOptions | null
+  ): Promise<FilterListItem[] | FilterMessageResponse | undefined>;
+
+  deleteFilter(
+    options: FilterRuleParams
+  ): Promise<FilterMessageResponse | undefined>;
+
+  listS3files(
+    options?: { bucket?: string | null; search?: string | null } | null
+  ): Promise<S3ListFileEntry[] | undefined>;
+
+  validateS3file(
+    options: ValidateS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  scoreS3file(
+    options: ScoreS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  exportS3file(
+    options: ExportS3FileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  emailFinderS3file(
+    options: BulkRootFileJobOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  domainSearchS3file(
+    options: BulkRootFileJobOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  /** file_name is optional here; omit it to use the configured input bucket. */
+  validateSFTPfile(
+    options: BulkRootFileJobOptions | { has_header_row: boolean; remove_duplicates?: boolean; return_url?: string }
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  scoreSFTPfile(
+    options: BulkRootFileJobOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  emailFinderSFTPfile(
+    options: BulkRootFileJobOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  domainSearchSFTPfile(
+    options: BulkRootFileJobOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  exportSFTPfile(
+    options: ExportSFTPFileOptions
+  ): Promise<S3BulkJobResponse | undefined>;
+
+  /** Inbox Placement Tester: seed providers. GET /api/ipt/providers */
+  getInboxPlacementProviders(): Promise<unknown>;
+
+  /** Inbox Placement Tester: supported test types. GET /api/ipt/test-types */
+  getInboxPlacementTestTypes(): Promise<unknown>;
+
+  /** Inbox Placement Tester: create a test. POST /api/ipt/test */
+  createInboxPlacementTest(options: CreateInboxPlacementTestOptions): Promise<unknown>;
+
+  /** Inbox Placement Tester: a test and its results. GET /api/ipt/test/{id} */
+  getInboxPlacementTest(testId: string | number): Promise<unknown>;
+
+  /** Inbox Placement Tester: list tests, newest first. GET /api/ipt/tests */
+  listInboxPlacementTests(options?: ListInboxPlacementTestsOptions | null): Promise<unknown>;
+
+  /** Inbox Placement Tester: delete a finished test. DELETE /api/ipt/test/{id} */
+  deleteInboxPlacementTest(testId: string | number): Promise<unknown>;
+
+  /** Inbox Placement Tester: the webhook saved on this API key. GET /api/ipt/webhook */
+  getInboxPlacementWebhook(): Promise<unknown>;
+
+  /** Inbox Placement Tester: save the result webhook. PUT /api/ipt/webhook */
+  setInboxPlacementWebhook(webhookUrl: string): Promise<unknown>;
+
   /**
    * Email Finder: find email by domain and name.
    */
@@ -519,6 +912,121 @@ export class ZeroBounceSDK {
     middle_name?: string | null;
     last_name?: string | null;
   }): Promise<EmailFinderResponse | DomainFormatResponse | undefined>;
+}
+
+/** An error from the API, carrying the HTTP status of the failed response. */
+export class ZBApiError extends Error {
+  statusCode: number;
+}
+
+/** `self_managed` runs your own mailbox; `zb_managed` has ZeroBounce provision one. */
+export type WarmupOnboardingModel = "self_managed" | "zb_managed";
+
+export type WarmupEmailType = "transactional" | "newsletter" | "marketing";
+
+export interface WarmupEmailContent {
+  company_name?: string;
+  company_website?: string;
+  company_description?: string;
+  types_of_emails?: WarmupEmailType[];
+  example_email?: string;
+}
+
+export interface WarmupManagedSending {
+  weekdays_only?: boolean;
+  timezone?: string;
+  /** -11 to 14. */
+  timezone_offset?: number;
+  /** YYYY-MM-DD, or a Date. */
+  warmup_start_date?: string | Date;
+}
+
+/**
+ * The ZeroBounce Warmup API (https://www.zerobounce.net/docs/warmup-api).
+ *
+ * A separate product from email validation: its own team-scoped key, its own
+ * host, and an `API-Key` header. One instance per Warmup key.
+ */
+export class ZeroBounceWarmup {
+  static DEFAULT_BASE_URL: string;
+
+  constructor(apiKey: string, baseURL?: string);
+
+  listSendingAccounts(): Promise<unknown>;
+  getSendingAccount(fromAddress: string): Promise<unknown>;
+  addSendingAccount(options: {
+    fromAddress: string;
+    onboardingModel: WarmupOnboardingModel;
+    /** 0 to 4. Required for self_managed. */
+    engagementRuleId?: number | null;
+    ignoreConflict?: boolean | null;
+    emailContent?: WarmupEmailContent | null;
+    managedSending?: WarmupManagedSending | null;
+  }): Promise<unknown>;
+  updateSendingAccount(options: {
+    fromAddress: string;
+    /** 0 to 4. */
+    engagementRuleId: number;
+    /** 0 to 8 (4 Paused, 5 Disabled). */
+    statusId: number;
+    autoEnable: boolean;
+  }): Promise<unknown>;
+  deleteSendingAccount(fromAddress: string): Promise<null>;
+  changeFromAddress(oldFromAddress: string, newFromAddress: string): Promise<unknown>;
+  listFromAddresses(options?: {
+    /** Letters, digits and `. - _ @ +` only. */
+    searchFrom?: string | null;
+    offset?: number | null;
+    limit?: number | null;
+  }): Promise<unknown>;
+
+  getEngagementRules(): Promise<unknown>;
+  setEngagementRule(cFrom: string, ruleId: number): Promise<unknown>;
+  getCustomEngagement(cFrom: string): Promise<unknown>;
+  createCustomEngagement(options: {
+    cFrom: string;
+    /** 5 to 45. */
+    replyPct: number;
+    /** 5 to 40. */
+    importantPct: number;
+    /** 0 to 70, and at most importantPct x 1.75. */
+    clickPct: number;
+  }): Promise<unknown>;
+  updateCustomEngagement(options: {
+    cFrom: string;
+    replyPct: number;
+    importantPct: number;
+    clickPct: number;
+  }): Promise<unknown>;
+  deleteCustomEngagement(cFrom: string, engagementRuleId: number): Promise<unknown>;
+
+  getSeeds(): Promise<unknown>;
+  /** CSV text (columns `seed,provider`). */
+  downloadSeeds(): Promise<string>;
+  getSeedCount(): Promise<unknown>;
+  getProgressToday(): Promise<unknown>;
+  getSentToday(): Promise<unknown>;
+  getEmailsPerDay(): Promise<unknown>;
+  getStatistics(fromAddress: string): Promise<unknown>;
+  getStatisticsPerDay(options: {
+    fromAddress: string;
+    startDate: string | Date;
+    endDate: string | Date;
+  }): Promise<unknown>;
+  getStatisticsDetailed(cFrom: string): Promise<unknown>;
+  /** CSV text. */
+  downloadStatistics(cFrom: string): Promise<string>;
+  getFromAddressStatistics(fromAddress: string): Promise<unknown>;
+  /** Pass an email address: the live API rejects a bare domain. */
+  checkDomainDmarc(fromAddress: string, dkimSelector?: string | null): Promise<unknown>;
+  /** The live API answers a failed SMTP login with HTTP 500. */
+  testSmtpConfiguration(options: {
+    fromAddress: string;
+    username: string;
+    password: string;
+    server: string;
+    port: number;
+  }): Promise<unknown>;
 }
 
 export default ZeroBounceSDK;

@@ -5,6 +5,7 @@
 
 import ZeroBounceSDK, {
   type ValidateEmailOptions,
+  type ValidateBatchOptions,
   type ValidateBatchEmailItem,
   type SendFileOptions,
   type SendFileStreamOptions,
@@ -21,6 +22,9 @@ import ZeroBounceSDK, {
   type ValidateBatchResponse,
   type ApiUsageResponse,
   type EmailActivityResponse,
+  type EmailScoringResult,
+  type EmailScoringError,
+  type ScoreEmailOptions,
   type SendFileResponse,
   type ValidationFileStatusResponse,
   type ScoringFileStatusResponse,
@@ -46,6 +50,15 @@ const downloadCombined: string = ZeroBounceSDK.ZBDownloadType.COMBINED;
 const validateOpts: ValidateEmailOptions = {
   ip_address: "127.0.0.1",
   timeout: 10,
+  activityData: true,
+  verifyPlus: false,
+  method: "POST",
+};
+
+const batchOpts: ValidateBatchOptions = {
+  timeout: 30,
+  activityData: true,
+  verifyPlus: true,
 };
 
 const batchItems: ValidateBatchEmailItem[] = [
@@ -82,10 +95,16 @@ const usagePromise: Promise<ApiUsageResponse | undefined> =
   zb.getApiUsage("2024-01-01", "2024-12-31");
 
 const batchPromise: Promise<ValidateBatchResponse | undefined> =
-  zb.validateBatch(batchItems);
+  zb.validateBatch(batchItems, batchOpts);
 
 const activityPromise: Promise<EmailActivityResponse | undefined> =
   zb.getEmailActivity("test@example.com");
+
+const scoreOpts: ScoreEmailOptions = { method: "POST" };
+const scorePromise: Promise<EmailScoringResult | EmailScoringError | undefined> =
+  zb.scoreEmail("test@example.com");
+const scorePostPromise: Promise<EmailScoringResult | EmailScoringError | undefined> =
+  zb.scoreEmail("test@example.com", scoreOpts);
 
 const findDomainPromise: Promise<EmailFinderResponse | undefined> =
   zb.findEmailByDomain(findByDomainOpts);
@@ -198,6 +217,8 @@ function assertTypes(): void {
   void usagePromise;
   void batchPromise;
   void activityPromise;
+  void scorePromise;
+  void scorePostPromise;
   void findDomainPromise;
   void findCompanyPromise;
   void formatDomainPromise;
