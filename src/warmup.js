@@ -63,6 +63,17 @@ function fetchTimeoutSignal() {
   return undefined;
 }
 
+/**
+ * Drops trailing slashes without a regular expression: `/\/+$/` backtracks
+ * quadratically on a string of many slashes, which CodeQL flags as a
+ * polynomial ReDoS when the value comes from a caller.
+ */
+function trimTrailingSlashes(value) {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47 /* "/" */) end -= 1;
+  return value.slice(0, end);
+}
+
 export class ZeroBounceWarmup {
   static DEFAULT_BASE_URL = DEFAULT_BASE_URL;
 
@@ -75,7 +86,7 @@ export class ZeroBounceWarmup {
     checkApiKey(apiKey, "Warmup api key");
     const base = requireHttpsUrl(baseURL || DEFAULT_BASE_URL, "baseURL");
     this._api_key = apiKey;
-    this._root = `${base.replace(/\/+$/, "")}${BASE_PATH}`;
+    this._root = `${trimTrailingSlashes(base)}${BASE_PATH}`;
   }
 
   // -- transport --------------------------------------------------------------

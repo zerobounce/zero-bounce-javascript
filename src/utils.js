@@ -263,12 +263,28 @@ function transportError(error, secrets = []) {
  * sends bulk traffic to bulkapi.zerobounce.net. Warn once per client.
  */
 const REGIONAL_API_HOSTS = ["api-eu.zerobounce.net", "api-us.zerobounce.net"];
+const BULK_HOST = "bulkapi.zerobounce.net";
+
+/**
+ * The host of a URL, lowercased, or "" when it will not parse.
+ *
+ * Matching the host as a substring of the whole URL would also accept
+ * `https://evil.example/bulkapi.zerobounce.net` and
+ * `https://bulkapi.zerobounce.net.evil.example`, so the host is compared on
+ * its own.
+ */
+function hostOf(value) {
+  try {
+    return new URL(String(value)).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
 
 export function warnOnRegionalBulkHost(url, apiBaseURL, state) {
   if (!state || state.warned) return;
-  const base = String(apiBaseURL || "").toLowerCase();
-  if (!REGIONAL_API_HOSTS.some((host) => base.includes(host))) return;
-  if (!String(url).toLowerCase().includes("bulkapi.zerobounce.net")) return;
+  if (!REGIONAL_API_HOSTS.includes(hostOf(apiBaseURL))) return;
+  if (hostOf(url) !== BULK_HOST) return;
   state.warned = true;
   const warn = typeof console !== "undefined" && console.warn ? console.warn : null;
   if (warn) {
