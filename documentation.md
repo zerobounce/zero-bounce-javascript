@@ -72,6 +72,95 @@ try {
 // const response = await zeroBounce.validateEmail(email, "127.0.0.1");
 ```
 
+- ##### Validate with domain info and greylist processing
+
+```javascript
+// domainInfo adds domain_website_exists and domain_registrant_company_name.
+// greylistProcessing re-runs a greylisted address instead of returning unknown.
+// callbackUrl is only allowed together with greylistProcessing: true.
+try {
+  const response = await zeroBounce.validateEmail("<EMAIL_ADDRESS>", {
+    domainInfo: true,
+    greylistProcessing: true,
+    callbackUrl: "https://example.com/zerobounce-callback",
+  });
+  // While the greylist retry is still running the API returns a message
+  // instead of a result; call validateEmail again in about 30 minutes.
+  console.log(response.message, response.domain_website_exists);
+} catch (error) {
+  console.error(error);
+}
+```
+
+- ##### S3 and SFTP/FTP bulk jobs
+
+```javascript
+// Amazon S3: https://www.zerobounce.net/docs/api-integrations/amazon-s3-bulk-api
+await zeroBounce.emailFinderS3file({ file_name: "lists/leads.csv", has_header_row: true });
+await zeroBounce.domainSearchS3file({
+  file_name: "lists/leads.csv",
+  has_header_row: true,
+  remove_duplicates: true,
+  return_url: "https://example.com/zerobounce-done",
+});
+
+// SFTP/FTP: https://www.zerobounce.net/docs/api-integrations/sftp_bulk_api
+// The server, path and protocol come from your ZeroBounce settings.
+// file_name is optional for validateSFTPfile only.
+await zeroBounce.validateSFTPfile({ has_header_row: true });
+await zeroBounce.scoreSFTPfile({ file_name: "my_file.txt", has_header_row: true });
+await zeroBounce.emailFinderSFTPfile({ file_name: "my_file.txt", has_header_row: true });
+await zeroBounce.domainSearchSFTPfile({ file_name: "my_file.txt", has_header_row: true });
+
+// Without export_path the path from your settings is used.
+await zeroBounce.exportSFTPfile({ file_id: "<FILE_ID>", export_path: "/exports" });
+```
+
+- ##### Inbox Placement Tester
+
+```javascript
+// Lives on https://bulkapi.zerobounce.net/api/ipt and spends inbox test credits.
+try {
+  const providers = await zeroBounce.getInboxPlacementProviders();
+  const testTypes = await zeroBounce.getInboxPlacementTestTypes();
+
+  // testType 1 (Email) needs senderEmail; 2 is Unique ID and 3 is Auto Alias.
+  const created = await zeroBounce.createInboxPlacementTest({
+    name: "October campaign",            // required, at most 64 characters
+    testType: 1,
+    senderEmail: "news@example.com",
+    providers: [{ id: 1, maxSeeds: 5 }], // optional per-provider seed cap
+    webhookUrl: "https://example.com/ipt-webhook",
+  });
+
+  // Send your campaign to created.emailAddressList, then read the results.
+  const result = await zeroBounce.getInboxPlacementTest(created.id);
+
+  const tests = await zeroBounce.listInboxPlacementTests({
+    status: "finished",
+    page: 1,
+    pageSize: 25,
+  });
+
+  await zeroBounce.setInboxPlacementWebhook("https://example.com/ipt-webhook");
+  const webhook = await zeroBounce.getInboxPlacementWebhook();
+  await zeroBounce.deleteInboxPlacementTest(created.id);
+} catch (error) {
+  console.error(error);
+}
+```
+
+- ##### Point an API at a different base URL
+
+```javascript
+// The list evaluator and the Inbox Placement Tester have their own base URLs,
+// separate from the main and bulk hosts.
+zeroBounce.init("<YOUR_API_KEY>", ZeroBounceSDK.ApiURL.DEFAULT_API_URL, {
+  listEvaluatorBaseURL: "https://bulkapi.zerobounce.net/v2/listevaluator",
+  inboxPlacementBaseURL: "https://bulkapi.zerobounce.net/api/ipt",
+});
+```
+
 - ####### Get api usage from a start date to an end date
 
 ```javascript

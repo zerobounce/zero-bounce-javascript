@@ -26,7 +26,8 @@
     "prepublishOnly": "npm run build",
     "dts-check": "tsc --noEmit",
     "test:types": "tsc --noEmit -p tsconfig.test.json",
-    "test:real-api": "node tests/real-api-prod.mjs"
+    "test:real-api": "node tests/real-api-prod.mjs",
+    "test:live": "node tests/live-api.mjs"
   },
   "repository": {
     "type": "git",
