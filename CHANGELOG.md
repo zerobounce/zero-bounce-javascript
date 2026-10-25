@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `init`'s `emailFinderBaseURL` and `domainSearchBaseURL` options are now honoured. They were validated and stored but never read, so the bulk email finder and bulk domain search always went to `https://bulkapi.zerobounce.net`. Both default to the same hosts as before, so a client that does not set them is unaffected.
+- **BREAKING:** `sendEmailFinderFile` and `sendEmailFinderFileStream` require `first_name_column` or `full_name_column`, as the bulk email finder documents. As with every optional column, `0` and `false` mean "leave this column out" and so do not count as given.
+- **BREAKING:** `validateS3file` and `scoreS3file` now send exactly the documented job fields — `file_name`, `has_header_row`, `remove_duplicates` and `return_url` — and go through the same path as their six siblings. They no longer send the undocumented `email_address_column`, `first_name_column`, `last_name_column`, `gender_column`, `ip_address_column`, `allow_phase_2` or singular `remove_duplicate`. `file_name`, `has_header_row` and `return_url` are now required on both: the live API rejects a job without `return_url` ("Provided return URL is not permitted: None"). `allowPhase2` remains available on `sendFile` and `sendFileStream`.
+- `findEmailByDomain` and `findEmailByCompanyName` accept a missing `first_name` instead of rejecting it, as the Email Finder documents it as optional. Without it the API answers with the domain's or company's email format. `domain` or `company_name` is still required.
+- `exportS3file` accepts a missing `export_bucket` instead of rejecting it, matching `exportSFTPfile`'s `export_path`. Without it the output bucket from your ZeroBounce settings is used.
+
+### Fixed
+
+- `validateBatch` sends its JSON body with `Content-Type: application/json`. It was handed to `fetch` as a plain string, which labelled the JSON `text/plain;charset=UTF-8`.
+- Warmup `addSendingAccount` rejects `engagementRuleId` for a `zb_managed` account rather than silently dropping it. The field belongs to `self_managed` only.
+- `validateSFTPfile` no longer passes a third argument that the shared job helper never had, and its documentation no longer says `file_name` is optional — the live API requires it.
+
 ## [3.0.0] - 2026-10-25
 
 This release is a major version because the error contract changed: every public

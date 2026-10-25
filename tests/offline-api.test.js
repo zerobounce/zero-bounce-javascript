@@ -312,8 +312,8 @@ describe("offline API", () => {
       ["getScoringFile", () => sdk.getScoringFile(id), "GET", "bulkapi.zerobounce.net", "/v2/scoring/getfile"],
       ["deleteFile", () => sdk.deleteFile(id), "GET", "bulkapi.zerobounce.net", "/v2/deletefile"],
       ["deleteScoringFile", () => sdk.deleteScoringFile(id), "GET", "bulkapi.zerobounce.net", "/v2/scoring/deletefile"],
-      ["sendEmailFinderFile", () => sdk.sendEmailFinderFile({ file, domain_column: 1 }), "POST", "bulkapi.zerobounce.net", "/email-finder/sendfile"],
-      ["sendEmailFinderFileStream", () => sdk.sendEmailFinderFileStream(file, "emails.csv", { domain_column: 1 }), "POST", "bulkapi.zerobounce.net", "/email-finder/sendfile"],
+      ["sendEmailFinderFile", () => sdk.sendEmailFinderFile({ file, domain_column: 1, first_name_column: 2 }), "POST", "bulkapi.zerobounce.net", "/email-finder/sendfile"],
+      ["sendEmailFinderFileStream", () => sdk.sendEmailFinderFileStream(file, "emails.csv", { domain_column: 1, full_name_column: 2 }), "POST", "bulkapi.zerobounce.net", "/email-finder/sendfile"],
       ["getEmailFinderFileStatus", () => sdk.getEmailFinderFileStatus(id), "GET", "bulkapi.zerobounce.net", "/email-finder/filestatus"],
       ["getEmailFinderFile", () => sdk.getEmailFinderFile(id), "GET", "bulkapi.zerobounce.net", "/email-finder/getfile"],
       ["deleteEmailFinderFile", () => sdk.deleteEmailFinderFile(id), "GET", "bulkapi.zerobounce.net", "/email-finder/deletefile"],
@@ -514,11 +514,19 @@ describe("offline API", () => {
     expect(request.fields.first_name_column).toBeUndefined();
 
     fake.records.length = 0;
-    await sdk.sendEmailFinderFile({ file, domain_column: 2, has_header_row: false, first_name_column: 0 });
+    await sdk.sendEmailFinderFile({
+      file,
+      domain_column: 2,
+      has_header_row: false,
+      full_name_column: 3,
+      middle_name_column: 0,
+    });
     request = fake.only();
     expect(request.fields.has_header_row).toBe("false");
     expect(request.fields.domain_column).toBe("2");
+    expect(request.fields.full_name_column).toBe("3");
     expect(request.fields.first_name_column).toBeUndefined();
+    expect(request.fields.middle_name_column).toBeUndefined();
 
     fake.records.length = 0;
     await sdk.sendDomainSearchFile({ file, domain_column: 1, has_header_row: false });
@@ -539,27 +547,12 @@ describe("offline API", () => {
     expect(request.fields.last_name_column).toBe("3");
 
     fake.records.length = 0;
-    await sdk.sendEmailFinderFile({ file, domain_column: 0 });
+    await sdk.sendEmailFinderFile({ file, domain_column: 0, first_name_column: 1 });
     expect(fake.only().fields.domain_column).toBe("0");
 
     fake.records.length = 0;
     await sdk.sendListEvaluatorFile({ file, email_address_column: 0 });
     expect(fake.only().fields.email_address_column).toBe("0");
-    fake.records.length = 0;
-    await sdk.validateS3file({
-      file_name: "f.csv",
-      email_address_column: 0,
-      first_name_column: 0,
-      has_header_row: false,
-      remove_duplicate: false,
-    });
-    request = fake.only();
-    expect(request.fields.email_address_column).toBe("0");
-    expect(request.fields.first_name_column).toBeUndefined();
-    expect(request.fields.has_header_row).toBe("false");
-    expect(request.fields.remove_duplicate).toBe("false");
-    expect(request.fields.allow_phase_2).toBeUndefined();
-
   });
 
   it("sends getFile download_type and activity_data only when set, and not for scoring", async () => {
@@ -660,11 +653,23 @@ describe("offline API", () => {
     await expectRejected(sdk.sendFile({ email_address_column: 1 }));
     await expectRejected(sdk.sendFile({ file }));
     await expectRejected(sdk.findEmailByDomain({ first_name: "Ada" }));
-    await expectRejected(sdk.findEmailByDomain({ domain: "example.com" }));
+    await expectRejected(sdk.findEmailFormatByDomain({ domain: "" }));
     await expectRejected(sdk.addFilter({ rule: "", target: "domain", value: "spam.com" }));
     await expectRejected(sdk.getFile(""));
-    await expectRejected(sdk.exportS3file({ file_id: "id" }));
+    await expectRejected(sdk.exportS3file({}));
+    await expectRejected(sdk.exportS3file({ file_id: "fid", export_bucket: "  " }));
     await expectRejected(sdk.emailFinderS3file({ has_header_row: true }));
+    await expectRejected(sdk.validateS3file({ file_name: "f.csv", has_header_row: true }));
+    await expectRejected(sdk.scoreS3file({ file_name: "f.csv", has_header_row: true }));
+    await expectRejected(
+      sdk.sendEmailFinderFile({ file, domain_column: 1 })
+    );
+    await expectRejected(
+      sdk.sendEmailFinderFile({ file, domain_column: 1, first_name_column: 0 })
+    );
+    await expectRejected(
+      sdk.sendEmailFinderFileStream(file, "emails.csv", { domain_column: 1 })
+    );
     await expectRejected(sdk.scoreSFTPfile({ file_name: "  ", has_header_row: true }));
     await expectRejected(sdk.domainSearchSFTPfile({ file_name: "f.csv" }));
     // LIVE: return_url is required even though the docs mark it optional.
@@ -915,6 +920,254 @@ describe("offline API", () => {
     const csvSdk = client("parity-key");
     jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     await expect(csvSdk.getFile("file-1")).resolves.toBe("result.csv");
+  });
+
+  it("sends validateBatch as JSON with the JSON content type", async () => {
+    const sdk = client("parity-key");
+    const batch = [{ email_address: "a@example.com", ip_address: "1.1.1.1" }];
+    const result = await sdk.validateBatch(batch, { timeout: 30, verifyPlus: true });
+
+    const request = fake.only();
+    expect(request.method).toBe("POST");
+    expect(request.url).toBe("https://api.zerobounce.net/v2/validatebatch");
+    // The key travels in the JSON body, not the query string.
+    expect(request.query).toEqual({});
+    expect(request.headers["Content-Type"]).toBe("application/json");
+    expect(request.json).toEqual({
+      api_key: "parity-key",
+      email_batch: batch,
+      // LIVE: timeout is a JSON string; the flags stay JSON booleans.
+      timeout: "30",
+      verify_plus: true,
+    });
+    expect(result.email_batch[0].status).toBe("valid");
+  });
+
+  it("finds an email without first_name and still sends it when given", async () => {
+    const sdk = client("parity-key");
+    await sdk.findEmailByDomain({ domain: "example.com" });
+    let request = fake.only();
+    expect(request.method).toBe("GET");
+    expect(request.url).toBe(
+      "https://api.zerobounce.net/v2/guessformat?api_key=parity-key&domain=example.com"
+    );
+    expect(request.query.first_name).toBeUndefined();
+
+    fake.records.length = 0;
+    await sdk.findEmailByCompanyName({ company_name: "Ada Inc" });
+    request = fake.only();
+    expect(request.url).toBe(
+      "https://api.zerobounce.net/v2/guessformat?api_key=parity-key&company_name=Ada+Inc"
+    );
+    expect(request.query.first_name).toBeUndefined();
+
+    fake.records.length = 0;
+    const result = await sdk.findEmailByDomain({
+      domain: "example.com",
+      first_name: "Ada",
+      last_name: "Lovelace",
+    });
+    request = fake.only();
+    expect(request.query).toEqual({
+      api_key: "parity-key",
+      first_name: "Ada",
+      last_name: "Lovelace",
+      domain: "example.com",
+    });
+    expect(result.email).toBe("ada@example.com");
+
+    // The domain is still required, and the domain-search family is untouched.
+    await expectRejected(sdk.findEmailByDomain({ first_name: "Ada" }));
+    await expectRejected(sdk.findEmailByCompanyName({ first_name: "Ada" }));
+  });
+
+  it("requires a first_name_column or full_name_column for the bulk email finder", async () => {
+    const sdk = client("parity-key");
+    const missing = await expectRejected(sdk.sendEmailFinderFile({ file, domain_column: 1 }));
+    expect(missing.message).toBe(
+      "ZeroBounce: first_name_column parameter is missing. Send first_name_column or full_name_column."
+    );
+    // 0 and false mean "leave this column out", so neither counts as given.
+    await expectRejected(
+      sdk.sendEmailFinderFile({ file, domain_column: 1, first_name_column: 0 })
+    );
+    await expectRejected(
+      sdk.sendEmailFinderFile({ file, domain_column: 1, full_name_column: false })
+    );
+    await expectRejected(
+      sdk.sendEmailFinderFileStream(file, "emails.csv", { domain_column: 1 })
+    );
+    expect(fake.records).toHaveLength(0);
+
+    await sdk.sendEmailFinderFile({ file, domain_column: 1, first_name_column: 2 });
+    let request = fake.only();
+    expect(request.method).toBe("POST");
+    expect(request.url).toBe("https://bulkapi.zerobounce.net/email-finder/sendfile");
+    expect(request.fields.first_name_column).toBe("2");
+    expect(request.fields.api_key).toBe("parity-key");
+
+    fake.records.length = 0;
+    await sdk.sendEmailFinderFileStream(file, "emails.csv", {
+      domain_column: 1,
+      full_name_column: 3,
+    });
+    request = fake.only();
+    expect(request.url).toBe("https://bulkapi.zerobounce.net/email-finder/sendfile");
+    expect(request.fields.full_name_column).toBe("3");
+    expect(request.fields.first_name_column).toBeUndefined();
+  });
+
+  it("honours the emailFinderBaseURL and domainSearchBaseURL overrides", async () => {
+    const sdk = new ZeroBounceSDK();
+    sdk.init("parity-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL, {
+      emailFinderBaseURL: "https://finder.example.com/email-finder",
+      domainSearchBaseURL: "https://search.example.com/domain-search",
+    });
+
+    const calls = [
+      [() => sdk.sendEmailFinderFile({ file, domain_column: 1, first_name_column: 2 }), "POST", "https://finder.example.com/email-finder/sendfile"],
+      [() => sdk.sendEmailFinderFileStream(file, "emails.csv", { domain_column: 1, first_name_column: 2 }), "POST", "https://finder.example.com/email-finder/sendfile"],
+      [() => sdk.getEmailFinderFileStatus("file-1"), "GET", "https://finder.example.com/email-finder/filestatus?api_key=parity-key&file_id=file-1"],
+      [() => sdk.getEmailFinderFile("file-1"), "GET", "https://finder.example.com/email-finder/getfile?api_key=parity-key&file_id=file-1"],
+      [() => sdk.deleteEmailFinderFile("file-1"), "GET", "https://finder.example.com/email-finder/deletefile?api_key=parity-key&file_id=file-1"],
+      [() => sdk.sendDomainSearchFile({ file, domain_column: 1 }), "POST", "https://search.example.com/domain-search/sendfile"],
+      [() => sdk.sendDomainSearchFileStream(file, "emails.csv", { domain_column: 1 }), "POST", "https://search.example.com/domain-search/sendfile"],
+      [() => sdk.getDomainSearchFileStatus("file-1"), "GET", "https://search.example.com/domain-search/filestatus?api_key=parity-key&file_id=file-1"],
+      [() => sdk.getDomainSearchFile("file-1"), "GET", "https://search.example.com/domain-search/getfile?api_key=parity-key&file_id=file-1"],
+      [() => sdk.deleteDomainSearchFile("file-1"), "GET", "https://search.example.com/domain-search/deletefile?api_key=parity-key&file_id=file-1"],
+    ];
+    for (const [run, method, url] of calls) {
+      fake.records.length = 0;
+      await run();
+      expect({ method: fake.only().method, url: fake.only().url }).toEqual({ method, url });
+      expect(fake.only().apiKey).toBe("parity-key");
+    }
+
+    // An override is still checked, and a default client keeps the bulk host.
+    const bare = new ZeroBounceSDK();
+    expect(() =>
+      bare.init("parity-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL, {
+        emailFinderBaseURL: "http://finder.example.com",
+      })
+    ).toThrow(/emailFinderBaseURL must be an https/);
+    expect(() =>
+      bare.init("parity-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL, {
+        domainSearchBaseURL: "http://search.example.com",
+      })
+    ).toThrow(/domainSearchBaseURL must be an https/);
+
+    fake.records.length = 0;
+    await client("parity-key").getEmailFinderFileStatus("file-1");
+    expect(fake.only().url).toBe(
+      "https://bulkapi.zerobounce.net/email-finder/filestatus?api_key=parity-key&file_id=file-1"
+    );
+  });
+
+  it("sends exactly the documented fields for the S3 and SFTP file jobs", async () => {
+    const sdk = client("parity-key");
+    const jobs = [
+      ["validateS3file", (options) => sdk.validateS3file(options), "/validateS3file"],
+      ["scoreS3file", (options) => sdk.scoreS3file(options), "/scoreS3file"],
+      ["emailFinderS3file", (options) => sdk.emailFinderS3file(options), "/emailFinderS3file"],
+      ["domainSearchS3file", (options) => sdk.domainSearchS3file(options), "/domainSearchS3file"],
+      ["validateSFTPfile", (options) => sdk.validateSFTPfile(options), "/validateSFTPfile"],
+      ["scoreSFTPfile", (options) => sdk.scoreSFTPfile(options), "/scoreSFTPfile"],
+      ["emailFinderSFTPfile", (options) => sdk.emailFinderSFTPfile(options), "/emailFinderSFTPfile"],
+      ["domainSearchSFTPfile", (options) => sdk.domainSearchSFTPfile(options), "/domainSearchSFTPfile"],
+    ];
+
+    for (const [name, run, path] of jobs) {
+      fake.records.length = 0;
+      const result = await run({
+        file_name: "emails/list.csv",
+        has_header_row: true,
+        remove_duplicates: false,
+        return_url: "https://example.com/done",
+        // Undocumented extras a caller may still pass: none may go out.
+        email_address_column: 1,
+        first_name_column: 2,
+        last_name_column: 3,
+        gender_column: 4,
+        ip_address_column: 5,
+        remove_duplicate: true,
+        allowPhase2: true,
+      });
+      const request = fake.only();
+      expect({ name, method: request.method, url: request.url }).toEqual({
+        name,
+        method: "POST",
+        url: `https://bulkapi.zerobounce.net${path}`,
+      });
+      expect(request.query).toEqual({});
+      expect(request.body).toEqual({
+        api_key: "parity-key",
+        file_name: "emails/list.csv",
+        has_header_row: "true",
+        remove_duplicates: "false",
+        return_url: "https://example.com/done",
+      });
+      expect(result.success).toBe(true);
+    }
+
+    // LIVE: file_name, has_header_row and return_url are all required.
+    fake.records.length = 0;
+    for (const [, run] of jobs) {
+      await expectRejected(run({ has_header_row: true, return_url: "https://example.com/done" }));
+      await expectRejected(run({ file_name: "f.csv", return_url: "https://example.com/done" }));
+      const noUrl = await expectRejected(run({ file_name: "f.csv", has_header_row: true }));
+      expect(noUrl.message).toBe(
+        "ZeroBounce: return_url parameter is missing. The API rejects a job without it."
+      );
+    }
+    expect(fake.records).toHaveLength(0);
+  });
+
+  it("makes export_bucket optional on exportS3file, as export_path is on exportSFTPfile", async () => {
+    const sdk = client("parity-key");
+    await sdk.exportS3file({ file_id: "job-1" });
+    let request = fake.only();
+    expect(request.method).toBe("POST");
+    expect(request.url).toBe("https://bulkapi.zerobounce.net/exportS3file");
+    expect(request.body).toEqual({ api_key: "parity-key", file_id: "job-1" });
+
+    fake.records.length = 0;
+    const result = await sdk.exportS3file({ file_id: "job-1", export_bucket: "my-bucket" });
+    request = fake.only();
+    expect(request.body).toEqual({
+      api_key: "parity-key",
+      file_id: "job-1",
+      export_bucket: "my-bucket",
+    });
+    expect(result.success).toBe(true);
+
+    fake.records.length = 0;
+    await expectRejected(sdk.exportS3file({}));
+    await expectRejected(sdk.exportS3file({ file_id: "job-1", export_bucket: "   " }));
+    expect(fake.records).toHaveLength(0);
+  });
+
+  it("reports the API's own error body for a rejected S3 job", async () => {
+    const sdk = client("parity-key");
+    jest.spyOn(global, "fetch").mockImplementationOnce(() =>
+      Promise.resolve({
+        ok: false,
+        status: 400,
+        headers: { get: () => "application/json" },
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({ error_message: "Provided return URL is not permitted: None" })
+          ),
+      })
+    );
+    const error = await expectRejected(
+      sdk.validateS3file({
+        file_name: "emails/list.csv",
+        has_header_row: true,
+        return_url: "https://example.com/done",
+      })
+    );
+    expect(error.message).toBe("Provided return URL is not permitted: None");
+    expect(error.statusCode).toBe(400);
   });
 
   it("keeps API keys isolated across concurrent clients", async () => {

@@ -33,6 +33,13 @@ import ZeroBounceSDK, {
   type EmailFinderResponse,
   type DomainFormatResponse,
   type SendScoringFileResponse,
+  type SendEmailFinderFileOptions,
+  type SendEmailFinderFileStreamOptions,
+  type BulkRootFileJobOptions,
+  type ValidateS3FileOptions,
+  type ScoreS3FileOptions,
+  type ExportS3FileOptions,
+  type S3BulkJobResponse,
 } from "@zerobounce/zero-bounce-sdk";
 
 // --- Class and static members ---
@@ -77,10 +84,42 @@ const findByCompanyOpts: FindEmailByCompanyNameOptions = {
   first_name: "Jane",
 };
 
+// first_name is optional on both: /guessformat answers with the format.
+const findByDomainNoName: FindEmailByDomainOptions = { domain: "example.com" };
+const findByCompanyNoName: FindEmailByCompanyNameOptions = { company_name: "Acme Inc" };
+
+// A bulk email finder file takes first_name_column or full_name_column.
+const finderFileOpts: SendEmailFinderFileStreamOptions = {
+  domain_column: 1,
+  first_name_column: 2,
+};
+const finderFullNameOpts: SendEmailFinderFileStreamOptions = {
+  domain_column: 1,
+  full_name_column: 2,
+};
+
+// The S3 / SFTP jobs all take the same documented set of fields.
+const s3JobOpts: BulkRootFileJobOptions = {
+  file_name: "emails/list.csv",
+  has_header_row: true,
+  remove_duplicates: false,
+  return_url: "https://example.com/done",
+};
+const validateS3Opts: ValidateS3FileOptions = s3JobOpts;
+const scoreS3Opts: ScoreS3FileOptions = s3JobOpts;
+const exportS3Opts: ExportS3FileOptions = { file_id: "job-1" };
+
 // --- Method signatures (types only; we don't call the API) ---
 const zb: ZeroBounceSDK = new ZeroBounceSDK();
 
 zb.init("fake-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
+// Every overridable base URL, including the finder and domain-search hosts.
+zb.init("fake-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL, {
+  listEvaluatorBaseURL: "https://bulkapi.zerobounce.net/v2/listevaluator",
+  inboxPlacementBaseURL: "https://bulkapi.zerobounce.net/api/ipt",
+  emailFinderBaseURL: "https://bulkapi.zerobounce.net/email-finder",
+  domainSearchBaseURL: "https://bulkapi.zerobounce.net/domain-search",
+});
 
 // Return types are Promise<...>; we only check they're assignable
 const creditsPromise: Promise<GetCreditsResponse | undefined> = zb.getCredits();
@@ -208,6 +247,23 @@ zb.sendFileStream(blob, "emails.csv", sendFileStreamOpts);
 zb.sendScoringFileStream(blob, "scoring.csv");
 zb.sendScoringFileStream(blob, "scoring.csv", sendScoringStreamOpts);
 
+const finderFileSendOpts: SendEmailFinderFileOptions = {
+  file: blob as unknown as File,
+  domain_column: 1,
+  full_name_column: 2,
+};
+zb.sendEmailFinderFile(finderFileSendOpts);
+zb.sendEmailFinderFileStream(blob, "finder.csv", finderFileOpts);
+
+const validateS3Promise: Promise<S3BulkJobResponse | undefined> =
+  zb.validateS3file(validateS3Opts);
+const scoreS3Promise: Promise<S3BulkJobResponse | undefined> = zb.scoreS3file(scoreS3Opts);
+const exportS3Promise: Promise<S3BulkJobResponse | undefined> = zb.exportS3file(exportS3Opts);
+const validateSFTPPromise: Promise<S3BulkJobResponse | undefined> =
+  zb.validateSFTPfile(s3JobOpts);
+zb.findEmailByDomain(findByDomainNoName);
+zb.findEmailByCompanyName(findByCompanyNoName);
+
 // Ensure types are used (avoid unused variable warnings in strict mode)
 function assertTypes(): void {
   void creditsPromise;
@@ -250,6 +306,12 @@ function assertTypes(): void {
   void statusValid;
   void statusInvalid;
   void subStatus;
+  void finderFullNameOpts;
+  void finderFileSendOpts;
+  void validateS3Promise;
+  void scoreS3Promise;
+  void exportS3Promise;
+  void validateSFTPPromise;
 }
 
 assertTypes();
