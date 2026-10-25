@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-25
+
+This release is a major version because the error contract changed: every public
+method that is given a missing or invalid argument now rejects, where 2.1.11
+logged with `console.error` and resolved to `undefined`. Code that relied on the
+old silent behaviour needs a `catch` before upgrading. See **Changed** below.
+
 ### Added
 
 - `validateEmail` accepts `activityData`, `verifyPlus`, and `method: "POST"` (form-encoded `POST /v2/validate`). `timeout` is still optional and must be from 3 to 60 seconds.
@@ -27,9 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - List evaluator requests use their own base URL (`https://bulkapi.zerobounce.net/v2/listevaluator`) instead of building the path from the bulk base, and the file id is URL-encoded as one path segment. `sendEvaluatedFile` stays on the bulk base.
 
-- `init` rejects an `apiBaseURL` that is not `https://`.
+- **BREAKING:** `init` rejects an `apiBaseURL` that is not `https://`.
 - API requests abort after 120 seconds and do not follow redirects.
-- Missing or invalid arguments reject the promise. They no longer log with `console.error` and return `undefined`.
+- **BREAKING:** Missing or invalid arguments reject the promise. They no longer log with `console.error` and return `undefined`.
 
 ### Fixed
 
@@ -47,6 +54,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Redirects are disabled, so a response cannot send the client, or the API key in the query string, to another host.
 - A custom API base URL cannot be `http://`.
 - Rejected errors no longer include the raw HTML access-denied page.
+
+## [2.1.11] - 2026-08-14
+
+### Fixed
+
+- `npm audit` advisories for `fast-uri` and `js-yaml`, and tsconfig updates for TypeScript 7.
+
+## [2.1.10] - 2026-07-27
+
+### Fixed
+
+- `npm audit` advisories in the development dependencies.
+
+## [2.1.9] - 2026-06-18
+
+### Fixed
+
+- `validatebatch` goes to `api.zerobounce.net`, not the bulk host.
+- `npm audit` advisories in the development dependencies.
 
 ## [2.1.8] - 2026-06-18
 
@@ -99,7 +125,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `guessFormat`. Use the email-finder or domain-search methods instead.
 
-[Unreleased]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.11...HEAD
+[Unreleased]: https://github.com/zerobounce/zero-bounce-javascript/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.11...v3.0.0
+[2.1.11]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.10...v2.1.11
+[2.1.10]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.9...v2.1.10
+[2.1.9]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.8...v2.1.9
 [2.1.8]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.6...v2.1.8
 [2.1.6]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.5...v2.1.6
 [2.1.5]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.0...v2.1.5
