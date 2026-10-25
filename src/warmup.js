@@ -180,8 +180,8 @@ export class ZeroBounceWarmup {
    *
    * `self_managed` runs your own mailbox and needs `engagementRuleId` 0-4.
    * `zb_managed` has ZeroBounce provision it and takes `emailContent` and
-   * `managedSending` instead; a 200 means accepted, and the mailbox is
-   * provisioned afterwards.
+   * `managedSending` instead, and rejects `engagementRuleId`; a 200 means
+   * accepted, and the mailbox is provisioned afterwards.
    */
   addSendingAccount({
     fromAddress,
@@ -204,6 +204,9 @@ export class ZeroBounceWarmup {
       if (emailContent != null || managedSending != null) {
         throw clientError("email_content and managed_sending are for zb_managed.");
       }
+    } else if (engagementRuleId != null) {
+      // zb_managed has no engagement_rule_id field: say so rather than drop it.
+      throw clientError("engagement_rule_id is for self_managed.");
     }
     if (ignoreConflict != null) body.ignore_conflict = Boolean(ignoreConflict);
     if (emailContent != null) {

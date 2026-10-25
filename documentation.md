@@ -95,8 +95,27 @@ try {
 - ##### S3 and SFTP/FTP bulk jobs
 
 ```javascript
+// All eight jobs take the same four fields and nothing else: file_name,
+// has_header_row, remove_duplicates and return_url. The live API requires
+// file_name and return_url on every one of them, including validateSFTPfile,
+// although the docs mark them optional.
+
 // Amazon S3: https://www.zerobounce.net/docs/api-integrations/amazon-s3-bulk-api
-await zeroBounce.emailFinderS3file({ file_name: "lists/leads.csv", has_header_row: true });
+await zeroBounce.validateS3file({
+  file_name: "lists/leads.csv",
+  has_header_row: true,
+  return_url: "https://example.com/zerobounce-done",
+});
+await zeroBounce.scoreS3file({
+  file_name: "lists/leads.csv",
+  has_header_row: true,
+  return_url: "https://example.com/zerobounce-done",
+});
+await zeroBounce.emailFinderS3file({
+  file_name: "lists/leads.csv",
+  has_header_row: true,
+  return_url: "https://example.com/zerobounce-done",
+});
 await zeroBounce.domainSearchS3file({
   file_name: "lists/leads.csv",
   has_header_row: true,
@@ -104,16 +123,37 @@ await zeroBounce.domainSearchS3file({
   return_url: "https://example.com/zerobounce-done",
 });
 
+// Without export_bucket the output bucket from your settings is used.
+await zeroBounce.exportS3file({ file_id: "<FILE_ID>" });
+
 // SFTP/FTP: https://www.zerobounce.net/docs/api-integrations/sftp_bulk_api
 // The server, path and protocol come from your ZeroBounce settings.
-// file_name is optional for validateSFTPfile only.
-await zeroBounce.validateSFTPfile({ has_header_row: true });
-await zeroBounce.scoreSFTPfile({ file_name: "my_file.txt", has_header_row: true });
-await zeroBounce.emailFinderSFTPfile({ file_name: "my_file.txt", has_header_row: true });
-await zeroBounce.domainSearchSFTPfile({ file_name: "my_file.txt", has_header_row: true });
+const sftpJob = {
+  file_name: "my_file.txt",
+  has_header_row: true,
+  return_url: "https://example.com/zerobounce-done",
+};
+await zeroBounce.validateSFTPfile(sftpJob);
+await zeroBounce.scoreSFTPfile(sftpJob);
+await zeroBounce.emailFinderSFTPfile(sftpJob);
+await zeroBounce.domainSearchSFTPfile(sftpJob);
 
 // Without export_path the path from your settings is used.
 await zeroBounce.exportSFTPfile({ file_id: "<FILE_ID>", export_path: "/exports" });
+```
+
+- ##### Bulk email finder
+
+```javascript
+// domain_column is required, and so is a name to work from: send either
+// first_name_column or full_name_column. As with every optional column, 0 and
+// false mean "leave this column out", so neither counts as a name column.
+await zeroBounce.sendEmailFinderFile({
+  file: "<FILE>",
+  domain_column: 1,
+  first_name_column: 2,
+  has_header_row: true,
+});
 ```
 
 - ##### Inbox Placement Tester
@@ -376,8 +416,9 @@ try {
 //     The email domain for which to find the email format. 
 // company_name: String
 //     The company name for which to find the email format.
-// first_name: String
+// first_name: String or null (Optional)
 //     The first name of the person whose email format is being searched.
+//     Left out, the API answers with the domain's or company's email format.
 // middle_name: String or null (Optional)
 //     The middle name of the person whose email format is being searched.
 // last_name: String or null (Optional)

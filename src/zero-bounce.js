@@ -341,7 +341,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/validatebatch",
-      body: JSON.stringify(body),
+      jsonBody: body,
       apiBaseURL: this._api_base_url
     });
   }
@@ -623,7 +623,7 @@ export class ZeroBounceSDK {
     });
   }
 
-  async _getStatusUtil(fileId, path, { bulkRoot = false } = {}) {
+  async _getStatusUtil(fileId, path, { bulkRoot = false, baseURL = null } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -642,7 +642,8 @@ export class ZeroBounceSDK {
       path,
       batch: true,
       bulkBase: bulkRoot ? "root" : "v2",
-      apiBaseURL: this._api_base_url
+      apiBaseURL: this._api_base_url,
+      baseURL
     });
   }
 
@@ -676,7 +677,7 @@ export class ZeroBounceSDK {
     return this._getStatusUtil(fileId, "/scoring/filestatus");
   }
 
-  async _getFileUtil(fileId, path, scoring = false, getFileOptions = null, { bulkRoot = false } = {}) {
+  async _getFileUtil(fileId, path, scoring = false, getFileOptions = null, { bulkRoot = false, baseURL = null } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -704,7 +705,8 @@ export class ZeroBounceSDK {
       bulkBase: bulkRoot ? "root" : "v2",
       returnText: true,
       scoring, 
-      apiBaseURL: this._api_base_url
+      apiBaseURL: this._api_base_url,
+      baseURL
     });
   }
 
@@ -724,7 +726,7 @@ export class ZeroBounceSDK {
     return this._getFileUtil(fileId, "/scoring/getfile", true, getFileOptions);
   }
 
-  async _deleteFileUtil(fileId, path, scoring = false, { bulkRoot = false } = {}) {
+  async _deleteFileUtil(fileId, path, scoring = false, { bulkRoot = false, baseURL = null } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -743,11 +745,12 @@ export class ZeroBounceSDK {
       batch: true,
       bulkBase: bulkRoot ? "root" : "v2",
       scoring, 
-      apiBaseURL: this._api_base_url
+      apiBaseURL: this._api_base_url,
+      baseURL
     });
   }
 
-  async _sendBulkRootMultipartFile(path, { file, fileName = null, fields = {} }) {
+  async _sendBulkRootMultipartFile(path, { file, fileName = null, fields = {}, baseURL = null }) {
     const body = new FormData();
     for (const [key, value] of Object.entries(fields)) {
       if (value == null) continue;
@@ -766,6 +769,7 @@ export class ZeroBounceSDK {
       batch: true,
       bulkBase: "root",
       apiBaseURL: this._api_base_url,
+      baseURL,
     });
   }
 
@@ -783,8 +787,16 @@ export class ZeroBounceSDK {
     return this._deleteFileUtil(fileId, "/scoring/deletefile", true);
   }
 
-  // BULK EMAIL FINDER (bulkapi.zerobounce.net/email-finder/*)
+  // BULK EMAIL FINDER (emailFinderBaseURL, by default
+  // bulkapi.zerobounce.net/email-finder)
 
+  /**
+   * Submit a file to the bulk email finder. POST /email-finder/sendfile
+   *
+   * The API needs a name to work from: either {@code first_name_column} or
+   * {@code full_name_column}. As with every optional column, {@code 0} and
+   * {@code false} mean "leave this field out", so neither counts as given.
+   * */
   async sendEmailFinderFile({
     file,
     domain_column,
@@ -803,9 +815,13 @@ export class ZeroBounceSDK {
     } else if (isMissing(domain_column)) {
       parameterIsMissing("domain_column");
       return;
+    } else if (!first_name_column && !full_name_column) {
+      parameterIsMissing("first_name_column", "Send first_name_column or full_name_column.");
+      return;
     }
-    return this._sendBulkRootMultipartFile("/email-finder/sendfile", {
+    return this._sendBulkRootMultipartFile("/sendfile", {
       file,
+      baseURL: this._email_finder_base_url,
       fields: {
         domain_column,
         first_name_column: optionalColumn(first_name_column),
@@ -817,6 +833,12 @@ export class ZeroBounceSDK {
     });
   }
 
+  /**
+   * Submit a stream or Blob to the bulk email finder. POST /email-finder/sendfile
+   *
+   * Takes {@code first_name_column} or {@code full_name_column}, as
+   * {@link sendEmailFinderFile} does.
+   * */
   async sendEmailFinderFileStream(fileStreamOrBlob, fileName, {
     domain_column,
     first_name_column = false,
@@ -837,10 +859,14 @@ export class ZeroBounceSDK {
     } else if (isMissing(domain_column)) {
       parameterIsMissing("domain_column");
       return;
+    } else if (!first_name_column && !full_name_column) {
+      parameterIsMissing("first_name_column", "Send first_name_column or full_name_column.");
+      return;
     }
-    return this._sendBulkRootMultipartFile("/email-finder/sendfile", {
+    return this._sendBulkRootMultipartFile("/sendfile", {
       file: fileStreamOrBlob,
       fileName,
+      baseURL: this._email_finder_base_url,
       fields: {
         domain_column,
         first_name_column: optionalColumn(first_name_column),
@@ -853,18 +879,28 @@ export class ZeroBounceSDK {
   }
 
   async getEmailFinderFileStatus(fileId) {
-    return this._getStatusUtil(fileId, "/email-finder/filestatus", { bulkRoot: true });
+    return this._getStatusUtil(fileId, "/filestatus", {
+      bulkRoot: true,
+      baseURL: this._email_finder_base_url,
+    });
   }
 
   async getEmailFinderFile(fileId) {
-    return this._getFileUtil(fileId, "/email-finder/getfile", false, null, { bulkRoot: true });
+    return this._getFileUtil(fileId, "/getfile", false, null, {
+      bulkRoot: true,
+      baseURL: this._email_finder_base_url,
+    });
   }
 
   async deleteEmailFinderFile(fileId) {
-    return this._deleteFileUtil(fileId, "/email-finder/deletefile", false, { bulkRoot: true });
+    return this._deleteFileUtil(fileId, "/deletefile", false, {
+      bulkRoot: true,
+      baseURL: this._email_finder_base_url,
+    });
   }
 
-  // BULK DOMAIN SEARCH (bulkapi.zerobounce.net/domain-search/*)
+  // BULK DOMAIN SEARCH (domainSearchBaseURL, by default
+  // bulkapi.zerobounce.net/domain-search)
 
   async sendDomainSearchFile({
     file,
@@ -881,8 +917,9 @@ export class ZeroBounceSDK {
       parameterIsMissing("domain_column");
       return;
     }
-    return this._sendBulkRootMultipartFile("/domain-search/sendfile", {
+    return this._sendBulkRootMultipartFile("/sendfile", {
       file,
+      baseURL: this._domain_search_base_url,
       fields: { domain_column, has_header_row: Boolean(has_header_row) },
     });
   }
@@ -904,23 +941,33 @@ export class ZeroBounceSDK {
       parameterIsMissing("domain_column");
       return;
     }
-    return this._sendBulkRootMultipartFile("/domain-search/sendfile", {
+    return this._sendBulkRootMultipartFile("/sendfile", {
       file: fileStreamOrBlob,
       fileName,
+      baseURL: this._domain_search_base_url,
       fields: { domain_column, has_header_row: Boolean(has_header_row) },
     });
   }
 
   async getDomainSearchFileStatus(fileId) {
-    return this._getStatusUtil(fileId, "/domain-search/filestatus", { bulkRoot: true });
+    return this._getStatusUtil(fileId, "/filestatus", {
+      bulkRoot: true,
+      baseURL: this._domain_search_base_url,
+    });
   }
 
   async getDomainSearchFile(fileId) {
-    return this._getFileUtil(fileId, "/domain-search/getfile", false, null, { bulkRoot: true });
+    return this._getFileUtil(fileId, "/getfile", false, null, {
+      bulkRoot: true,
+      baseURL: this._domain_search_base_url,
+    });
   }
 
   async deleteDomainSearchFile(fileId) {
-    return this._deleteFileUtil(fileId, "/domain-search/deletefile", false, { bulkRoot: true });
+    return this._deleteFileUtil(fileId, "/deletefile", false, {
+      bulkRoot: true,
+      baseURL: this._domain_search_base_url,
+    });
   }
 
   // LIST EVALUATOR (bulkapi.zerobounce.net/v2/listevaluator/)
@@ -1144,94 +1191,52 @@ export class ZeroBounceSDK {
     });
   }
 
-  async validateS3file({
-    file_name,
-    has_header_row,
-    remove_duplicates,
-    email_address_column = null,
-    return_url = false,
-    first_name_column = false,
-    last_name_column = false,
-    gender_column = false,
-    ip_address_column = false,
-    remove_duplicate = null,
-    allowPhase2 = null,
-  }) {
-    if (!this._initialized) {
-      notInitialized();
-      return;
-    } else if (isMissing(file_name)) {
-      parameterIsMissing("file_name");
-      return;
-    }
-    const fields = { file_name };
-    if (has_header_row != null) fields.has_header_row = has_header_row;
-    if (remove_duplicates != null) fields.remove_duplicates = remove_duplicates;
-    if (remove_duplicate != null) fields.remove_duplicate = remove_duplicate;
-    if (email_address_column != null) fields.email_address_column = email_address_column;
-    if (return_url) fields.return_url = return_url;
-    if (first_name_column) fields.first_name_column = first_name_column;
-    if (last_name_column) fields.last_name_column = last_name_column;
-    if (gender_column) fields.gender_column = gender_column;
-    if (ip_address_column) fields.ip_address_column = ip_address_column;
-    if (allowPhase2 != null) fields.allow_phase_2 = String(allowPhase2);
-    return this._sendBulkRootFormPost("/validateS3file", fields);
+  /** Validate a file in your Amazon S3 bucket. POST /validateS3file */
+  async validateS3file(options) {
+    return this._bulkRootFileJob("/validateS3file", options || {});
   }
 
-  async scoreS3file({
-    file_name,
-    has_header_row,
-    remove_duplicates,
-    email_address_column = null,
-    remove_duplicate = null,
-  }) {
-    if (!this._initialized) {
-      notInitialized();
-      return;
-    } else if (isMissing(file_name)) {
-      parameterIsMissing("file_name");
-      return;
-    }
-    const fields = { file_name };
-    if (has_header_row != null) fields.has_header_row = has_header_row;
-    if (remove_duplicates != null) fields.remove_duplicates = remove_duplicates;
-    if (remove_duplicate != null) fields.remove_duplicate = remove_duplicate;
-    if (email_address_column != null) fields.email_address_column = email_address_column;
-    return this._sendBulkRootFormPost("/scoreS3file", fields);
+  /** Score a file in your Amazon S3 bucket. POST /scoreS3file */
+  async scoreS3file(options) {
+    return this._bulkRootFileJob("/scoreS3file", options || {});
   }
 
-  async exportS3file({ file_id, export_bucket }) {
+  /**
+   * Export a validated or scored file back to Amazon S3. POST /exportS3file
+   *
+   * Without export_bucket the output bucket from your ZeroBounce settings is
+   * used, as exportSFTPfile does with export_path.
+   * */
+  async exportS3file({ file_id, export_bucket = null } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
-    } else if (isMissing(file_id)) {
+    }
+    if (isMissing(file_id)) {
       parameterIsMissing("file_id");
       return;
-    } else if (isMissing(export_bucket)) {
+    }
+    if (export_bucket != null && String(export_bucket).trim() === "") {
       parameterIsMissing("export_bucket");
       return;
     }
-    return this._sendBulkRootFormPost("/exportS3file", {
-      file_id,
-      export_bucket,
-    });
+    const fields = { file_id };
+    if (export_bucket != null) fields.export_bucket = export_bucket;
+    return this._sendBulkRootFormPost("/exportS3file", fields);
   }
 
 
   /**
-   * Shared shape for the documented S3 and SFTP file jobs on the bulkapi root.
-   * Only fields the caller set are sent; booleans go as the strings true/false.
-   *
-   * @param fileNameRequired - false for validateSFTPfile, whose file_name is optional
-   * */
-  /**
-   * One of the six documented S3 / SFTP file jobs on the bulkapi root.
+   * One of the eight documented S3 / SFTP file jobs on the bulkapi root.
    *
    * LIVE: `return_url` is required, although the docs mark it optional —
    * without it the API answers "Provided return URL is not permitted: None".
    * `file_name` is required for every job including validateSFTPfile, which
    * the docs also mark optional ("file_name: This field is required").
    * All three are checked here so no request goes out without them.
+   *
+   * The documented set of fields is file_name, has_header_row,
+   * remove_duplicates and return_url, and nothing else goes out.
    *
    * The documented success is {success, message} with no file ID.
    */
@@ -1278,11 +1283,10 @@ export class ZeroBounceSDK {
   /**
    * Validate a file from your SFTP/FTP server. POST /validateSFTPfile
    *
-   * The docs list file_name as optional here; leave it out to use the input
-   * bucket configured in your settings.
+   * LIVE: file_name is required here too, although the docs mark it optional.
    * */
   async validateSFTPfile(options) {
-    return this._bulkRootFileJob("/validateSFTPfile", options || {}, false);
+    return this._bulkRootFileJob("/validateSFTPfile", options || {});
   }
 
   /** Score a file from your SFTP/FTP server. POST /scoreSFTPfile */
@@ -1514,7 +1518,7 @@ export class ZeroBounceSDK {
 
   /**
    * @param domain str - domain of the email address
-   * @param first_name str - first name
+   * @param first_name str or null - first name (optional)
    * @param middle_name str or null - middle name
    * @param last_name str or null - last name
    * */
@@ -1534,7 +1538,7 @@ export class ZeroBounceSDK {
 
   /**
    * @param company_name str - company name of the email address
-   * @param first_name str - first name
+   * @param first_name str or null - first name (optional)
    * @param middle_name str or null - middle name
    * @param last_name str or null - last name
    * */
@@ -1555,7 +1559,7 @@ export class ZeroBounceSDK {
   async _findEmail({
     domain = null,
     company_name = null,
-    first_name,
+    first_name = null,
     middle_name = null,
     last_name = null
   }) {
@@ -1566,15 +1570,14 @@ export class ZeroBounceSDK {
       parameterIsMissing("domain");
       parameterIsMissing("company_name");
       return;
-    } else if (isMissing(first_name)) {
-      parameterIsMissing("first_name");
-      return;
     }
 
+    // first_name is optional: /guessformat answers a domain-only request with
+    // the domain's format, so an unset name is left out rather than rejected.
     const params = {
       api_key: this._api_key,
-      first_name: first_name,
     };
+    if (!isMissing(first_name)) params.first_name = first_name;
     if (!isMissing(middle_name)) params.middle_name = middle_name;
     if (!isMissing(last_name)) params.last_name = last_name;
 

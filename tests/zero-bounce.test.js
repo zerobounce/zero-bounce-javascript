@@ -1186,7 +1186,7 @@ describe("ZeroBounceSDK", () => {
       const fetch = jest.spyOn(global, "fetch").mockImplementationOnce(() =>
         jsonOk({ success: true, file_id: "fid" })
       );
-      await zeroBounceSDK.sendEmailFinderFile({ file, domain_column: 1 });
+      await zeroBounceSDK.sendEmailFinderFile({ file, domain_column: 1, first_name_column: 2 });
       expect(String(fetch.mock.calls[0][0])).toContain(
         "https://bulkapi.zerobounce.net/email-finder/sendfile"
       );
@@ -1270,10 +1270,19 @@ describe("ZeroBounceSDK", () => {
         file_name: "emails/list.csv",
         has_header_row: true,
         remove_duplicates: true,
+        return_url: "https://example.com/done",
       });
       expect(String(fetch.mock.calls[0][0])).toBe(
         "https://bulkapi.zerobounce.net/validateS3file"
       );
+      const body = fetch.mock.calls[0][1].body;
+      expect(Object.fromEntries(body.entries())).toEqual({
+        api_key: "valid-api-key",
+        file_name: "emails/list.csv",
+        has_header_row: "true",
+        remove_duplicates: "true",
+        return_url: "https://example.com/done",
+      });
     });
 
     it("exportS3file posts file_id and export_bucket", async () => {

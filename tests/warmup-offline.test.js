@@ -199,6 +199,17 @@ describe("Warmup API client", () => {
       managed_sending: { timezone_offset: 2, warmup_start_date: "2026-02-01" },
     });
 
+    // A zb_managed account takes no engagement rule: say so rather than drop it.
+    fake.records.length = 0;
+    expect(() =>
+      c.addSendingAccount({
+        fromAddress: "sender@example.com",
+        onboardingModel: "zb_managed",
+        engagementRuleId: 2,
+      })
+    ).toThrow("ZeroBounce: engagement_rule_id is for self_managed.");
+    expect(fake.records).toHaveLength(0);
+
     fake.records.length = 0;
     await c.updateSendingAccount({
       fromAddress: "sender@example.com",
@@ -224,6 +235,8 @@ describe("Warmup API client", () => {
       () => c.addSendingAccount({ fromAddress: "a@example.com", onboardingModel: "nope" }),
       () => c.addSendingAccount({ fromAddress: "a@example.com", onboardingModel: "self_managed" }),
       () => c.addSendingAccount({ fromAddress: "a@example.com", onboardingModel: "self_managed", engagementRuleId: 9 }),
+      // zb_managed has no engagement_rule_id: it is rejected, not dropped.
+      () => c.addSendingAccount({ fromAddress: "a@example.com", onboardingModel: "zb_managed", engagementRuleId: 1 }),
       () => c.updateSendingAccount({ fromAddress: "a@example.com", engagementRuleId: 1, statusId: 1 }),
       () => c.setEngagementRule("a@example.com", 7),
       () => c.createCustomEngagement({ cFrom: "a@example.com", replyPct: 1, importantPct: 10, clickPct: 5 }),

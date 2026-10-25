@@ -361,7 +361,12 @@ export interface SendScoringFileStreamOptions {
   remove_duplicate?: boolean;
 }
 
-/** Options for bulk email finder sendfile. */
+/**
+ * Options for bulk email finder sendfile.
+ *
+ * Send `first_name_column` or `full_name_column`; `0` and `false` mean
+ * "leave this column out" and so do not count as given.
+ */
 export interface SendEmailFinderFileOptions {
   file: File;
   domain_column: number;
@@ -372,6 +377,7 @@ export interface SendEmailFinderFileOptions {
   has_header_row?: boolean;
 }
 
+/** As SendEmailFinderFileOptions, for a stream or Blob. */
 export interface SendEmailFinderFileStreamOptions {
   domain_column: number;
   first_name_column?: number | false;
@@ -446,33 +452,16 @@ export interface ListFiltersOptions {
   method?: "GET" | "POST";
 }
 
-export interface ValidateS3FileOptions {
-  file_name: string;
-  has_header_row?: boolean;
-  /** Postman field name for duplicate removal. */
-  remove_duplicates?: boolean;
-  /** Alternate field name used by some bulk endpoints. */
-  remove_duplicate?: boolean;
-  email_address_column?: number;
-  return_url?: string | false;
-  first_name_column?: number | false;
-  last_name_column?: number | false;
-  gender_column?: number | false;
-  ip_address_column?: number | false;
-  allowPhase2?: boolean | null;
-}
+/** Options for validateS3file: the shared S3 / SFTP job fields. */
+export interface ValidateS3FileOptions extends BulkRootFileJobOptions {}
 
-export interface ScoreS3FileOptions {
-  file_name: string;
-  has_header_row?: boolean;
-  remove_duplicates?: boolean;
-  remove_duplicate?: boolean;
-  email_address_column?: number;
-}
+/** Options for scoreS3file: the shared S3 / SFTP job fields. */
+export interface ScoreS3FileOptions extends BulkRootFileJobOptions {}
 
 export interface ExportS3FileOptions {
   file_id: string;
-  export_bucket: string;
+  /** Defaults to the export bucket in your ZeroBounce settings. */
+  export_bucket?: string;
 }
 
 /** Single entry from GET /listS3files. */
@@ -523,13 +512,19 @@ export interface ListInboxPlacementTestsOptions {
   pageSize?: number;
 }
 
-/** Shared options for the documented S3 and SFTP file jobs. */
+/**
+ * Shared options for the documented S3 and SFTP file jobs.
+ *
+ * The live API requires `file_name` and `return_url` on every one of them,
+ * including validateSFTPfile, although the docs mark them optional.
+ */
 export interface BulkRootFileJobOptions {
-  /** Full path as returned by listS3files. Optional only for validateSFTPfile. */
-  file_name?: string;
+  /** Full path as returned by listS3files. */
+  file_name: string;
   has_header_row: boolean;
   remove_duplicates?: boolean;
-  return_url?: string;
+  /** The API rejects a job without it. */
+  return_url: string;
 }
 
 /** Options for exportSFTPfile. */
@@ -542,7 +537,8 @@ export interface ExportSFTPFileOptions {
 /** Options for findEmailByDomain / Email Finder. */
 export interface FindEmailByDomainOptions {
   domain: string;
-  first_name: string;
+  /** Optional: without it the API answers with the domain's format. */
+  first_name?: string | null;
   middle_name?: string | null;
   last_name?: string | null;
 }
@@ -550,7 +546,8 @@ export interface FindEmailByDomainOptions {
 /** Options for findEmailByCompanyName / Email Finder. */
 export interface FindEmailByCompanyNameOptions {
   company_name: string;
-  first_name: string;
+  /** Optional: without it the API answers with the company's format. */
+  first_name?: string | null;
   middle_name?: string | null;
   last_name?: string | null;
 }
@@ -592,6 +589,10 @@ export class ZeroBounceSDK {
       listEvaluatorBaseURL?: string;
       /** Defaults to https://bulkapi.zerobounce.net/api/ipt */
       inboxPlacementBaseURL?: string;
+      /** Defaults to https://bulkapi.zerobounce.net/email-finder */
+      emailFinderBaseURL?: string;
+      /** Defaults to https://bulkapi.zerobounce.net/domain-search */
+      domainSearchBaseURL?: string;
     } | null
   ): void;
 
@@ -832,9 +833,9 @@ export class ZeroBounceSDK {
     options: BulkRootFileJobOptions
   ): Promise<S3BulkJobResponse | undefined>;
 
-  /** file_name is optional here; omit it to use the configured input bucket. */
+  /** LIVE: file_name is required here too, although the docs mark it optional. */
   validateSFTPfile(
-    options: BulkRootFileJobOptions | { has_header_row: boolean; remove_duplicates?: boolean; return_url?: string }
+    options: BulkRootFileJobOptions
   ): Promise<S3BulkJobResponse | undefined>;
 
   scoreSFTPfile(
@@ -957,7 +958,7 @@ export class ZeroBounceWarmup {
   addSendingAccount(options: {
     fromAddress: string;
     onboardingModel: WarmupOnboardingModel;
-    /** 0 to 4. Required for self_managed. */
+    /** 0 to 4. Required for self_managed, and rejected for zb_managed. */
     engagementRuleId?: number | null;
     ignoreConflict?: boolean | null;
     emailContent?: WarmupEmailContent | null;
