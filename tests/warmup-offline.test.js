@@ -199,15 +199,24 @@ describe("Warmup API client", () => {
       managed_sending: { timezone_offset: 2, warmup_start_date: "2026-02-01" },
     });
 
-    // A zb_managed account takes no engagement rule: say so rather than drop it.
+    // A zb_managed account takes no engagement rule: say so rather than drop
+    // it. Like every argument check, it rejects the promise: a caller's
+    // .catch() sees it, and nothing is thrown before a promise exists.
     fake.records.length = 0;
-    expect(() =>
-      c.addSendingAccount({
+    let pending;
+    expect(() => {
+      pending = c.addSendingAccount({
         fromAddress: "sender@example.com",
         onboardingModel: "zb_managed",
         engagementRuleId: 2,
-      })
-    ).toThrow("ZeroBounce: engagement_rule_id is for self_managed.");
+      });
+    }).not.toThrow();
+    expect(typeof (pending && pending.then)).toBe("function");
+    await expect(pending).rejects.toThrow("ZeroBounce: engagement_rule_id is for self_managed.");
+    const caught = await c
+      .addSendingAccount({ fromAddress: "sender@example.com", onboardingModel: "zb_managed", engagementRuleId: 0 })
+      .catch((error) => error.message);
+    expect(caught).toBe("ZeroBounce: engagement_rule_id is for self_managed.");
     expect(fake.records).toHaveLength(0);
 
     fake.records.length = 0;
@@ -252,8 +261,15 @@ describe("Warmup API client", () => {
       () => c.getCustomEngagement(".."),
     ];
 
+    // Every check rejects the returned promise, as on ZeroBounceSDK; none
+    // throws synchronously.
     for (const call of bad) {
-      expect(call).toThrow();
+      let pending;
+      expect(() => {
+        pending = call();
+      }).not.toThrow();
+      expect(typeof (pending && pending.then)).toBe("function");
+      await rejects(pending);
     }
     expect(fake.records.length).toBe(0);
   });

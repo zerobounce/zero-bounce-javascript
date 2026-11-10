@@ -4,6 +4,15 @@
  */
 
 import ZeroBounceSDK, {
+  ZeroBounceWarmup,
+  ZBApiError,
+  type InboxPlacementProvidersResponse,
+  type InboxPlacementTestCreated,
+  type InboxPlacementTestResult,
+  type InboxPlacementTestDeleted,
+  type InboxPlacementWebhookResponse,
+  type ListEvaluatorSubmitResponse,
+  type SendEvaluatedFileOptions,
   type ValidateEmailOptions,
   type ValidateBatchOptions,
   type ValidateBatchEmailItem,
@@ -264,6 +273,54 @@ const validateSFTPPromise: Promise<S3BulkJobResponse | undefined> =
 zb.findEmailByDomain(findByDomainNoName);
 zb.findEmailByCompanyName(findByCompanyNoName);
 
+// Since 3.0.0 a method rejects instead of resolving undefined, so results are
+// usable without a guard (the getfile family alone may resolve undefined, from
+// the legacy msSaveOrOpenBlob download path).
+async function resultsNeedNoUndefinedGuard(): Promise<void> {
+  const credits: GetCreditsResponse = await zb.getCredits();
+  const validated: EmailValidationResult = await zb.validateEmail("a@example.com");
+  const message: string | null | undefined = validated.message;
+  const finder: EmailFinderResponse = await zb.findEmailByDomain(findByDomainOpts);
+  const s3: S3BulkJobResponse = await zb.validateS3file(validateS3Opts);
+  void credits;
+  void message;
+  void finder;
+  void s3;
+}
+
+// Inbox Placement Tester results are typed where the docs give a body.
+async function inboxPlacement(): Promise<void> {
+  const providers: InboxPlacementProvidersResponse = await zb.getInboxPlacementProviders();
+  const providerId: number = providers.emailProviders.items[0].id;
+  const created: InboxPlacementTestCreated = await zb.createInboxPlacementTest({
+    name: "October campaign",
+    providerIds: [providerId],
+  });
+  const seeds: string[] = created.emailAddressList;
+  const result: InboxPlacementTestResult = await zb.getInboxPlacementTest(created.id);
+  const status: "running" | "finished" = result.status;
+  const deleted: InboxPlacementTestDeleted = await zb.deleteInboxPlacementTest(created.id);
+  const webhook: InboxPlacementWebhookResponse = await zb.getInboxPlacementWebhook();
+  const webhookUrl: string = webhook.webhookUrl;
+  void seeds;
+  void status;
+  void deleted;
+  void webhookUrl;
+}
+
+// sendEvaluatedFile takes the list evaluator's file_id, not a File.
+const evaluatedById: Promise<ListEvaluatorSubmitResponse> = zb.sendEvaluatedFile("eval-file-1");
+const evaluatedOpts: SendEvaluatedFileOptions = { file_id: "eval-file-1" };
+const evaluatedByObject: Promise<ListEvaluatorSubmitResponse> = zb.sendEvaluatedFile(evaluatedOpts);
+
+// Named runtime exports: the Warmup client and the API error class.
+const warmup = new ZeroBounceWarmup("fake-warmup-key");
+const sameWarmup: typeof ZeroBounceWarmup = ZeroBounceSDK.Warmup;
+const warmupAccounts: Promise<unknown> = warmup.listSendingAccounts();
+function statusOf(error: unknown): number | null {
+  return error instanceof ZBApiError ? error.statusCode : null;
+}
+
 // Ensure types are used (avoid unused variable warnings in strict mode)
 function assertTypes(): void {
   void creditsPromise;
@@ -312,6 +369,13 @@ function assertTypes(): void {
   void scoreS3Promise;
   void exportS3Promise;
   void validateSFTPPromise;
+  void resultsNeedNoUndefinedGuard;
+  void inboxPlacement;
+  void evaluatedById;
+  void evaluatedByObject;
+  void sameWarmup;
+  void warmupAccounts;
+  void statusOf;
 }
 
 assertTypes();

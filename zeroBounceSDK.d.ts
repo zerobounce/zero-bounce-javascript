@@ -92,8 +92,13 @@ export interface EmailValidationResult {
   domain_website_exists?: string | null;
   /** With domainInfo: WHOIS registrant company, "Registrant info not found" or "unchecked". */
   domain_registrant_company_name?: string | null;
-  /** Read from the API's "Message" key. Set while greylist processing is still running. */
+  /**
+   * The API's "Message" key, copied here by the SDK. Set while greylist
+   * processing is still running, when it is the only field.
+   */
   message?: string | null;
+  /** The API's own spelling of {@link message}. */
+  Message?: string;
 }
 
 /** POST /validatebatch response body. */
@@ -423,8 +428,12 @@ export interface SendListEvaluatorFileStreamOptions {
   email_address_column: number;
 }
 
+/**
+ * Argument for sendEvaluatedFile: the list evaluator's `file_id`.
+ * LIVE: the endpoint takes that id as a form field, not a file upload.
+ */
 export interface SendEvaluatedFileOptions {
-  file: File;
+  file_id: string;
 }
 
 export type FilterRule = "allow" | "block";
@@ -512,6 +521,79 @@ export interface ListInboxPlacementTestsOptions {
   pageSize?: number;
 }
 
+/** A seed provider from GET /api/ipt/providers. */
+export interface InboxPlacementProvider {
+  /** Use in createInboxPlacementTest's providerIds or providers. */
+  id: number;
+  name: string;
+  location: string;
+  seedCount: number;
+  seedIds: number[];
+  [key: string]: unknown;
+}
+
+/** GET /api/ipt/providers: mailbox providers and gateway (Mimecast, Proofpoint) providers. */
+export interface InboxPlacementProvidersResponse {
+  emailProviders: { items: InboxPlacementProvider[]; [key: string]: unknown };
+  gatewayProviders: { items: InboxPlacementProvider[]; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
+/** POST /api/ipt/test success (201). */
+export interface InboxPlacementTestCreated {
+  /** Pass to getInboxPlacementTest and deleteInboxPlacementTest. */
+  id: string;
+  /** Put this in the campaign for a Unique ID test. */
+  identifier: string;
+  /** The test type by name, for example `"auto_alias"`. */
+  testType: string;
+  /** The seed addresses to send the campaign to. */
+  emailAddressList: string[];
+  [key: string]: unknown;
+}
+
+/** Placement counts of a test. */
+export interface InboxPlacementCounts {
+  inboxCount?: number;
+  spamCount?: number;
+  otherCount?: number;
+  notDeliveredCount?: number;
+  pendingCount?: number;
+  percentages?: unknown;
+  [key: string]: unknown;
+}
+
+/**
+ * GET /api/ipt/test/{id}, and the body of the result webhook. The docs list
+ * the counts both on the test and under `counts`, so both are optional here.
+ */
+export interface InboxPlacementTestResult extends InboxPlacementCounts {
+  id: string;
+  testName?: string;
+  testType?: string;
+  identifier?: string;
+  status: "running" | "finished";
+  counts?: InboxPlacementCounts;
+  /** Aggregate placement results. */
+  results?: unknown;
+  /** Placement details for each seed mailbox. */
+  seeds?: unknown[];
+}
+
+/** DELETE /api/ipt/test/{id} success. */
+export interface InboxPlacementTestDeleted {
+  id: string;
+  /** `"deleted"`. */
+  status: string;
+  [key: string]: unknown;
+}
+
+/** GET /api/ipt/webhook: the URL saved on the API key, or `""`. */
+export interface InboxPlacementWebhookResponse {
+  webhookUrl: string;
+  [key: string]: unknown;
+}
+
 /**
  * Shared options for the documented S3 and SFTP file jobs.
  *
@@ -577,6 +659,12 @@ export class ZeroBounceSDK {
   static ZBDownloadType: ZBDownloadTypeValues;
 
   /**
+   * The Warmup client, also exported as `ZeroBounceWarmup`. Reachable this way
+   * from the browser `<script>` build, which has only the global ZeroBounceSDK.
+   */
+  static Warmup: typeof ZeroBounceWarmup;
+
+  /**
    * Initialize the SDK with your API key and optional base URL.
    * @param apiKey - Your private API key
    * @param apiBaseURL - Preferred API base (e.g. ZeroBounceSDK.ApiURL.DEFAULT_API_URL)
@@ -599,7 +687,7 @@ export class ZeroBounceSDK {
   /**
    * Get remaining credits for your account.
    */
-  getCredits(): Promise<GetCreditsResponse | undefined>;
+  getCredits(): Promise<GetCreditsResponse>;
 
   /**
    * Validate a single email address.
@@ -609,7 +697,7 @@ export class ZeroBounceSDK {
   validateEmail(
     email: string,
     options?: ValidateEmailOptions | string | null
-  ): Promise<EmailValidationResult | undefined>;
+  ): Promise<EmailValidationResult>;
 
   /**
    * Get API usage for a date range.
@@ -619,7 +707,7 @@ export class ZeroBounceSDK {
   getApiUsage(
     startDate: string,
     endDate: string
-  ): Promise<ApiUsageResponse | undefined>;
+  ): Promise<ApiUsageResponse>;
 
   /**
    * Validate a batch of emails.
@@ -629,13 +717,13 @@ export class ZeroBounceSDK {
   validateBatch(
     emailBatch: ValidateBatchEmailItem[],
     options?: ValidateBatchOptions | null
-  ): Promise<ValidateBatchResponse | undefined>;
+  ): Promise<ValidateBatchResponse>;
 
   /**
    * Get activity data for an email address.
    * @param email - Valid email address
    */
-  getEmailActivity(email: string): Promise<EmailActivityResponse | undefined>;
+  getEmailActivity(email: string): Promise<EmailActivityResponse>;
 
   /**
    * Real-time AI scoring for a single email (GET or POST /scoring).
@@ -645,12 +733,12 @@ export class ZeroBounceSDK {
   scoreEmail(
     email: string,
     options?: ScoreEmailOptions | null
-  ): Promise<EmailScoringResult | EmailScoringError | undefined>;
+  ): Promise<EmailScoringResult | EmailScoringError>;
 
   /**
    * Submit a file for bulk email validation.
    */
-  sendFile(options: SendFileOptions): Promise<SendFileResponse | undefined>;
+  sendFile(options: SendFileOptions): Promise<SendFileResponse>;
 
   /**
    * Submit file data (File, Blob, or stream) for bulk validation.
@@ -662,14 +750,14 @@ export class ZeroBounceSDK {
     fileStreamOrBlob: File | Blob,
     fileName: string,
     options?: SendFileStreamOptions
-  ): Promise<SendFileResponse | undefined>;
+  ): Promise<SendFileResponse>;
 
   /**
    * Submit a file for bulk scoring.
    */
   sendScoringFile(
     options: SendScoringFileOptions
-  ): Promise<SendScoringFileResponse | undefined>;
+  ): Promise<SendScoringFileResponse>;
 
   /**
    * Submit file data for bulk scoring.
@@ -679,13 +767,13 @@ export class ZeroBounceSDK {
     fileStreamOrBlob: File | Blob,
     fileName: string,
     options?: SendScoringFileStreamOptions
-  ): Promise<SendScoringFileResponse | undefined>;
+  ): Promise<SendScoringFileResponse>;
 
   /**
    * Get status of a previously submitted validation file.
    * @param fileId - ID of the submitted file
    */
-  getFileStatus(fileId: string): Promise<ValidationFileStatusResponse | undefined>;
+  getFileStatus(fileId: string): Promise<ValidationFileStatusResponse>;
 
   /**
    * Get status of a previously submitted scoring file.
@@ -693,7 +781,7 @@ export class ZeroBounceSDK {
    */
   getScoringFileStatus(
     fileId: string
-  ): Promise<ScoringFileStatusResponse | undefined>;
+  ): Promise<ScoringFileStatusResponse>;
 
   /**
    * Download result file for a completed validation.
@@ -725,7 +813,7 @@ export class ZeroBounceSDK {
    * Delete a submitted validation file.
    * @param fileId - ID of the submitted file
    */
-  deleteFile(fileId: string): Promise<BulkFileDeletedResponse | undefined>;
+  deleteFile(fileId: string): Promise<BulkFileDeletedResponse>;
 
   /**
    * Delete a submitted scoring file.
@@ -733,21 +821,21 @@ export class ZeroBounceSDK {
    */
   deleteScoringFile(
     fileId: string
-  ): Promise<BulkFileDeletedResponse | undefined>;
+  ): Promise<BulkFileDeletedResponse>;
 
   sendEmailFinderFile(
     options: SendEmailFinderFileOptions
-  ): Promise<SendFileResponse | undefined>;
+  ): Promise<SendFileResponse>;
 
   sendEmailFinderFileStream(
     fileStreamOrBlob: File | Blob,
     fileName: string,
     options?: SendEmailFinderFileStreamOptions
-  ): Promise<SendFileResponse | undefined>;
+  ): Promise<SendFileResponse>;
 
   getEmailFinderFileStatus(
     fileId: string
-  ): Promise<ValidationFileStatusResponse | undefined>;
+  ): Promise<ValidationFileStatusResponse>;
 
   getEmailFinderFile(
     fileId: string
@@ -755,21 +843,21 @@ export class ZeroBounceSDK {
 
   deleteEmailFinderFile(
     fileId: string
-  ): Promise<BulkFileDeletedResponse | undefined>;
+  ): Promise<BulkFileDeletedResponse>;
 
   sendDomainSearchFile(
     options: SendDomainSearchFileOptions
-  ): Promise<SendFileResponse | undefined>;
+  ): Promise<SendFileResponse>;
 
   sendDomainSearchFileStream(
     fileStreamOrBlob: File | Blob,
     fileName: string,
     options?: SendDomainSearchFileStreamOptions
-  ): Promise<SendFileResponse | undefined>;
+  ): Promise<SendFileResponse>;
 
   getDomainSearchFileStatus(
     fileId: string
-  ): Promise<ValidationFileStatusResponse | undefined>;
+  ): Promise<ValidationFileStatusResponse>;
 
   getDomainSearchFile(
     fileId: string
@@ -777,105 +865,118 @@ export class ZeroBounceSDK {
 
   deleteDomainSearchFile(
     fileId: string
-  ): Promise<BulkFileDeletedResponse | undefined>;
+  ): Promise<BulkFileDeletedResponse>;
 
   sendListEvaluatorFile(
     options: SendListEvaluatorFileOptions
-  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+  ): Promise<ListEvaluatorSubmitResponse>;
 
   sendListEvaluatorFileStream(
     fileStreamOrBlob: File | Blob,
     fileName: string,
     options?: SendListEvaluatorFileStreamOptions
-  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+  ): Promise<ListEvaluatorSubmitResponse>;
 
   getListEvaluatorResult(
     fileId: string
-  ): Promise<ListEvaluatorResultResponse | undefined>;
+  ): Promise<ListEvaluatorResultResponse>;
 
+  /**
+   * Submit a finished list evaluation for validation, by the `file_id` the list
+   * evaluator returned (a string, or `{ file_id }`). POST /v2/send-evaluated-file/
+   */
   sendEvaluatedFile(
-    options: SendEvaluatedFileOptions
-  ): Promise<ListEvaluatorSubmitResponse | undefined>;
+    fileId: string | SendEvaluatedFileOptions
+  ): Promise<ListEvaluatorSubmitResponse>;
 
   addFilter(
     options: FilterRuleParams
-  ): Promise<FilterMessageResponse | undefined>;
+  ): Promise<FilterMessageResponse>;
 
   listFilters(
     options?: ListFiltersOptions | null
-  ): Promise<FilterListItem[] | FilterMessageResponse | undefined>;
+  ): Promise<FilterListItem[] | FilterMessageResponse>;
 
   deleteFilter(
     options: FilterRuleParams
-  ): Promise<FilterMessageResponse | undefined>;
+  ): Promise<FilterMessageResponse>;
 
   listS3files(
     options?: { bucket?: string | null; search?: string | null } | null
-  ): Promise<S3ListFileEntry[] | undefined>;
+  ): Promise<S3ListFileEntry[]>;
 
   validateS3file(
     options: ValidateS3FileOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  ): Promise<S3BulkJobResponse>;
 
   scoreS3file(
     options: ScoreS3FileOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  ): Promise<S3BulkJobResponse>;
 
   exportS3file(
     options: ExportS3FileOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  ): Promise<S3BulkJobResponse>;
 
   emailFinderS3file(
     options: BulkRootFileJobOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  ): Promise<S3BulkJobResponse>;
 
   domainSearchS3file(
     options: BulkRootFileJobOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  ): Promise<S3BulkJobResponse>;
 
   /** LIVE: file_name is required here too, although the docs mark it optional. */
   validateSFTPfile(
     options: BulkRootFileJobOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  ): Promise<S3BulkJobResponse>;
 
   scoreSFTPfile(
     options: BulkRootFileJobOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  ): Promise<S3BulkJobResponse>;
 
   emailFinderSFTPfile(
     options: BulkRootFileJobOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  ): Promise<S3BulkJobResponse>;
 
   domainSearchSFTPfile(
     options: BulkRootFileJobOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  ): Promise<S3BulkJobResponse>;
 
   exportSFTPfile(
     options: ExportSFTPFileOptions
-  ): Promise<S3BulkJobResponse | undefined>;
+  ): Promise<S3BulkJobResponse>;
 
   /** Inbox Placement Tester: seed providers. GET /api/ipt/providers */
-  getInboxPlacementProviders(): Promise<unknown>;
+  getInboxPlacementProviders(): Promise<InboxPlacementProvidersResponse>;
 
-  /** Inbox Placement Tester: supported test types. GET /api/ipt/test-types */
+  /**
+   * Inbox Placement Tester: supported test types and the default one.
+   * GET /api/ipt/test-types. The docs give no body shape, so it is `unknown`.
+   */
   getInboxPlacementTestTypes(): Promise<unknown>;
 
   /** Inbox Placement Tester: create a test. POST /api/ipt/test */
-  createInboxPlacementTest(options: CreateInboxPlacementTestOptions): Promise<unknown>;
+  createInboxPlacementTest(options: CreateInboxPlacementTestOptions): Promise<InboxPlacementTestCreated>;
 
   /** Inbox Placement Tester: a test and its results. GET /api/ipt/test/{id} */
-  getInboxPlacementTest(testId: string | number): Promise<unknown>;
+  getInboxPlacementTest(testId: string | number): Promise<InboxPlacementTestResult>;
 
-  /** Inbox Placement Tester: list tests, newest first. GET /api/ipt/tests */
+  /**
+   * Inbox Placement Tester: list tests, newest first. GET /api/ipt/tests.
+   * The docs give no body shape (it is paginated), so it is `unknown`.
+   */
   listInboxPlacementTests(options?: ListInboxPlacementTestsOptions | null): Promise<unknown>;
 
   /** Inbox Placement Tester: delete a finished test. DELETE /api/ipt/test/{id} */
-  deleteInboxPlacementTest(testId: string | number): Promise<unknown>;
+  deleteInboxPlacementTest(testId: string | number): Promise<InboxPlacementTestDeleted>;
 
   /** Inbox Placement Tester: the webhook saved on this API key. GET /api/ipt/webhook */
-  getInboxPlacementWebhook(): Promise<unknown>;
+  getInboxPlacementWebhook(): Promise<InboxPlacementWebhookResponse>;
 
-  /** Inbox Placement Tester: save the result webhook. PUT /api/ipt/webhook */
+  /**
+   * Inbox Placement Tester: save the result webhook. PUT /api/ipt/webhook.
+   * The docs give no body shape, so it is `unknown`.
+   */
   setInboxPlacementWebhook(webhookUrl: string): Promise<unknown>;
 
   /**
@@ -883,26 +984,26 @@ export class ZeroBounceSDK {
    */
   findEmailByDomain(
     options: FindEmailByDomainOptions
-  ): Promise<EmailFinderResponse | undefined>;
+  ): Promise<EmailFinderResponse>;
 
   /**
    * Email Finder: find email by company name and name.
    */
   findEmailByCompanyName(
     options: FindEmailByCompanyNameOptions
-  ): Promise<EmailFinderResponse | undefined>;
+  ): Promise<EmailFinderResponse>;
 
   /**
    * Domain Search: get email format by domain.
    */
-  findEmailFormatByDomain(options: { domain: string }): Promise<DomainFormatResponse | undefined>;
+  findEmailFormatByDomain(options: { domain: string }): Promise<DomainFormatResponse>;
 
   /**
    * Domain Search: get email format by company name.
    */
   findEmailFormatByCompanyName(options: {
     company_name: string;
-  }): Promise<DomainFormatResponse | undefined>;
+  }): Promise<DomainFormatResponse>;
 
   /**
    * @deprecated Use findEmailByDomain for Email Finder or findEmailFormatByDomain for Domain Search.
@@ -912,11 +1013,13 @@ export class ZeroBounceSDK {
     first_name?: string | null;
     middle_name?: string | null;
     last_name?: string | null;
-  }): Promise<EmailFinderResponse | DomainFormatResponse | undefined>;
+  }): Promise<EmailFinderResponse | DomainFormatResponse>;
 }
 
 /** An error from the API, carrying the HTTP status of the failed response. */
 export class ZBApiError extends Error {
+  constructor(message: string, statusCode?: number);
+  /** The HTTP status of the failed response; 0 when there was none. */
   statusCode: number;
 }
 

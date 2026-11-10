@@ -5,7 +5,7 @@
 
 - Keep API keys on a trusted server. Do not embed them in mobile apps or browser JavaScript that untrusted users can inspect.
 - Custom API base URLs (when supported) must use `https://`. Do not pass end-user-controlled hosts into those settings.
-- Request URLs include `api_key` as a query parameter (ZeroBounce API contract). Do not log full request URLs or enable payload debug logging in production.
+- Request URLs include `api_key` as a query parameter (ZeroBounce API contract). The Inbox Placement Tester sends the key in an `Authorization: Bearer` header and the Warmup API in an `API-Key` header instead. Do not log full request URLs or enable payload debug logging in production.
 
 ## WE DO NOT RECOMMEND USING THIS SDK ON A FRONT-END ENVIRONMENT AS THE API KEY WILL BE VISIBLE
 
@@ -19,13 +19,7 @@ npm install @zerobounce/zero-bounce-sdk
 
 ## Node.js
 
-The SDK uses the global `fetch` API for HTTP requests. **Node.js 18 or later** is required when running in Node; older versions do not provide `fetch` and will throw (e.g. `TypeError: fetch failed` or `fetch is not defined`). If you must use Node 16 or older, polyfill `fetch` before using the SDK, for example:
-
-```javascript
-global.fetch = require('node-fetch');
-const ZeroBounceSDK = require('@zerobounce/zero-bounce-sdk');
-// ...
-```
+The SDK uses the global `fetch`, `FormData` and `Blob` APIs. **Node.js 18 or later** is required when running in Node, and `package.json` declares it in `engines`. Older versions do not provide these globals, so requests reject with an error reading `ReferenceError: fetch is not defined`.
 
 Bulk `getFile` / `getScoringFile` return the downloaded CSV as a **string** in Node (stdio MCP servers, Docker, CI). In the browser they trigger a file download and return the suggested filename.
 
@@ -34,8 +28,8 @@ Bulk `getFile` / `getScoringFile` return the downloaded CSV as a **string** in N
 - **`npm test`** — Runs unit tests (Jest) and TypeScript type checks.
 - **`npm run test:unit`** — Unit tests only.
 - **`npm run test:types`** — Type-checks the declaration file and a TypeScript consumer.
-- **`npm run dts-check`** — Validates `zeroBounceSDK.d.ts`.
-- **`npm run build && npm run test:smoke`** — Builds the bundle and runs a smoke test against `dist/`.
+- **`npm run dts-check`** — Type-checks the shipped declaration files, `zeroBounceSDK.d.ts` and `zeroBounceSDK.d.mts`.
+- **`npm run build && npm run test:smoke`** — Builds the bundle and runs a smoke test against `dist/`. **It calls the live ZeroBounce API**: after checking the exports it sends one real `getCredits` request over the network with a dummy key (`test-api-key`), and passes once the request reaches the API (the API rejecting that dummy key counts as a pass). It needs network access, fails without it, and is not part of `npm test`. No real key is needed or used.
 
 ## TypeScript
 
@@ -64,7 +58,8 @@ if (result?.status === ZeroBounceSDK.ZBValidateStatus.VALID) {
 Add the script
 
 ```HTML
-<script src="<PATH_TO_SCRIPT/zeroBounceSDK.js"></script>
+<!-- dist/zeroBounceSDK.js from the npm package; it defines the global ZeroBounceSDK -->
+<script src="node_modules/@zerobounce/zero-bounce-sdk/dist/zeroBounceSDK.js"></script>
 ```
 
 ```HTML
@@ -78,7 +73,8 @@ OR
 Add npm module
 
 ```javascript
-const ZeroBounceSDK = require('@zerobounce/zero-bounce-sdk')
+const { ZeroBounceSDK } = require('@zerobounce/zero-bounce-sdk');
+// or, as an ES module: import ZeroBounceSDK from '@zerobounce/zero-bounce-sdk';
 
 const zeroBounce = new ZeroBounceSDK();
 ```
@@ -196,14 +192,14 @@ await zeroBounce.exportSFTPfile({ file_id: "<FILE_ID>", export_path: "/exports" 
 // first_name_column or full_name_column. As with every optional column, 0 and
 // false mean "leave this column out", so neither counts as a name column.
 await zeroBounce.sendEmailFinderFile({
-  file: "<FILE>",
+  file: file, // a File, as for sendFile
   domain_column: 1,
   first_name_column: 2,
   last_name_column: 3,
   has_header_row: true,
 });
 await zeroBounce.sendEmailFinderFile({
-  file: "<FILE>",
+  file: file,
   domain_column: 1,
   full_name_column: 2,
 });
@@ -256,6 +252,53 @@ zeroBounce.init("<YOUR_API_KEY>", ZeroBounceSDK.ApiURL.DEFAULT_API_URL, {
   domainSearchBaseURL: "https://bulkapi.zerobounce.net/domain-search",
 });
 ```
+
+- ##### Warmup API
+
+```javascript
+// The Warmup API (https://www.zerobounce.net/docs/warmup-api) is a separate
+// product: it takes its own team-scoped Warmup API key, sent in an API-Key
+// header, and lives on https://warmup-api.zerobounce.net. Use one
+// ZeroBounceWarmup per Warmup key. It is a named export:
+//   import { ZeroBounceWarmup } from '@zerobounce/zero-bounce-sdk';
+//   const { ZeroBounceWarmup } = require('@zerobounce/zero-bounce-sdk');
+// and, from the <script> build, ZeroBounceSDK.Warmup.
+const warmup = new ZeroBounceWarmup("<YOUR_WARMUP_API_KEY>");
+
+try {
+  const accounts = await warmup.listSendingAccounts();
+
+  // self_managed: your own mailbox, with an engagement rule from 0 to 4.
+  await warmup.addSendingAccount({
+    fromAddress: "sender@example.com",
+    onboardingModel: "self_managed",
+    engagementRuleId: 0,
+  });
+
+  // zb_managed: ZeroBounce provisions the mailbox. It takes emailContent and
+  // managedSending, and rejects engagementRuleId.
+  await warmup.addSendingAccount({
+    fromAddress: "news@example.com",
+    onboardingModel: "zb_managed",
+    emailContent: { company_name: "Example Inc", types_of_emails: ["newsletter"] },
+    managedSending: { timezone_offset: 2, warmup_start_date: "2026-12-01" },
+  });
+
+  const perDay = await warmup.getStatisticsPerDay({
+    fromAddress: "sender@example.com",
+    startDate: "2026-11-01",
+    endDate: "2026-11-10",
+  });
+  const seedsCsv = await warmup.downloadSeeds(); // CSV text: seed,provider
+} catch (error) {
+  // A missing or invalid argument rejects before any request is sent. An API
+  // failure rejects with a ZBApiError, whose statusCode is the HTTP status
+  // (429 when rate limited).
+  console.error(error);
+}
+```
+
+The client also has `getSendingAccount`, `updateSendingAccount`, `deleteSendingAccount`, `changeFromAddress`, `listFromAddresses`, `getEngagementRules`, `setEngagementRule`, `getCustomEngagement`, `createCustomEngagement`, `updateCustomEngagement`, `deleteCustomEngagement`, `getSeeds`, `getSeedCount`, `getProgressToday`, `getSentToday`, `getEmailsPerDay`, `getStatistics`, `getStatisticsDetailed`, `downloadStatistics`, `getFromAddressStatistics`, `checkDomainDmarc` and `testSmtpConfiguration`. Their options are typed in `zeroBounceSDK.d.ts`.
 
 - ##### Get api usage from a start date to an end date
 
@@ -322,16 +365,18 @@ try {
 //     If you want the system to remove duplicate emails.
 // allowPhase2: Boolean (Optional)
 //     When set, sends allow_phase_2 (validation bulk only). See v2 send file API.
+// `file` is a File, for example from an <input type="file"> in a browser.
+// From a Blob or in-memory CSV, use sendFileStream(blob, "emails.csv", options).
 const payload = {
-  file: "<FILE>",
-  email_address_column: "<NUMBER_OF_COLUMN>", //example 3
-  return_url: "<RETURN_URL>", // (Optional)
-  first_name_column: "<NUMBER_OF_COLUMN>", //example 3 (Optional)
-  last_name_column: "<NUMBER_OF_COLUMN>", //example 3 (Optional)
-  gender_column: "<NUMBER_OF_COLUMN>", //example 3 (Optional)
-  ip_address_column: "<NUMBER_OF_COLUMN>", //example 3 (Optional)
-  has_header_row: true / false, // (Optional)
-  remove_duplicate: true / false, // (Optional)
+  file: file,
+  email_address_column: 1, // column indexes start from 1
+  return_url: "https://example.com/zerobounce-done", // (Optional)
+  first_name_column: 2, // (Optional)
+  last_name_column: 3, // (Optional)
+  gender_column: 4, // (Optional)
+  ip_address_column: 5, // (Optional)
+  has_header_row: true, // (Optional) true or false
+  remove_duplicate: true, // (Optional) true or false
   allowPhase2: true, // (Optional)
 };
 
@@ -361,12 +406,14 @@ Bulk validation uses `https://bulkapi.zerobounce.net/v2`. See [v2 send file](htt
 //     If the first row from the submitted file is a header row.
 // remove_duplicate: Boolean (Optional)
 //     If you want the system to remove duplicate emails.
+// `file` is a File, for example from an <input type="file"> in a browser.
+// From a Blob, use sendScoringFileStream(blob, "emails.csv", options).
 const payload = {
-  file: "<FILE>",
-  email_address_column: "<NUMBER_OF_COLUMN>", //example 3
-  return_url: "<RETURN_URL>", // (Optional)
-  has_header_row: true / false,
-  remove_duplicate: true / false, // (Optional)
+  file: file,
+  email_address_column: 1, // column indexes start from 1
+  return_url: "https://example.com/zerobounce-done", // (Optional)
+  has_header_row: true, // (Optional) true or false
+  remove_duplicate: true, // (Optional) true or false
 };
 
 try {
@@ -591,10 +638,9 @@ npm test
 You should see an output like this
 
 ```bash
-Test Suites: 1 passed, 1 total
-Tests:       58 passed, 58 total
+Test Suites: 5 passed, 5 total
+Tests:       157 passed, 157 total
 Snapshots:   0 total
-Time:        2.596 s, estimated 3 s
 Ran all test suites.
 ```
 

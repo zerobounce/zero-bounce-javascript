@@ -177,7 +177,7 @@ function readableJsonMessage(parsed) {
   if (!parsed || typeof parsed !== "object") return null;
   // "detail" is how the Inbox Placement Tester (Django REST framework) and the
   // Warmup API report errors.
-  for (const key of ["error", "message", "error_message", "detail"]) {
+  for (const key of ["error", "message", "error_message", "Message", "Error", "detail"]) {
     const value = parsed[key];
     if (typeof value === "string" && value.trim()) return value.trim();
     if (Array.isArray(value) && value.length) {
@@ -204,10 +204,41 @@ function accountLevelMessage(parsed) {
       }
     }
   }
-  if (typeof parsed.error === "string" && isAccountLevelText(parsed.error)) {
-    return stripErrorPrefix(parsed.error.trim());
+  // LIVE: the filters spell it "Error": an invalid or drained key answers
+  // them with {"Error": "Invalid API key or your account ran out of credits"}.
+  for (const key of ["error", "Error"]) {
+    if (typeof parsed[key] === "string" && isAccountLevelText(parsed[key])) {
+      return stripErrorPrefix(parsed[key].trim());
+    }
   }
   return null;
+}
+
+function objectWithoutSuccess(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  return Object.prototype.hasOwnProperty.call(parsed, "success") ? null : parsed;
+}
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+const MESSAGE_KEYS = new Set(["error", "message", "error_message", "Message", "Error", "detail"]);
+
+/**
+ * Whether a body is nothing but a message: an object with no "success" field
+ * whose keys are all message keys, at least one a non-empty string. Only for
+ * the email finder and domain search, whose result is never a bare message.
+ * LIVE: guessformat answers an invalid or drained key with an HTTP 200 and
+ * {"Message": "Invalid API key or your account ran out of credits"}. Not for
+ * validate: a repeated greylist_processing request answers
+ * {"Message": "Greylist validation still in progress..."}, which is a result.
+ */
+function messageOnlyBody(parsed) {
+  const object = objectWithoutSuccess(parsed);
+  if (!object) return false;
+  const keys = Object.keys(object);
+  return keys.length > 0 && keys.every((key) => MESSAGE_KEYS.has(key)) && keys.some((key) => nonEmptyString(object[key]));
 }
 
 function cloudflareTitle(parsed) {
@@ -368,6 +399,7 @@ export async function createRequest({
   extraHeaders = null,
   secrets = [],
   regionalWarningState = null,
+  messageOnlyIsFailure = false,
 }) {
   const url = buildRequestUrl({ batch, bulkBase, apiBaseURL, baseURL, path, params });
   requireHttpsUrl(url, "request URL");
@@ -433,6 +465,9 @@ export async function createRequest({
   }
   const account = accountLevelMessage(parsed);
   if (account) throw apiError(account, status);
+  if (messageOnlyIsFailure && messageOnlyBody(parsed)) {
+    throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
+  }
   // {"success": false, ...} on an HTTP 200 is still a failure.
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     const failed = parsed.success === false || parsed.success === "False" || parsed.success === "false";

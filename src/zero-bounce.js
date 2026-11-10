@@ -74,6 +74,25 @@ function booleanText(value) {
   return value ? "true" : "false";
 }
 
+/**
+ * A yes/no field of the S3 / SFTP jobs, as the string "true" or "false".
+ *
+ * booleanText alone would send the string "false" as "true", since any
+ * non-empty string is truthy. 3.0.0's validateS3file and scoreS3file sent the
+ * value as given, so "false" meant false there and still does. Booleans, the
+ * strings "true" / "false" (any case) and 1 / 0 are accepted; anything else is
+ * rejected rather than guessed at.
+ */
+function jobBooleanText(value, name) {
+  if (typeof value === "boolean") return booleanText(value);
+  if (value === 1 || value === 0) return booleanText(value === 1);
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase();
+    if (text === "true" || text === "false") return text;
+  }
+  return parameterIsInvalid(name, "Must be true or false.");
+}
+
 function optionalColumn(value) {
   return value ? value : null;
 }
@@ -91,6 +110,25 @@ function apiDate(value) {
     return value.toISOString().slice(0, 10);
   }
   return value;
+}
+
+/**
+ * The validate result with the API's "Message" also on `message`, as the type
+ * declarations have described it since 3.0.0. A pending greylist_processing
+ * request answers {"Message": "Greylist validation still in progress..."}.
+ * "Message" itself is left in place.
+ */
+function withLowercaseMessage(result) {
+  if (
+    result &&
+    typeof result === "object" &&
+    !Array.isArray(result) &&
+    result.message === undefined &&
+    typeof result.Message === "string"
+  ) {
+    result.message = result.Message;
+  }
+  return result;
 }
 
 /** Documented filter rules and targets, checked before a request is sent. */
@@ -258,16 +296,20 @@ export class ZeroBounceSDK {
       options && typeof options === "object" && options.method === "POST";
 
     if (usePost) {
-      return createRequest({
-        requestType: "POST",
-        path: "/validate",
-        body: new URLSearchParams(params),
-        params: {},
-        apiBaseURL: this._api_base_url,
-      });
+      return withLowercaseMessage(
+        await createRequest({
+          requestType: "POST",
+          path: "/validate",
+          body: new URLSearchParams(params),
+          params: {},
+          apiBaseURL: this._api_base_url,
+        })
+      );
     }
 
-    return createRequest({ requestType: "GET", params, path: "/validate", apiBaseURL: this._api_base_url });
+    return withLowercaseMessage(
+      await createRequest({ requestType: "GET", params, path: "/validate", apiBaseURL: this._api_base_url })
+    );
   }
 
   /**
@@ -1260,10 +1302,12 @@ export class ZeroBounceSDK {
 
     const fields = {
       file_name,
-      has_header_row: booleanText(has_header_row),
+      has_header_row: jobBooleanText(has_header_row, "has_header_row"),
       return_url,
     };
-    if (remove_duplicates != null) fields.remove_duplicates = booleanText(remove_duplicates);
+    if (remove_duplicates != null) {
+      fields.remove_duplicates = jobBooleanText(remove_duplicates, "remove_duplicates");
+    }
     return this._sendBulkRootFormPost(path, fields);
   }
 
@@ -1328,7 +1372,7 @@ export class ZeroBounceSDK {
   }
 
   // INBOX PLACEMENT TESTER (bulkapi.zerobounce.net/api/ipt)
-  // The API key goes on the query string and bodies are JSON with camelCase fields.
+  // The API key goes in an Authorization: Bearer header and bodies are JSON with camelCase fields.
 
   _iptRequest(requestType, path, { params = null, jsonBody = null } = {}) {
     return createRequest({
@@ -1590,8 +1634,10 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "GET",
       params,
-      path: "/guessformat", 
-      apiBaseURL: this._api_base_url
+      path: "/guessformat",
+      apiBaseURL: this._api_base_url,
+      // The finder's result is never a bare message: see messageOnlyBody.
+      messageOnlyIsFailure: true,
     });
   }
 
@@ -1646,8 +1692,10 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "GET",
       params,
-      path: "/guessformat", 
-      apiBaseURL: this._api_base_url
+      path: "/guessformat",
+      apiBaseURL: this._api_base_url,
+      // The finder's result is never a bare message: see messageOnlyBody.
+      messageOnlyIsFailure: true,
     });
   }
 
@@ -1685,8 +1733,10 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "GET",
       params,
-      path: "/guessformat", 
-      apiBaseURL: this._api_base_url
+      path: "/guessformat",
+      apiBaseURL: this._api_base_url,
+      // The finder's result is never a bare message: see messageOnlyBody.
+      messageOnlyIsFailure: true,
     });
   }
 }

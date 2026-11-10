@@ -1,5 +1,5 @@
-# ZeroBounce JavaScript SDK – test image (Node 20 LTS)
-FROM node:20-alpine
+# ZeroBounce JavaScript SDK – test image (Node 24 LTS, as CI)
+FROM node:24-alpine
 
 WORKDIR /app
 

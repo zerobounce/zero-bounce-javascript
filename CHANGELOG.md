@@ -7,19 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-11-11
+
+This minor release has breaking changes. Code that compiled or ran on 3.0.0 can
+fail on 3.1.0 in the cases marked **Breaking** below:
+
+- TypeScript: the S3 / SFTP job option types changed shape, so a call that
+  compiled against 3.0.0 can now fail to compile.
+- `validateS3file` and `scoreS3file` reject a call without `has_header_row`
+  before sending it (and without `return_url`, which the API already refused),
+  and the eight S3 / SFTP jobs reject a `has_header_row` or `remove_duplicates`
+  that is not a boolean, `"true"` / `"false"` or `1` / `0`.
+- Warmup `addSendingAccount` rejects `engagementRuleId` on a `zb_managed`
+  account, which 3.0.0 dropped and sent without.
+- Warmup methods reject the returned promise on a bad argument instead of
+  throwing synchronously.
+
+Calls that resolved on 3.0.0 with an invalid-key message in the body now reject
+instead; see **Fixed**.
+
+### Added
+
+- Response types for the Inbox Placement Tester, from its documentation: `getInboxPlacementProviders` returns `InboxPlacementProvidersResponse`, `createInboxPlacementTest` returns `InboxPlacementTestCreated` (`id`, `identifier`, `testType`, `emailAddressList`), `getInboxPlacementTest` returns `InboxPlacementTestResult`, `deleteInboxPlacementTest` returns `InboxPlacementTestDeleted` and `getInboxPlacementWebhook` returns `InboxPlacementWebhookResponse`. `getInboxPlacementTestTypes`, `listInboxPlacementTests` and `setInboxPlacementWebhook` stay `Promise<unknown>`: the documentation gives no body for them. All eight were `Promise<unknown>` in 3.0.0.
+- `zeroBounceSDK.d.ts` declares `init`'s `emailFinderBaseURL` and `domainSearchBaseURL` options, and `ZeroBounceSDK.Warmup`.
+- The README and documentation describe the Warmup client, `ZeroBounceWarmup`. It shipped in 3.0.0 without a changelog entry.
+
 ### Changed
 
+- **Breaking (TypeScript):** `ValidateS3FileOptions` and `ScoreS3FileOptions` are now `BulkRootFileJobOptions`: `file_name: string`, `has_header_row: boolean`, `return_url: string` and optional `remove_duplicates`. `email_address_column`, `first_name_column`, `last_name_column`, `gender_column`, `ip_address_column`, `allowPhase2` and `remove_duplicate` are gone from them, so an object literal carrying one no longer compiles (TS2353 under TypeScript 7). `has_header_row` and `return_url` are required, and `return_url` can no longer be `false`, so options without them, or with `return_url: false`, no longer compile either (TS2739, TS2741 or TS2322 under TypeScript 7). `BulkRootFileJobOptions`, used by the six other S3 / SFTP jobs, makes `file_name` and `return_url` required where 3.0.0 had them optional; at run time 3.0.0 already rejected those calls.
+- **Breaking:** `validateS3file` and `scoreS3file` require `has_header_row` and reject a call without it, before any request; 3.0.0 sent the job without it. They also require `file_name` and `return_url`. The live API rejects a job without `return_url` ("Provided return URL is not permitted: None"). In 3.0.0 `validateS3file` sent `return_url` whenever it was given, and `scoreS3file` had no `return_url` parameter, so it never sent one.
+- `validateS3file` and `scoreS3file` now send only the documented job fields, `file_name`, `has_header_row`, `remove_duplicates` and `return_url`, through the same path as the other six S3 / SFTP jobs. 3.1.0 stops sending `email_address_column`, `first_name_column`, `last_name_column`, `gender_column`, `ip_address_column`, `allow_phase_2` and the singular `remove_duplicate`, which 3.0.0 sent when they were set. `allowPhase2` remains available on `sendFile` and `sendFileStream`.
+- **Breaking:** The eight S3 / SFTP jobs take `has_header_row` and `remove_duplicates` as `true` / `false`, the strings `"true"` / `"false"` in any case, or `1` / `0`, and reject anything else. The string `"false"` is sent as `false`.
+- **Breaking:** Warmup `addSendingAccount` rejects `engagementRuleId` for a `zb_managed` account instead of dropping it and sending the request. The field belongs to `self_managed` only.
+- **Breaking:** Every Warmup (`ZeroBounceWarmup`) method is async, so a missing or invalid argument rejects the returned promise, as on `ZeroBounceSDK`, instead of throwing before a promise exists. `await` inside `try`, and `.catch()`, both see it. Code that called a Warmup method inside `try` without `await` no longer catches the error there. Only the constructor still throws.
 - `init`'s `emailFinderBaseURL` and `domainSearchBaseURL` options are now honoured. They were validated and stored but never read, so the bulk email finder and bulk domain search always went to `https://bulkapi.zerobounce.net`. Both default to the same hosts as before, so a client that does not set them is unaffected.
-- **BREAKING:** `sendEmailFinderFile` and `sendEmailFinderFileStream` require `first_name_column` or `full_name_column`, as the bulk email finder documents. As with every optional column, `0` and `false` mean "leave this column out" and so do not count as given.
-- **BREAKING:** `validateS3file` and `scoreS3file` now send exactly the documented job fields — `file_name`, `has_header_row`, `remove_duplicates` and `return_url` — and go through the same path as their six siblings. They no longer send the undocumented `email_address_column`, `first_name_column`, `last_name_column`, `gender_column`, `ip_address_column`, `allow_phase_2` or singular `remove_duplicate`. `file_name`, `has_header_row` and `return_url` are now required on both: the live API rejects a job without `return_url` ("Provided return URL is not permitted: None"). `allowPhase2` remains available on `sendFile` and `sendFileStream`.
+- `sendEmailFinderFile` and `sendEmailFinderFileStream` require `first_name_column` or `full_name_column`, as the bulk email finder documents. The call is now rejected locally instead of reaching the API, which already refused such a job with `["full_name_column or first_name_column indexes must be present."]`. As with every optional column, `0` and `false` mean "leave this column out" and so do not count as given.
 - `findEmailByDomain` and `findEmailByCompanyName` accept a missing `first_name` instead of rejecting it, as the Email Finder documents it as optional. Without it the API answers with the domain's or company's email format. `domain` or `company_name` is still required.
 - `exportS3file` accepts a missing `export_bucket` instead of rejecting it, matching `exportSFTPfile`'s `export_path`. Without it the output bucket from your ZeroBounce settings is used.
+- Methods are typed `Promise<X>` rather than `Promise<X | undefined>`: since 3.0.0 they reject rather than resolve `undefined`. `getFile`, `getScoringFile`, `getEmailFinderFile` and `getDomainSearchFile` keep `| undefined`, which a legacy browser download (`msSaveOrOpenBlob`) resolves to.
+- `package.json` declares `"engines": { "node": ">=18" }`, the minimum the README already stated: the SDK needs the global `fetch`, `FormData` and `Blob`, which Node 16 lacks. npm only warns about an older Node by default and still installs.
 
 ### Fixed
 
+- The named exports `ZeroBounceWarmup`, `ZBApiError` and `ZeroBounceSDK`, declared in `zeroBounceSDK.d.ts`, exist at run time. `import { ZeroBounceWarmup } from "@zerobounce/zero-bounce-sdk"` failed with "does not provide an export named", and `require()` returned them as `undefined`, because the bundle kept only the default export. `import` now resolves to an ES module entry, `zeroBounceSDK.mjs`, with real named exports over the same bundle, so import and require share one `ZBApiError`. ES module TypeScript projects (`"module": "node16"` / `"nodenext"`) get matching types from `zeroBounceSDK.d.mts`, so `new ZeroBounceSDK()` type-checks there.
+- `sendEvaluatedFile` is typed as taking the list evaluator's `file_id`, as a string or `{ file_id }`, which is what it sends. It was typed as taking `{ file: File }`, which carries no id and is rejected.
+- An invalid or drained API key resolved instead of rejecting on the email finder, the domain search and the filters. The API answers them with an HTTP 200 and no `success` field: `{"Message": "Invalid API key or your account ran out of credits"}` from `findEmailByDomain`, `findEmailByCompanyName`, `findEmailFormatByDomain`, `findEmailFormatByCompanyName` and the deprecated `guessFormat`, and `{"Error": ...}` from `addFilter`, `deleteFilter` and `listFilters`. Each now rejects with that message and `statusCode` 200, as `validateEmail`, `getEmailActivity` and `getApiUsage` already did in 3.0.0, where the API spells the key `error`. The five finder and domain-search methods, `guessFormat` included, reject any body that holds nothing but a message (`Message`, `message`, `Error`, `error`, `error_message` or `detail`), since their result is never one. A bare `Message` still resolves where it is a result: a filter change answers with one, and a repeated `greylist_processing` validate answers `{"Message": "Greylist validation still in progress. Please try again later."}`. `getCredits` still resolves `{"Credits": "-1"}` for an invalid key, as documented.
+- On every endpoint, an `Error` key holding an invalid-key or out-of-credits message rejects, as a lowercase `error` already did. When a failure (an HTTP error status, or `success: false`) carries its text under `Message` or `Error`, the rejection uses that text instead of "ZeroBounce returned an unexpected response."
+- `validateEmail`'s result carries the API's `Message` on `message` too, as the types have described since 3.0.0. Until now it was only on `Message`, so `message` was always `undefined`.
 - `validateBatch` sends its JSON body with `Content-Type: application/json`. It was handed to `fetch` as a plain string, which labelled the JSON `text/plain;charset=UTF-8`.
-- Warmup `addSendingAccount` rejects `engagementRuleId` for a `zb_managed` account rather than silently dropping it. The field belongs to `self_managed` only.
-- `validateSFTPfile` no longer passes a third argument that the shared job helper never had, and its documentation no longer says `file_name` is optional — the live API requires it.
+- `validateSFTPfile` no longer passes a third argument that the shared job helper never had, and its documentation no longer says `file_name` is optional. The live API requires it.
 
 ## [3.0.0] - 2026-10-25
 
@@ -139,7 +175,8 @@ old silent behaviour needs a `catch` before upgrading. See **Changed** below.
 
 - `guessFormat`. Use the email-finder or domain-search methods instead.
 
-[Unreleased]: https://github.com/zerobounce/zero-bounce-javascript/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/zerobounce/zero-bounce-javascript/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/zerobounce/zero-bounce-javascript/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.11...v3.0.0
 [2.1.11]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.10...v2.1.11
 [2.1.10]: https://github.com/zerobounce/zero-bounce-javascript/compare/v2.1.9...v2.1.10

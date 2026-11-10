@@ -167,6 +167,29 @@ function answer(request) {
       "application/json"
     );
   }
+  // LIVE (2026-11-11): what an invalid or drained key gets back, each with an
+  // HTTP 200 and no "success" field.
+  if (key.startsWith("dead-key-")) {
+    const path = request.path;
+    let body = '{"error":"Invalid API key or your account ran out of credits"}';
+    if (path.includes("guessformat")) body = '{"Message":"Invalid API key or your account ran out of credits"}';
+    else if (path.includes("filters")) body = '{  "Error": "Invalid API key or your account ran out of credits"}';
+    else if (path.includes("getapiusage")) body = '{"error":"Invalid API key"}';
+    else if (path.includes("getcredits")) body = '{"Credits":"-1"}';
+    return httpResponse(200, body, "application/json");
+  }
+  // The documented answer to a repeated greylist_processing validate: a result
+  // whose only field is Message, not an error.
+  if (key.startsWith("greylist-pending-") && request.path.endsWith("/validate")) {
+    return httpResponse(
+      200,
+      '{"Message":"Greylist validation still in progress. Please try again later."}',
+      "application/json"
+    );
+  }
+  if (key.startsWith("filter-message-") && request.path.includes("filters")) {
+    return httpResponse(200, '{"Message":"Filter has been added."}', "application/json");
+  }
   if (key.startsWith("invalid-key-")) {
     return httpResponse(200, JSON.stringify({ error: "Invalid API Key" }), "application/json");
   }
@@ -459,6 +482,51 @@ describe("offline API", () => {
     fake.records.length = 0;
     const credits = await expectRejected(client("no-credits-1").getCredits());
     expect(credits.message).toBe("Your account ran out of credits");
+  });
+
+  it("rejects a dead key on every call with the API's own message", async () => {
+    const sdk = client("dead-key-user");
+    const drained = "Invalid API key or your account ran out of credits";
+    const calls = [
+      ["validateEmail", () => sdk.validateEmail("a@example.com"), drained],
+      ["validateEmail POST", () => sdk.validateEmail("a@example.com", { method: "POST" }), drained],
+      ["getEmailActivity", () => sdk.getEmailActivity("a@example.com"), drained],
+      ["getApiUsage", () => sdk.getApiUsage("2026-10-01", "2026-10-02"), "Invalid API key"],
+      ["findEmailByDomain", () => sdk.findEmailByDomain({ domain: "example.com", first_name: "john" }), drained],
+      ["findEmailByCompanyName", () => sdk.findEmailByCompanyName({ company_name: "Example", first_name: "john" }), drained],
+      ["findEmailFormatByDomain", () => sdk.findEmailFormatByDomain({ domain: "example.com" }), drained],
+      ["findEmailFormatByCompanyName", () => sdk.findEmailFormatByCompanyName({ company_name: "Example" }), drained],
+      ["addFilter", () => sdk.addFilter({ rule: "allow", target: "email", value: "x@example.com" }), drained],
+      ["deleteFilter", () => sdk.deleteFilter({ rule: "allow", target: "email", value: "x@example.com" }), drained],
+      ["listFilters", () => sdk.listFilters(), drained],
+      ["listFilters POST", () => sdk.listFilters({ method: "POST" }), drained],
+    ];
+    for (const [name, call, message] of calls) {
+      let result;
+      let error;
+      try {
+        result = await call();
+      } catch (caught) {
+        error = caught;
+      }
+      expect([name, result]).toEqual([name, undefined]);
+      expect([name, error && error.message]).toEqual([name, message]);
+      expect([name, error && error.statusCode]).toEqual([name, 200]);
+    }
+    // -1 is the documented credit balance of an invalid key, not an error.
+    await expect(sdk.getCredits()).resolves.toEqual({ Credits: "-1" });
+
+  });
+
+  it("keeps a bare Message as a result where the API means one", async () => {
+    // The API's "Message" is also on `message`, the field the types declare.
+    await expect(client("greylist-pending-1").validateEmail("a@example.com")).resolves.toEqual({
+      Message: "Greylist validation still in progress. Please try again later.",
+      message: "Greylist validation still in progress. Please try again later.",
+    });
+    await expect(
+      client("filter-message-1").addFilter({ rule: "allow", target: "email", value: "x@example.com" })
+    ).resolves.toEqual({ Message: "Filter has been added." });
   });
 
   it("leaves a per-email scoring error on the resolved result", async () => {
@@ -1119,6 +1187,62 @@ describe("offline API", () => {
         "ZeroBounce: return_url parameter is missing. The API rejects a job without it."
       );
     }
+    expect(fake.records).toHaveLength(0);
+  });
+
+  it("sends the string \"false\" as false on the S3 and SFTP jobs and rejects non-booleans", async () => {
+    // 3.0.0's validateS3file sent has_header_row as given, so "false" meant
+    // false. Coerced with truthiness it would go out as "true".
+    const sdk = client("parity-key");
+    const job = (extra) => ({
+      file_name: "emails/list.csv",
+      return_url: "https://example.com/done",
+      ...extra,
+    });
+    const cases = [
+      [{ has_header_row: "false", remove_duplicates: "false" }, "false", "false"],
+      [{ has_header_row: "FALSE", remove_duplicates: " False " }, "false", "false"],
+      [{ has_header_row: "true", remove_duplicates: "TRUE" }, "true", "true"],
+      [{ has_header_row: false, remove_duplicates: true }, "false", "true"],
+      [{ has_header_row: 0, remove_duplicates: 1 }, "false", "true"],
+    ];
+    for (const run of [(o) => sdk.validateS3file(o), (o) => sdk.scoreS3file(o), (o) => sdk.validateSFTPfile(o)]) {
+      for (const [extra, header, duplicates] of cases) {
+        fake.records.length = 0;
+        await run(job(extra));
+        const request = fake.only();
+        expect([extra, request.body.has_header_row, request.body.remove_duplicates]).toEqual([
+          extra,
+          header,
+          duplicates,
+        ]);
+      }
+    }
+
+    fake.records.length = 0;
+    for (const bad of ["no", "", "yes", 2, {}, []]) {
+      const header = await expectRejected(sdk.validateS3file(job({ has_header_row: bad })));
+      expect(header.message).toBe("ZeroBounce: has_header_row parameter is invalid. Must be true or false.");
+      const duplicates = await expectRejected(
+        sdk.scoreS3file(job({ has_header_row: true, remove_duplicates: bad }))
+      );
+      expect(duplicates.message).toBe(
+        "ZeroBounce: remove_duplicates parameter is invalid. Must be true or false."
+      );
+    }
+    expect(fake.records).toHaveLength(0);
+  });
+
+  it("takes sendEvaluatedFile's file id as a string or as { file_id }", async () => {
+    const sdk = client("parity-key");
+    await sdk.sendEvaluatedFile("eval-file-1");
+    expect(fake.only().body).toEqual({ api_key: "parity-key", file_id: "eval-file-1" });
+    fake.records.length = 0;
+    await sdk.sendEvaluatedFile({ file_id: "eval-file-2" });
+    expect(fake.only().body).toEqual({ api_key: "parity-key", file_id: "eval-file-2" });
+    fake.records.length = 0;
+    // What the 3.1.0 type declared, { file }, carries no id and is rejected.
+    await expectRejected(sdk.sendEvaluatedFile({ file: new Blob(["x"]) }));
     expect(fake.records).toHaveLength(0);
   });
 

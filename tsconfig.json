@@ -1,12 +1,17 @@
+// `npm run dts-check` type-checks the shipped declaration files with this config.
+// skipLibCheck must stay false: it skips every .d.ts file, including these two.
+// `types` is empty so the check cannot lean on @types/node, which a browser
+// consumer may not have installed.
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2020", "DOM"],
+    "types": [],
     "strict": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": false
   },
-  "include": ["zeroBounceSDK.d.ts"],
-  "exclude": ["node_modules", "dist"]
+  "files": ["zeroBounceSDK.d.ts", "zeroBounceSDK.d.mts"]
 }

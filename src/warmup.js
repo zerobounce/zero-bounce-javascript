@@ -5,6 +5,10 @@
  * own team-scoped key, and an `API-Key` header instead of an `api_key`
  * parameter. Use `ZeroBounceWarmup` with a Warmup API key; `ZeroBounceSDK`
  * stays for the validation API key.
+ *
+ * Every method is async: a missing or invalid argument rejects the returned
+ * promise, as on ZeroBounceSDK, rather than throwing before a promise exists.
+ * Only the constructor throws.
  */
 import {
   apiError,
@@ -164,12 +168,12 @@ export class ZeroBounceWarmup {
   // -- sending accounts -------------------------------------------------------
 
   /** Every sending account of the key's team. GET /sending-accounts */
-  listSendingAccounts() {
+  async listSendingAccounts() {
     return this._json("GET", "/sending-accounts");
   }
 
   /** One sending account. GET /sending-account */
-  getSendingAccount(fromAddress) {
+  async getSendingAccount(fromAddress) {
     return this._json("GET", "/sending-account", {
       params: { from_address: required(fromAddress, "from_address") },
     });
@@ -183,7 +187,7 @@ export class ZeroBounceWarmup {
    * `managedSending` instead, and rejects `engagementRuleId`; a 200 means
    * accepted, and the mailbox is provisioned afterwards.
    */
-  addSendingAccount({
+  async addSendingAccount({
     fromAddress,
     onboardingModel,
     engagementRuleId = null,
@@ -240,7 +244,7 @@ export class ZeroBounceWarmup {
    * `statusId` is 0 to 8 (4 Paused, 5 Disabled). `autoEnable` true is accepted
    * only for an account that is not active.
    */
-  updateSendingAccount({ fromAddress, engagementRuleId, statusId, autoEnable } = {}) {
+  async updateSendingAccount({ fromAddress, engagementRuleId, statusId, autoEnable } = {}) {
     required(fromAddress, "from_address");
     if (typeof autoEnable !== "boolean") {
       throw clientError("auto_enable parameter is missing. Must be true or false.");
@@ -257,7 +261,7 @@ export class ZeroBounceWarmup {
   }
 
   /** Remove a sending account. DELETE /sending-accounts. Destructive. */
-  deleteSendingAccount(fromAddress) {
+  async deleteSendingAccount(fromAddress) {
     return this._json("DELETE", "/sending-accounts", {
       params: { from_address: required(fromAddress, "from_address") },
     });
@@ -267,7 +271,7 @@ export class ZeroBounceWarmup {
    * Move an account and its history to a new from-address.
    * PUT /smtp-credentials — despite the path, no SMTP credentials are stored.
    */
-  changeFromAddress(oldFromAddress, newFromAddress) {
+  async changeFromAddress(oldFromAddress, newFromAddress) {
     return this._json("PUT", "/smtp-credentials", {
       jsonBody: {
         team_id: ANY_TEAM_ID,
@@ -283,7 +287,7 @@ export class ZeroBounceWarmup {
    * `searchFrom` takes letters, digits and `. - _ @ +` only. `offset` and
    * `limit` go on the wire as strings and default to 0 and 100 on the API.
    */
-  listFromAddresses({ searchFrom = null, offset = null, limit = null } = {}) {
+  async listFromAddresses({ searchFrom = null, offset = null, limit = null } = {}) {
     const params = {};
     if (searchFrom != null) {
       if (!SEARCH_FROM.test(searchFrom)) {
@@ -305,12 +309,12 @@ export class ZeroBounceWarmup {
   // -- engagement rules -------------------------------------------------------
 
   /** The rule catalogue: -1 Custom, 0 Default, 1 Slow Pace, 2 Repair, 3 Boost, 4 Protect. */
-  getEngagementRules() {
+  async getEngagementRules() {
     return this._json("GET", "/engagement-rules");
   }
 
   /** Set a standard rule (0 to 4) on an address. PUT /engagement-rule */
-  setEngagementRule(cFrom, ruleId) {
+  async setEngagementRule(cFrom, ruleId) {
     required(cFrom, "c_from");
     return this._json("PUT", "/engagement-rule", {
       params: { c_from: cFrom },
@@ -319,12 +323,12 @@ export class ZeroBounceWarmup {
   }
 
   /** An address's custom rule, with can_update and remaining_seconds. */
-  getCustomEngagement(cFrom) {
+  async getCustomEngagement(cFrom) {
     return this._json("GET", `/custom-engagement/${pathSegment(cFrom, "c_from")}`);
   }
 
   /** Create a custom rule. POST /custom-engagement. Starts a 7 day update cooldown. */
-  createCustomEngagement({ cFrom, replyPct, importantPct, clickPct } = {}) {
+  async createCustomEngagement({ cFrom, replyPct, importantPct, clickPct } = {}) {
     return this._json("POST", "/custom-engagement", {
       jsonBody: engagementBody(cFrom, replyPct, importantPct, clickPct),
     });
@@ -334,14 +338,14 @@ export class ZeroBounceWarmup {
    * Update a custom rule. PUT /custom-engagement.
    * During the 7 day cooldown this raises with statusCode 429.
    */
-  updateCustomEngagement({ cFrom, replyPct, importantPct, clickPct } = {}) {
+  async updateCustomEngagement({ cFrom, replyPct, importantPct, clickPct } = {}) {
     return this._json("PUT", "/custom-engagement", {
       jsonBody: engagementBody(cFrom, replyPct, importantPct, clickPct),
     });
   }
 
   /** Delete a custom rule and fall back to standard rule 1-4. DELETE /custom-engagement */
-  deleteCustomEngagement(cFrom, engagementRuleId) {
+  async deleteCustomEngagement(cFrom, engagementRuleId) {
     return this._json("DELETE", "/custom-engagement", {
       jsonBody: {
         c_from: required(cFrom, "c_from"),
@@ -353,44 +357,44 @@ export class ZeroBounceWarmup {
   // -- statistics, seeds and utilities ----------------------------------------
 
   /** The seed list. GET /seeds */
-  getSeeds() {
+  async getSeeds() {
     return this._json("GET", "/seeds");
   }
 
   /** The seed list as CSV (columns seed,provider). GET /seeds/download */
-  downloadSeeds() {
+  async downloadSeeds() {
     return this._csv("/seeds/download");
   }
 
   /** Number of seeds. GET /seed-count */
-  getSeedCount() {
+  async getSeedCount() {
     return this._json("GET", "/seed-count");
   }
 
   /** Today's warmup progress. GET /progress-today */
-  getProgressToday() {
+  async getProgressToday() {
     return this._json("GET", "/progress-today");
   }
 
   /** Messages sent today. GET /sent-today */
-  getSentToday() {
+  async getSentToday() {
     return this._json("GET", "/sent-today");
   }
 
   /** Current daily volume. GET /emails-per-day */
-  getEmailsPerDay() {
+  async getEmailsPerDay() {
     return this._json("GET", "/emails-per-day");
   }
 
   /** Statistics for an address. An address with no history returns zeros. */
-  getStatistics(fromAddress) {
+  async getStatistics(fromAddress) {
     return this._json("GET", "/statistics", {
       params: { from_address: required(fromAddress, "from_address") },
     });
   }
 
   /** Daily statistics between two dates, inclusive. GET /statistics-per-day */
-  getStatisticsPerDay({ fromAddress, startDate, endDate } = {}) {
+  async getStatisticsPerDay({ fromAddress, startDate, endDate } = {}) {
     required(fromAddress, "from_address");
     const start = isoDate(startDate, "start_date");
     const end = isoDate(endDate, "end_date");
@@ -403,19 +407,19 @@ export class ZeroBounceWarmup {
   }
 
   /** Detailed statistics for an address. GET /statistics-detailed */
-  getStatisticsDetailed(cFrom) {
+  async getStatisticsDetailed(cFrom) {
     return this._json("GET", "/statistics-detailed", {
       params: { c_from: required(cFrom, "c_from") },
     });
   }
 
   /** An address's statistics as CSV. GET /statistics/download */
-  downloadStatistics(cFrom) {
+  async downloadStatistics(cFrom) {
     return this._csv("/statistics/download", { c_from: required(cFrom, "c_from") });
   }
 
   /** Statistics for one from-address. GET /from-address-statistics */
-  getFromAddressStatistics(fromAddress) {
+  async getFromAddressStatistics(fromAddress) {
     return this._json("GET", "/from-address-statistics", {
       params: { from_address: required(fromAddress, "from_address") },
     });
@@ -427,7 +431,7 @@ export class ZeroBounceWarmup {
    * LIVE: pass an email address. The live API answers "Please provide a valid
    * email address" for a bare domain, although the docs describe a domain.
    */
-  checkDomainDmarc(fromAddress, dkimSelector = null) {
+  async checkDomainDmarc(fromAddress, dkimSelector = null) {
     required(fromAddress, "from_address");
     if (!String(fromAddress).includes("@")) {
       throw clientError(
@@ -449,7 +453,7 @@ export class ZeroBounceWarmup {
    * LIVE: the API answers any failed SMTP login with HTTP 500 — an API bug.
    * The username and password are masked in every error from this method.
    */
-  testSmtpConfiguration({ fromAddress, username, password, server, port } = {}) {
+  async testSmtpConfiguration({ fromAddress, username, password, server, port } = {}) {
     if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535) {
       throw clientError("port parameter is invalid. Must be 1 to 65535.");
     }
