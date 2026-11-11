@@ -395,6 +395,57 @@ describe("offline API", () => {
     }
   });
 
+  it("covers every public method in callAll, so the sweeps that use it miss none", () => {
+    const names = callAll(client("parity-key")).map(([name]) => name).sort();
+    const methods = Object.getOwnPropertyNames(ZeroBounceSDK.prototype)
+      .filter((name) => name !== "constructor" && name !== "init" && !name.startsWith("_"))
+      .sort();
+    expect(names).toEqual(methods);
+  });
+
+  it("keeps every form of the key out of a transport or API error, on every public method", async () => {
+    // A key whose URL-encoded form differs from the raw one.
+    const key = "transport-secret+key/1";
+    const forms = [key, encodeURIComponent(key), escape(key)];
+    const sdk = client(key);
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    const echoes = {
+      "success false": (detail) => JSON.stringify({ success: false, message: `rejected ${detail}` }),
+      "error field": (detail) => JSON.stringify({ error: `rejected ${detail}` }),
+      "HTTP 400": (detail) => JSON.stringify({ message: `rejected ${detail}` }),
+    };
+    for (const failure of ["fetch", "body", ...Object.keys(echoes)]) {
+      for (const [name, run] of callAll(sdk)) {
+        // Some fetch implementations and polyfills quote the request URL, or
+        // more, in their own errors.
+        global.fetch = async (url) => {
+          const detail = `${forms.join(" ")} ${url}`;
+          if (failure === "fetch") throw new TypeError(`fetch failed: ${detail}`);
+          if (echoes[failure]) {
+            const body = echoes[failure](detail);
+            const status = failure === "HTTP 400" ? 400 : 200;
+            return { status, headers: { get: () => "application/json" }, text: async () => body };
+          }
+          return {
+            status: 200,
+            headers: { get: () => "application/json" },
+            text: async () => {
+              throw new TypeError(`body failed: ${detail}`);
+            },
+          };
+        };
+        let message = null;
+        try {
+          await run();
+        } catch (error) {
+          message = `${error.message}\n${error.stack}`;
+        }
+        const leaked = message !== null && forms.some((form) => message.includes(form));
+        expect({ name, failure, rejected: message !== null, leaked }).toEqual({ name, failure, rejected: true, leaked: false });
+      }
+    }
+  });
+
   it("uses the regional host selected in init", async () => {
     const usa = client("parity-key", ZeroBounceSDK.ApiURL.USA_API_URL);
     await usa.getCredits();

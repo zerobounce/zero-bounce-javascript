@@ -412,6 +412,26 @@ function bulkApiBase(bulkBase) {
   return bulkBase === "root" ? API_BULK_ROOT_URL : API_BULK_BASE_URL;
 }
 
+/**
+ * The key as this request carries it: an api_key query or form field, an
+ * api_key JSON field, or the Inbox Placement Tester's Bearer token. Every
+ * error createRequest raises is redacted against these, so no call site can
+ * forget to pass its key.
+ */
+function requestSecrets({ params, body, jsonBody, bearerToken }) {
+  const found = [bearerToken];
+  if (params && typeof params === "object") found.push(params.api_key);
+  if (jsonBody && typeof jsonBody === "object") found.push(jsonBody.api_key);
+  if (body && typeof body === "object" && typeof body.get === "function") {
+    try {
+      found.push(body.get("api_key"));
+    } catch {
+      // Not a FormData or URLSearchParams after all.
+    }
+  }
+  return found.filter((value) => typeof value === "string" && value);
+}
+
 function buildRequestUrl({ batch, bulkBase, apiBaseURL, baseURL, path, params }) {
   // An explicit baseURL wins: the list evaluator, the Inbox Placement Tester and
   // the finder/domain-search families each have their own, overridable host.
@@ -443,6 +463,7 @@ export async function createRequest({
 }) {
   const url = buildRequestUrl({ batch, bulkBase, apiBaseURL, baseURL, path, params });
   requireHttpsUrl(url, "request URL");
+  secrets = [...secrets, ...requestSecrets({ params, body, jsonBody, bearerToken })];
   warnOnRegionalBulkHost(url, apiBaseURL, regionalWarningState);
 
   const headers = { ...HEADERS };
@@ -483,7 +504,12 @@ export async function createRequest({
   }
 
   if (returnText) {
-    return processGetFileResponseBody(finalResult, response, scoring);
+    try {
+      return processGetFileResponseBody(finalResult, response, scoring);
+    } catch (error) {
+      if (error instanceof ZBApiError) throw apiError(redactSecrets(error.message, secrets), error.statusCode);
+      throw error;
+    }
   }
 
   const status = responseStatus(response);
@@ -504,7 +530,7 @@ export async function createRequest({
     throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
   }
   const account = accountLevelMessage(parsed);
-  if (account) throw apiError(account, status);
+  if (account) throw apiError(redactSecrets(account, secrets), status);
   if (messageOnlyIsFailure && messageOnlyBody(parsed)) {
     throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
   }
@@ -512,7 +538,7 @@ export async function createRequest({
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     const failed = parsed.success === false || parsed.success === "False" || parsed.success === "false";
     if (failed) {
-      throw apiError(messageFromBody(finalResult, status), status);
+      throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
     }
   }
   return parsed;

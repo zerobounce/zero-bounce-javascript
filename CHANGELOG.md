@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `validateBatch` parses `activityData` and `verifyPlus` strictly, as 4.0.0
+  already did for every other boolean option: `true` / `false`, `"true"` /
+  `"false"` (any case) or `1` / `0`, sent as JSON booleans. 4.0.0 sent the
+  value as given, so `"false"`, `"no"` or `0` reached the API unchanged;
+  anything else now rejects with "parameter is invalid. Must be true or
+  false." before a request is sent.
+
+### Security
+
+- A network error or an API error message never carries the API key, from any
+  `ZeroBounceSDK` method. 4.0.0 removed the raw key from transport errors
+  only for `sendEvaluatedFile` and the Inbox Placement Tester, so a `fetch`
+  implementation that quotes the key in its own error (for example from
+  `getCredits`) passed it through in the rejection message. `ZeroBounceWarmup`
+  already redacted its key.
+
 ## [4.0.0] - 2026-11-12
 
 ### Breaking

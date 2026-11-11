@@ -250,6 +250,28 @@ describe("booleans", () => {
     }
   });
 
+  it("parse validateBatch's activityData and verifyPlus strictly and send them as JSON booleans", async () => {
+    const sdk = client();
+    const batch = [{ email_address: "a@example.com" }];
+    for (const [given, expected] of [["false", false], ["TRUE", true], [0, false], [1, true], [false, false], [true, true]]) {
+      respond('{"email_batch":[],"errors":[]}');
+      await sdk.validateBatch(batch, { activityData: given, verifyPlus: given });
+      expect(JSON.parse(calls[0].init.body)).toMatchObject({ activity_data: expected, verify_plus: expected });
+    }
+    respond('{"email_batch":[],"errors":[]}');
+    await sdk.validateBatch(batch, { activityData: null });
+    expect(JSON.parse(calls[0].init.body)).not.toHaveProperty("activity_data");
+    for (const bad of ["no", "yes", "0", 2]) {
+      for (const option of ["activityData", "verifyPlus"]) {
+        respond('{"email_batch":[],"errors":[]}');
+        await expect(sdk.validateBatch(batch, { [option]: bad })).rejects.toThrow(
+          `${option} parameter is invalid. Must be true or false.`
+        );
+        expect(calls).toHaveLength(0);
+      }
+    }
+  });
+
   it("send Warmup ignoreConflict \"false\" as false and reject a non-boolean", async () => {
     const warmup = new ZeroBounceWarmup(KEY);
     respond('{"ok":true}');
