@@ -1,6 +1,6 @@
 {
   "name": "@zerobounce/zero-bounce-sdk",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "description": "Official ZeroBounce JavaScript SDK: email validation, AI scoring, bulk files, email finder and domain search",
   "keywords": [
     "zerobounce",
