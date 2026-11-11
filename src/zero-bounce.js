@@ -1,4 +1,4 @@
-import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid, requireHttpsUrl, checkApiKey, pathSegment } from "./utils.js";
+import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid, normalizeBaseUrl, checkApiKey, pathSegment, strictBoolean } from "./utils.js";
 
 /**
  * Validation status values returned by the API (validate, validateBatch).
@@ -75,22 +75,18 @@ function booleanText(value) {
 }
 
 /**
- * A yes/no field of the S3 / SFTP jobs, as the string "true" or "false".
+ * A yes/no option, as the string "true" or "false". Used for every boolean
+ * the SDK sends.
  *
  * booleanText alone would send the string "false" as "true", since any
- * non-empty string is truthy. 3.0.0's validateS3file and scoreS3file sent the
- * value as given, so "false" meant false there and still does. Booleans, the
- * strings "true" / "false" (any case) and 1 / 0 are accepted; anything else is
- * rejected rather than guessed at.
+ * non-empty string is truthy. Booleans, the strings "true" / "false" (any
+ * case) and 1 / 0 are accepted; anything else is rejected rather than guessed
+ * at (see strictBoolean). `fallback`, when given, stands in for null or
+ * undefined.
  */
-function jobBooleanText(value, name) {
-  if (typeof value === "boolean") return booleanText(value);
-  if (value === 1 || value === 0) return booleanText(value === 1);
-  if (typeof value === "string") {
-    const text = value.trim().toLowerCase();
-    if (text === "true" || text === "false") return text;
-  }
-  return parameterIsInvalid(name, "Must be true or false.");
+function jobBooleanText(value, name, fallback) {
+  if (value == null && fallback !== undefined) return booleanText(fallback);
+  return booleanText(strictBoolean(value, name));
 }
 
 function optionalColumn(value) {
@@ -168,7 +164,9 @@ export class ZeroBounceSDK {
 
   constructor() {
     this._initialized = false;
-    this._api_key = null;
+    // Not enumerable, so util.inspect, console.log and JSON.stringify of a
+    // client do not print the key.
+    Object.defineProperty(this, "_api_key", { value: null, writable: true, enumerable: false });
     this._api_base_url = ZeroBounceSDK.ApiURL.DEFAULT_API_URL;
     this._list_evaluator_base_url = ZeroBounceSDK.ListEvaluatorURL.DEFAULT_URL;
     this._inbox_placement_base_url = ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL;
@@ -188,26 +186,26 @@ export class ZeroBounceSDK {
     }
     checkApiKey(apiKey, "Api key");
     this._api_key = apiKey;
-    this._api_base_url = requireHttpsUrl(apiBaseURL);
+    this._api_base_url = normalizeBaseUrl(apiBaseURL, "apiBaseURL");
     const {
       listEvaluatorBaseURL,
       inboxPlacementBaseURL,
       emailFinderBaseURL,
       domainSearchBaseURL,
     } = options || {};
-    this._list_evaluator_base_url = requireHttpsUrl(
+    this._list_evaluator_base_url = normalizeBaseUrl(
       listEvaluatorBaseURL ?? ZeroBounceSDK.ListEvaluatorURL.DEFAULT_URL,
       "listEvaluatorBaseURL"
     );
-    this._inbox_placement_base_url = requireHttpsUrl(
+    this._inbox_placement_base_url = normalizeBaseUrl(
       inboxPlacementBaseURL ?? ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL,
       "inboxPlacementBaseURL"
     );
-    this._email_finder_base_url = requireHttpsUrl(
+    this._email_finder_base_url = normalizeBaseUrl(
       emailFinderBaseURL ?? ZeroBounceSDK.EmailFinderURL.DEFAULT_URL,
       "emailFinderBaseURL"
     );
-    this._domain_search_base_url = requireHttpsUrl(
+    this._domain_search_base_url = normalizeBaseUrl(
       domainSearchBaseURL ?? ZeroBounceSDK.DomainSearchURL.DEFAULT_URL,
       "domainSearchBaseURL"
     );
@@ -268,7 +266,15 @@ export class ZeroBounceSDK {
       return;
     }
 
-    if (callbackUrl != null && greylistProcessing !== true) {
+    const flags = {};
+    if (activityData != null) flags.activity_data = jobBooleanText(activityData, "activityData");
+    if (verifyPlus != null) flags.verify_plus = jobBooleanText(verifyPlus, "verifyPlus");
+    if (domainInfo != null) flags.domain_info = jobBooleanText(domainInfo, "domainInfo");
+    if (greylistProcessing != null) {
+      flags.greylist_processing = jobBooleanText(greylistProcessing, "greylistProcessing");
+    }
+
+    if (callbackUrl != null && flags.greylist_processing !== "true") {
       parameterIsInvalid("callbackUrl", "Requires greylistProcessing: true.");
       return;
     }
@@ -284,12 +290,7 @@ export class ZeroBounceSDK {
     };
     if (ip_address != null) params.ip_address = ip_address;
     if (timeout != null) params.timeout = timeout;
-    if (activityData != null) params.activity_data = activityData ? "true" : "false";
-    if (verifyPlus != null) params.verify_plus = verifyPlus ? "true" : "false";
-    if (domainInfo != null) params.domain_info = domainInfo ? "true" : "false";
-    if (greylistProcessing != null) {
-      params.greylist_processing = greylistProcessing ? "true" : "false";
-    }
+    Object.assign(params, flags);
     if (callbackUrl != null) params.callback_url = callbackUrl;
 
     const usePost =
@@ -505,11 +506,11 @@ export class ZeroBounceSDK {
 
     body.append("email_address_column", email_address_column);
     body.append("file", file);
-    body.append("has_header_row", booleanText(has_header_row));
-    body.append("remove_duplicate", booleanText(remove_duplicate));
+    body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
+    body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
     body.append("api_key", this._api_key);
     if (allowPhase2 != null) {
-      body.append("allow_phase_2", booleanText(allowPhase2));
+      body.append("allow_phase_2", jobBooleanText(allowPhase2, "allowPhase2"));
     }
 
     return createRequest({
@@ -560,11 +561,11 @@ export class ZeroBounceSDK {
     if (ip_address_column) body.append("ip_address_column", ip_address_column);
     body.append("email_address_column", email_address_column);
     body.append("file", fileStreamOrBlob, fileName);
-    body.append("has_header_row", booleanText(has_header_row));
-    body.append("remove_duplicate", booleanText(remove_duplicate));
+    body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
+    body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
     body.append("api_key", this._api_key);
     if (allowPhase2 != null) {
-      body.append("allow_phase_2", booleanText(allowPhase2));
+      body.append("allow_phase_2", jobBooleanText(allowPhase2, "allowPhase2"));
     }
 
     return createRequest({
@@ -609,9 +610,9 @@ export class ZeroBounceSDK {
 
     body.append("file", file);
     body.append("email_address_column", email_address_column);
-    body.append("has_header_row", booleanText(has_header_row));
+    body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
     body.append("api_key", this._api_key);
-    body.append("remove_duplicate", booleanText(remove_duplicate));
+    body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
 
     return createRequest({
       requestType: "POST",
@@ -652,9 +653,9 @@ export class ZeroBounceSDK {
     if (return_url) body.append("return_url", return_url);
     body.append("file", fileStreamOrBlob, fileName);
     body.append("email_address_column", email_address_column);
-    body.append("has_header_row", booleanText(has_header_row));
+    body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
     body.append("api_key", this._api_key);
-    body.append("remove_duplicate", booleanText(remove_duplicate));
+    body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
 
     return createRequest({
       requestType: "POST",
@@ -736,7 +737,7 @@ export class ZeroBounceSDK {
         params.download_type = getFileOptions.downloadType;
       }
       if (!scoring && getFileOptions.activityData != null) {
-        params.activity_data = getFileOptions.activityData ? "true" : "false";
+        params.activity_data = jobBooleanText(getFileOptions.activityData, "activityData");
       }
     }
     return createRequest({
@@ -870,7 +871,7 @@ export class ZeroBounceSDK {
         last_name_column: optionalColumn(last_name_column),
         middle_name_column: optionalColumn(middle_name_column),
         full_name_column: optionalColumn(full_name_column),
-        has_header_row: Boolean(has_header_row),
+        has_header_row: jobBooleanText(has_header_row, "has_header_row", false),
       },
     });
   }
@@ -915,7 +916,7 @@ export class ZeroBounceSDK {
         last_name_column: optionalColumn(last_name_column),
         middle_name_column: optionalColumn(middle_name_column),
         full_name_column: optionalColumn(full_name_column),
-        has_header_row: Boolean(has_header_row),
+        has_header_row: jobBooleanText(has_header_row, "has_header_row", false),
       },
     });
   }
@@ -962,7 +963,7 @@ export class ZeroBounceSDK {
     return this._sendBulkRootMultipartFile("/sendfile", {
       file,
       baseURL: this._domain_search_base_url,
-      fields: { domain_column, has_header_row: Boolean(has_header_row) },
+      fields: { domain_column, has_header_row: jobBooleanText(has_header_row, "has_header_row", false) },
     });
   }
 
@@ -987,7 +988,7 @@ export class ZeroBounceSDK {
       file: fileStreamOrBlob,
       fileName,
       baseURL: this._domain_search_base_url,
-      fields: { domain_column, has_header_row: Boolean(has_header_row) },
+      fields: { domain_column, has_header_row: jobBooleanText(has_header_row, "has_header_row", false) },
     });
   }
 

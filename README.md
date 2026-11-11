@@ -29,7 +29,7 @@ Bulk `getFile` / `getScoringFile` return the downloaded CSV as a **string** in N
 - **`npm run test:unit`** — Unit tests only.
 - **`npm run test:types`** — Type-checks the declaration file and a TypeScript consumer.
 - **`npm run dts-check`** — Type-checks the shipped declaration files, `zeroBounceSDK.d.ts` and `zeroBounceSDK.d.mts`.
-- **`npm run build && npm run test:smoke`** — Builds the bundle and runs a smoke test against `dist/`. **It calls the live ZeroBounce API**: after checking the exports it sends one real `getCredits` request over the network with a dummy key (`test-api-key`), and passes once the request reaches the API (the API rejecting that dummy key counts as a pass). It needs network access, fails without it, and is not part of `npm test`. No real key is needed or used.
+- **`npm run build && npm run test:smoke`** — Builds the bundle and runs a smoke test against `dist/`. It checks the exports offline, then, **only when `ZEROBOUNCE_API_KEY` is set to a real key**, sends one live `getCredits` request and passes when the API answers with a credit balance (an invalid key's `-1` fails). Without the variable it skips the live request and says so. A placeholder key cannot work: Cloudflare answers it with `403 error code: 1020`. It is not part of `npm test`.
 
 ## TypeScript
 
@@ -389,7 +389,7 @@ try {
 
 Bulk validation uses `https://bulkapi.zerobounce.net/v2`. See [v2 send file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-send-file), [v2 file status](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-file-status), and [v2 get file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-get-file).
 
-**Bulk API v2:** `ZeroBounceSDK.ZBDownloadType` provides `PHASE_1`, `PHASE_2`, and `COMBINED` for `getFile` / `getScoringFile`. File status responses may include `file_phase_2_status`. For `getFile`, pass an optional second argument `{ downloadType, activityData }` (validation only for `activityData`; `getScoringFile` does not send `activity_data`). If the API returns a JSON error body with HTTP 200, the SDK returns a parsed object instead of treating the body as CSV.
+**Bulk API v2:** `ZeroBounceSDK.ZBDownloadType` provides `PHASE_1`, `PHASE_2`, and `COMBINED` for `getFile` / `getScoringFile`. File status responses may include `file_phase_2_status`. For `getFile`, pass an optional second argument `{ downloadType, activityData }` (validation only for `activityData`; `getScoringFile` does not send `activity_data`). If the API answers with JSON instead of a file (an error body, even on HTTP 200, or any `application/json` response), `getFile`, `getScoringFile`, `getEmailFinderFile` and `getDomainSearchFile` reject with a `ZBApiError` whose `statusCode` is the HTTP status; they do not resolve with the parsed object.
 
 - ##### Send a csv file containing email addresses to get the scoring of the emails
 

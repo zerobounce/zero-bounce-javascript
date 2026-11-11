@@ -2,6 +2,7 @@
  * Smoke test: load the built UMD bundle and verify the SDK API exists.
  * Run after: npm run build
  * Run: node tests/smoke-dist.js
+ * Live part: only with ZEROBOUNCE_API_KEY set to a real key; skipped otherwise.
  */
 const path = require("path");
 
@@ -46,22 +47,34 @@ assert(typeof zb.guessFormat === "function", "guessFormat should be a function")
 
 console.log("Smoke test passed: dist/zeroBounceSDK.js exports correct API.");
 
-// Test that fetch is available in Node (issue #6: TypeError: fetch failed)
-console.log("\nTesting getCredits() in Node (triggers fetch)...");
-zb.init("test-api-key");
+// Live check: one real getCredits request, which proves fetch works in this
+// Node and the bundle reaches the API. It needs a real key: Cloudflare answers
+// a placeholder key with "403 error code: 1020" before the API sees it, so a
+// dummy key can no longer show anything. Without ZEROBOUNCE_API_KEY the live
+// check is skipped and only the export checks above have run.
+const apiKey = process.env.ZEROBOUNCE_API_KEY;
+if (!apiKey || !apiKey.trim()) {
+  console.log(
+    "\nSkipping the live getCredits() check: set ZEROBOUNCE_API_KEY to a real key to run it."
+  );
+  process.exit(0);
+}
+
+console.log("\nTesting getCredits() in Node against the live API...");
+zb.init(apiKey.trim());
 zb
   .getCredits()
   .then((r) => {
-    console.log("getCredits() succeeded (fetch works). Response type:", typeof r);
+    const credits = Number(r && r.Credits);
+    // -1 is what a dead or invalid key gets back.
+    if (!Number.isFinite(credits) || credits < 0) {
+      console.error("getCredits() answered, but not with a usable credit balance. Is the key valid?");
+      process.exit(1);
+    }
+    console.log("getCredits() succeeded: fetch works and the key is valid.");
     process.exit(0);
   })
   .catch((e) => {
-    const msg = e?.message || String(e);
-    // API returned 403 / invalid key = fetch worked, only API rejected
-    if (msg.includes("api_key is invalid")) {
-      console.log("getCredits() reached API (fetch works). API correctly rejected invalid key.");
-      process.exit(0);
-    }
-    console.error("getCredits() failed (fetch may be missing in Node):", msg);
+    console.error("getCredits() failed:", e?.message || String(e));
     process.exit(1);
   });

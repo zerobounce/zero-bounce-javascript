@@ -36,6 +36,38 @@ export function requireHttpsUrl(url, name = "apiBaseURL") {
 }
 
 /**
+ * Drops trailing slashes, so a base URL given as ".../v2/" does not produce
+ * ".../v2//validate". Done without a regular expression: `/\/+$/` backtracks
+ * quadratically on a string of many slashes, which CodeQL flags as a
+ * polynomial ReDoS when the value comes from a caller.
+ */
+export function trimTrailingSlashes(value) {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47 /* "/" */) end -= 1;
+  return value.slice(0, end);
+}
+
+/** An https base URL with its trailing slashes removed. */
+export function normalizeBaseUrl(url, name) {
+  return trimTrailingSlashes(requireHttpsUrl(url, name));
+}
+
+/**
+ * A yes/no option, parsed strictly: true / false, the strings "true" /
+ * "false" in any case, or 1 / 0. Anything else is rejected rather than
+ * guessed at, so the string "false" is never sent as true.
+ */
+export function strictBoolean(value, name) {
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === 0) return value === 1;
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase();
+    if (text === "true" || text === "false") return text === "true";
+  }
+  throw new Error(`ZeroBounce: ${name} parameter is invalid. Must be true or false.`);
+}
+
+/**
  * Reject a key with surrounding whitespace or control characters — for example
  * one read from a file with its trailing newline. `fetch` would otherwise
  * reject it as a header value and quote it, unredacted, in its own error.
@@ -204,11 +236,17 @@ function accountLevelMessage(parsed) {
       }
     }
   }
-  // LIVE: the filters spell it "Error": an invalid or drained key answers
-  // them with {"Error": "Invalid API key or your account ran out of credits"}.
-  for (const key of ["error", "Error"]) {
-    if (typeof parsed[key] === "string" && isAccountLevelText(parsed[key])) {
-      return stripErrorPrefix(parsed[key].trim());
+  // LIVE: an invalid or drained key answers validate, activity and
+  // getapiusage with {"error": "..."} and the filters with {"Error": "..."},
+  // all on an HTTP 200 with no "success" field. Without a "success" field any
+  // non-empty error string is a failure, whatever it says, as in the other
+  // SDKs. With one, only the key / credits wording is.
+  const noSuccess = !Object.prototype.hasOwnProperty.call(parsed, "success");
+  for (const key of ["error", "error_message", "Error"]) {
+    const value = parsed[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    if (noSuccess || (key !== "error_message" && isAccountLevelText(value))) {
+      return stripErrorPrefix(value.trim()) || value.trim();
     }
   }
   return null;
@@ -345,18 +383,20 @@ function processGetFileResponseBody(finalResult, response, scoring) {
     throw apiError(`Empty response from ZeroBounce (HTTP ${status})`, status);
   }
 
+  // A file download is never JSON: a body served as application/json, or a
+  // JSON object that reads as an API error, rejects with the status (as in
+  // the Python and Go SDKs) rather than resolving as an object or as CSV text.
   const trimmed = finalResult.trim();
-  const looksJson =
-    ct.includes("application/json") || trimmed.startsWith("{") || trimmed.startsWith("[");
-
-  if (looksJson) {
+  const isJsonType = ct.includes("application/json");
+  if (isJsonType || trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    let parsed;
     try {
-      const parsed = JSON.parse(finalResult);
-      if (shouldReturnGetFileAsJsonError(parsed)) {
-        return parsed;
-      }
+      parsed = JSON.parse(finalResult);
     } catch {
       throw apiError("ZeroBounce returned a response that is not valid JSON.", status);
+    }
+    if (isJsonType || shouldReturnGetFileAsJsonError(parsed)) {
+      throw apiError(messageFromBody(finalResult, status), status);
     }
   }
 
