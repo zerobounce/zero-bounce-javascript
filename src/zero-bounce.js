@@ -377,10 +377,11 @@ export class ZeroBounceSDK {
     // LIVE: the API requires `timeout` as a JSON string ("30"). Sent as a
     // number it rejects the whole batch with the account-level
     // "Invalid API Key or your account ran out of credits" error.
-    // activity_data and verify_plus stay JSON booleans.
+    // activity_data and verify_plus stay JSON booleans, parsed as strictly as
+    // every other boolean option, so "false" or "no" is never sent as given.
     if (timeout != null) body.timeout = String(timeout);
-    if (activityData != null) body.activity_data = activityData;
-    if (verifyPlus != null) body.verify_plus = verifyPlus;
+    if (activityData != null) body.activity_data = strictBoolean(activityData, "activityData");
+    if (verifyPlus != null) body.verify_plus = strictBoolean(verifyPlus, "verifyPlus");
     return createRequest({
       requestType: "POST",
       path: "/validatebatch",
