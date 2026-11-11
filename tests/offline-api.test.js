@@ -529,9 +529,12 @@ describe("offline API", () => {
     ).resolves.toEqual({ Message: "Filter has been added." });
   });
 
-  it("leaves a per-email scoring error on the resolved result", async () => {
+  it("rejects a scoring body that is only an error, as the other SDKs do", async () => {
     const sdk = client("score-item-1");
-    await expect(sdk.scoreEmail("not-an-email")).resolves.toEqual({ error: "invalid email" });
+    await expect(sdk.scoreEmail("not-an-email")).rejects.toMatchObject({
+      message: "invalid email",
+      statusCode: 200,
+    });
   });
 
   it("sends scoreEmail and listFilters as form posts when method is POST", async () => {
@@ -970,7 +973,7 @@ describe("offline API", () => {
     expect(error.message).toBe("Error 1020: Access denied");
   });
 
-  it("returns a getFile JSON error object and still downloads CSV", async () => {
+  it("rejects a getFile JSON error object and still downloads CSV", async () => {
     const previous = global.fetch;
     const sdk = client("parity-key");
     global.fetch = previous;
@@ -982,7 +985,7 @@ describe("offline API", () => {
         text: () => Promise.resolve(JSON.stringify({ success: false, message: "File not ready" })),
       })
     );
-    await expect(sdk.getFile("file-1")).resolves.toEqual({ success: false, message: "File not ready" });
+    await expect(sdk.getFile("file-1")).rejects.toMatchObject({ message: "File not ready", statusCode: 200 });
     fake.restore();
     fake = installFakeFetch();
     const csvSdk = client("parity-key");

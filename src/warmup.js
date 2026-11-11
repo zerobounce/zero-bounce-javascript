@@ -16,6 +16,8 @@ import {
   pathSegment,
   redactSecrets,
   requireHttpsUrl,
+  strictBoolean,
+  trimTrailingSlashes,
 } from "./utils.js";
 
 const DEFAULT_BASE_URL = "https://warmup-api.zerobounce.net";
@@ -67,17 +69,6 @@ function fetchTimeoutSignal() {
   return undefined;
 }
 
-/**
- * Drops trailing slashes without a regular expression: `/\/+$/` backtracks
- * quadratically on a string of many slashes, which CodeQL flags as a
- * polynomial ReDoS when the value comes from a caller.
- */
-function trimTrailingSlashes(value) {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47 /* "/" */) end -= 1;
-  return value.slice(0, end);
-}
-
 export class ZeroBounceWarmup {
   static DEFAULT_BASE_URL = DEFAULT_BASE_URL;
 
@@ -89,7 +80,9 @@ export class ZeroBounceWarmup {
   constructor(apiKey, baseURL = DEFAULT_BASE_URL) {
     checkApiKey(apiKey, "Warmup api key");
     const base = requireHttpsUrl(baseURL || DEFAULT_BASE_URL, "baseURL");
-    this._api_key = apiKey;
+    // Not enumerable, so util.inspect, console.log and JSON.stringify of a
+    // client do not print the key.
+    Object.defineProperty(this, "_api_key", { value: apiKey, writable: true, enumerable: false });
     this._root = `${trimTrailingSlashes(base)}${BASE_PATH}`;
   }
 
@@ -212,7 +205,7 @@ export class ZeroBounceWarmup {
       // zb_managed has no engagement_rule_id field: say so rather than drop it.
       throw clientError("engagement_rule_id is for self_managed.");
     }
-    if (ignoreConflict != null) body.ignore_conflict = Boolean(ignoreConflict);
+    if (ignoreConflict != null) body.ignore_conflict = strictBoolean(ignoreConflict, "ignore_conflict");
     if (emailContent != null) {
       const content = { ...emailContent };
       const types = content.types_of_emails;

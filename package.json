@@ -1,7 +1,17 @@
 {
   "name": "@zerobounce/zero-bounce-sdk",
   "version": "3.1.0",
-  "description": "This SDK contains methods for interacting easily with ZeroBounce API. More information about ZeroBounce you can find in the official documentation.",
+  "description": "Official ZeroBounce JavaScript SDK: email validation, AI scoring, bulk files, email finder and domain search",
+  "keywords": [
+    "zerobounce",
+    "email-validation",
+    "email-verification",
+    "email-finder",
+    "domain-search",
+    "sdk",
+    "javascript",
+    "typescript"
+  ],
   "main": "dist/zeroBounceSDK.js",
   "types": "zeroBounceSDK.d.ts",
   "exports": {
@@ -46,7 +56,7 @@
     "type": "git",
     "url": "git+https://github.com/zerobounce/zero-bounce-javascript.git"
   },
-  "author": "",
+  "author": "ZeroBounce",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/zerobounce/zero-bounce-javascript/issues"

@@ -214,8 +214,9 @@ export interface ScoringFileStatusResponse {
 }
 
 /**
- * When GET getfile returns JSON treated as an error body (HTTP 200 or parsed failure), or non-OK HTTP with JSON body.
- * See SDK `getFileJsonIndicatesFailure` (utils) for which JSON bodies are treated as errors vs CSV.
+ * The JSON error body a getfile call resolved with in 3.1.0 and earlier.
+ * @deprecated getfile and its variants now reject such a body with a
+ * `ZBApiError` carrying the HTTP status; they no longer resolve with it.
  */
 export interface GetFileJsonErrorPayload {
   success?: boolean | string;
@@ -787,14 +788,15 @@ export class ZeroBounceSDK {
    * Download result file for a completed validation.
    * In the browser, triggers a download and returns the filename.
    * In Node.js and other non-browser runtimes, returns the file body as a string.
-   * On API error (including JSON with HTTP 200) returns a parsed object.
+   * Rejects with a `ZBApiError` carrying the HTTP status when the API answers
+   * with JSON instead of a file (including an error body on HTTP 200).
    * @param fileId - ID of the submitted file
    * @param options - Optional `downloadType` and `activityData` (see v2 get file API).
    */
   getFile(
     fileId: string,
     options?: GetFileOptions | null
-  ): Promise<string | Blob | GetFileJsonErrorPayload | undefined>;
+  ): Promise<string | Blob | undefined>;
 
   /**
    * Download result file for a completed scoring job.
@@ -807,7 +809,7 @@ export class ZeroBounceSDK {
   getScoringFile(
     fileId: string,
     options?: GetFileOptions | null
-  ): Promise<string | Blob | GetFileJsonErrorPayload | undefined>;
+  ): Promise<string | Blob | undefined>;
 
   /**
    * Delete a submitted validation file.
@@ -839,7 +841,7 @@ export class ZeroBounceSDK {
 
   getEmailFinderFile(
     fileId: string
-  ): Promise<string | Blob | GetFileJsonErrorPayload | undefined>;
+  ): Promise<string | Blob | undefined>;
 
   deleteEmailFinderFile(
     fileId: string
@@ -861,7 +863,7 @@ export class ZeroBounceSDK {
 
   getDomainSearchFile(
     fileId: string
-  ): Promise<string | Blob | GetFileJsonErrorPayload | undefined>;
+  ): Promise<string | Blob | undefined>;
 
   deleteDomainSearchFile(
     fileId: string

@@ -46,7 +46,7 @@ describe("getFile in Node.js", () => {
     expect(response).toBe(csvBody);
   });
 
-  it("returns parsed JSON when getfile body is an API error (HTTP 200)", async () => {
+  it("rejects with the status when the getfile body is an API error (HTTP 200)", async () => {
     const errPayload = { success: false, message: "File not ready" };
     jest.spyOn(global, "fetch").mockImplementationOnce(() =>
       Promise.resolve({
@@ -57,7 +57,9 @@ describe("getFile in Node.js", () => {
       })
     );
 
-    const response = await zeroBounceSDK.getFile(fileId);
-    expect(response).toEqual(errPayload);
+    await expect(zeroBounceSDK.getFile(fileId)).rejects.toMatchObject({
+      message: "File not ready",
+      statusCode: 200,
+    });
   });
 });

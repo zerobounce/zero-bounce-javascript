@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+Upgrading from 3.1.x: handle a rejection where a file download, a 2xx error
+body or a non-boolean option used to resolve or be sent; see below.
+
+- `getFile`, `getScoringFile`, `getEmailFinderFile` and `getDomainSearchFile`
+  reject with a `ZBApiError` carrying the HTTP status when the API answers with
+  JSON instead of a file: an error body such as
+  `{"success": false, "message": "File not found"}` (rejects with
+  "File not found", `statusCode` 200), or any `application/json` response.
+  3.1.0 resolved an error body as the parsed object, and returned other
+  `application/json` bodies as if they were the CSV text, as the Python and Go
+  SDKs never did. TypeScript: the four methods return
+  `Promise<string | Blob | undefined>`; `GetFileJsonErrorPayload` is
+  deprecated and no longer part of their return types.
+- A 2xx JSON body with no `success` field and a non-empty `error`,
+  `error_message` or `Error` string rejects whatever the text says, with
+  `statusCode` 200, as in the Python and Go SDKs. 3.1.0 rejected it only for
+  invalid-key or out-of-credits wording, so for example `scoreEmail` resolved
+  `{"error": "invalid email"}`; it now rejects with "invalid email".
+  Unchanged: validate's greylist answer `{"Message": "..."}` is a result, and
+  `getCredits` still resolves `{"Credits": "-1"}`.
+- Every boolean option is parsed strictly, as the S3 / SFTP jobs' have been
+  since 3.1.0: `true` / `false`, `"true"` / `"false"` (any case) or `1` / `0`,
+  and anything else rejects with "parameter is invalid. Must be true or
+  false." before a request is sent. This covers `validateEmail`'s
+  `activityData`, `verifyPlus`, `domainInfo` and `greylistProcessing`;
+  `has_header_row`, `remove_duplicate` and `allowPhase2` on `sendFile`,
+  `sendFileStream`, `sendScoringFile` and `sendScoringFileStream`;
+  `getFile`'s `activityData`; `has_header_row` on the four bulk email finder
+  and domain search uploads; and Warmup `addSendingAccount`'s
+  `ignoreConflict`. 3.1.0 used truthiness, so the string `"false"` was sent as
+  `true` and any other non-empty value as `true`. Leaving an option out, or
+  passing `null`, keeps its default as before. `greylistProcessing: "true"`
+  together with `callbackUrl` is now accepted; 3.1.0 rejected it as
+  "Requires greylistProcessing: true".
+
+### Changed
+
+- `npm run test:smoke` makes its live `getCredits` request only when
+  `ZEROBOUNCE_API_KEY` is set, and fails unless the API answers with a credit
+  balance of 0 or more. Without the variable it skips the request and says so.
+  It used a dummy key, which Cloudflare now answers with `403 error code: 1020`,
+  so it could not pass.
+- `package.json` has a specific `description`, `keywords` and `author`
+  ("ZeroBounce").
+
+### Fixed
+
+- Base URLs passed to `init` (`apiBaseURL`, `listEvaluatorBaseURL`,
+  `inboxPlacementBaseURL`, `emailFinderBaseURL`, `domainSearchBaseURL`) have
+  trailing slashes removed. In 3.1.0 `"https://api.zerobounce.net/v2/"` sent
+  requests to `https://api.zerobounce.net/v2//validate`. `ZeroBounceWarmup`
+  already did this.
+- The API key no longer appears in `util.inspect`, `console.log` or
+  `JSON.stringify` of a `ZeroBounceSDK` or `ZeroBounceWarmup` client: the
+  `_api_key` property is not enumerable. It is still sent with every request.
+
 ## [3.1.0] - 2026-11-11
 
 This minor release has breaking changes. Code that compiled or ran on 3.0.0 can
@@ -25,6 +83,21 @@ fail on 3.1.0 in the cases marked **Breaking** below:
 
 Calls that resolved on 3.0.0 with an invalid-key message in the body now reject
 instead; see **Fixed**.
+
+### Breaking
+
+Upgrading from 3.0.x (each item is described in full below):
+
+- `validateS3file` / `scoreS3file`: pass `file_name`, `has_header_row` and
+  `return_url`, and drop the column options and `remove_duplicate`; use
+  `remove_duplicates`.
+- The eight S3 / SFTP jobs: give `has_header_row` and `remove_duplicates` as
+  `true` / `false`, `"true"` / `"false"` or `1` / `0`.
+- TypeScript: the S3 / SFTP option types changed (`BulkRootFileJobOptions`).
+- Warmup: drop `engagementRuleId` for `zb_managed` accounts, and `await`
+  every `ZeroBounceWarmup` call inside `try` (or use `.catch()`).
+- The email finder, domain search and filters reject an invalid key
+  (`statusCode` 200) where 3.0.0 resolved with the message in the body.
 
 ### Added
 

@@ -916,7 +916,7 @@ describe("ZeroBounceSDK", () => {
       expect(arg.params.activity_data).toBeUndefined();
     });
 
-    it("should return parsed JSON when getfile body is an API error (HTTP 200)", async () => {
+    it("should reject when getfile body is an API error (HTTP 200)", async () => {
       const errPayload = { success: false, message: "File not ready" };
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
       jest.spyOn(global, "fetch").mockImplementationOnce(() =>
@@ -927,8 +927,10 @@ describe("ZeroBounceSDK", () => {
           text: () => Promise.resolve(JSON.stringify(errPayload)),
         })
       );
-      const response = await zeroBounceSDK.getFile(fileId);
-      expect(response).toEqual(errPayload);
+      await expect(zeroBounceSDK.getFile(fileId)).rejects.toMatchObject({
+        message: "File not ready",
+        statusCode: 200,
+      });
     });
 
     it("should trigger browser download and return filename on success", async () => {
