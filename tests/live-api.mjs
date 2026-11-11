@@ -75,6 +75,20 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+/**
+ * A rejected /guessformat request still resolves: a bad key is answered with a
+ * bare {"Message": "..."} body, which carries no `error` key for the SDK to
+ * turn into a throw, so an "is an object" check passes on a rejection and
+ * proves nothing. An answered response echoes the domain it was asked about.
+ */
+function assertGuessFormatAnswered(response, domain) {
+  assert(response && typeof response === "object", "no response");
+  assert(
+    response.domain === domain,
+    `the response did not echo the domain: ${JSON.stringify(response)}`
+  );
+}
+
 /** Run `call`, expecting it to fail, and hand back the (redacted) message. */
 async function expectFailure(call, what) {
   try {
@@ -124,7 +138,11 @@ async function validationFree() {
   const before = await creditBalance(client);
 
   await test("getCredits returns a balance", async () => {
+    // LIVE: -1 is the API's answer for an INVALID key, not a balance.
+    // Accepting it lets a dead key sail through the one check meant to catch
+    // it while every billable call below fails.
     assert(Number.isFinite(before), `Credits was ${before}`);
+    assert(before > 0, `not a usable credit balance: ${before}`);
   });
 
   await test("getApiUsage parses the documented date formats", async () => {
@@ -278,12 +296,20 @@ async function validationSpend() {
       first_name: "John",
       last_name: "Doe",
     });
-    assert(response && typeof response === "object", "no response");
+    assertGuessFormatAnswered(response, "example.com");
+    assert(
+      typeof response.email === "string",
+      `no email in the response: ${JSON.stringify(response)}`
+    );
   });
 
   await test("domain search", async () => {
     const response = await client.findEmailFormatByDomain({ domain: "example.com" });
-    assert(response && typeof response === "object", "no response");
+    assertGuessFormatAnswered(response, "example.com");
+    assert(
+      typeof response.format === "string",
+      `no format in the response: ${JSON.stringify(response)}`
+    );
   });
 
   let fileId = null;
