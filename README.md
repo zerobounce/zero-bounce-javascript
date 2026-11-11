@@ -650,3 +650,7 @@ Ran all test suites.
 2. **Actions → Publish → Run workflow** with that tag.
 
 Registry: [@zerobounce/zero-bounce-sdk on npm](https://www.npmjs.com/package/@zerobounce/zero-bounce-sdk)
+
+## License
+
+MIT. See [LICENSE](LICENSE).
