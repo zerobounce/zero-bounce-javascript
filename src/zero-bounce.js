@@ -1562,7 +1562,7 @@ export class ZeroBounceSDK {
     return this._iptRequest("GET", "/tests", { params });
   }
 
-  /** Delete a finished test. DELETE /test/{id}. Resolves to null on an empty 2xx (204 No Content). */
+  /** Delete a finished test. DELETE /test/{id}. Resolves to {} on an empty 2xx (204 No Content). */
   async deleteInboxPlacementTest(testId) {
     if (!this._initialized) {
       notInitialized();
@@ -1572,7 +1572,7 @@ export class ZeroBounceSDK {
       parameterIsMissing("testId");
       return;
     }
-    // A 204 No Content (or an empty 200) is a success: it resolves to null.
+    // A 204 No Content (or an empty 200) is a success: it resolves to {}.
     return this._iptRequest("DELETE", `/test/${encodeURIComponent(String(testId).trim())}`, {
       emptyIsSuccess: true,
     });

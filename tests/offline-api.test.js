@@ -3,6 +3,7 @@
  */
 import { inspect } from "util";
 import { ZeroBounceSDK } from "../src/zero-bounce.js";
+import { expectEveryFormRedacted } from "./secret-forms.js";
 
 const HTML_PAGE = (() => {
   const head =
@@ -255,6 +256,7 @@ function installFakeFetch() {
       bearer,
       body: body.fields,
       json: body.json,
+      multipart: typeof FormData !== "undefined" && init.body instanceof FormData,
       fields: { ...query, ...body.fields },
       apiKey: body.fields.api_key || query.api_key || bearer || "",
       redirect: init.redirect,
@@ -441,6 +443,33 @@ describe("offline API", () => {
     expect(names).toEqual(methods);
   });
 
+  it("rejects a 2xx body that is not JSON with a ZBApiError and status 200, on every JSON method", async () => {
+    const sdk = client("parity-key");
+    const bodies = {
+      "plain text": ["text/plain", "Service temporarily busy"],
+      "plain text, no content type": [null, "Service temporarily busy"],
+      "CSV under application/json": ["application/json", "email,status\na@example.com,valid\n"],
+      "cut-off JSON": ["application/json", '{"status":"valid","address":'],
+    };
+    // Downloads return CSV text; every other public method expects JSON.
+    const jsonCalls = callAll(sdk).filter(([name]) => !/^get\w*File$/.test(name));
+    expect(jsonCalls.length).toBe(callAll(sdk).length - 4);
+    for (const [kind, [contentType, body]] of Object.entries(bodies)) {
+      for (const status of [200, 201]) {
+        global.fetch = async () => httpResponse(status, body, contentType);
+        for (const [name, run] of jsonCalls) {
+          let outcome;
+          try {
+            outcome = { resolved: await run() };
+          } catch (error) {
+            outcome = { name: error.name, status: error.statusCode };
+          }
+          expect({ kind, name, outcome }).toEqual({ kind, name, outcome: { name: "ZBApiError", status } });
+        }
+      }
+    }
+  });
+
   it("keeps every form of the key out of a transport or API error, on every public method", async () => {
     // A key whose URL-encoded, escape()d and JSON-escaped forms all differ
     // from the raw one and from each other.
@@ -503,7 +532,7 @@ describe("offline API", () => {
     }
   });
 
-  it("resolves an empty 2xx to deleteInboxPlacementTest as null, and rejects every other empty answer with its status", async () => {
+  it("resolves an empty 2xx to deleteInboxPlacementTest as {}, and rejects every other empty answer with its status", async () => {
     const sdk = client("parity-key");
     const answerWith = (status, body = "") => {
       global.fetch = async () => ({
@@ -526,7 +555,7 @@ describe("offline API", () => {
         answerWith(status, body);
         const expected =
           name === "deleteInboxPlacementTest"
-            ? { resolved: null }
+            ? { resolved: {} }
             : { status, message: `Empty response from ZeroBounce (HTTP ${status})` };
         expect({ name, status, outcome: await settle(run) }).toEqual({ name, status, outcome: expected });
       }
@@ -680,6 +709,48 @@ describe("offline API", () => {
     ).resolves.toEqual({ Message: "Filter has been added." });
   });
 
+  it("rejects a download whose body is an HTML fragment with only <head> or only <body>, on every download", async () => {
+    const sdk = client("parity-key");
+    // Neither has a doctype or <html>, and text/csv hides it: only the <head>
+    // or the <body> marker tells each apart from CSV text.
+    const pages = {
+      "<head> only": "<head><title>Blocked</title></head>no",
+      "<body> only": "<body>Access denied</body>",
+    };
+    const downloads = {
+      getFile: () => sdk.getFile("file-1"),
+      getScoringFile: () => sdk.getScoringFile("file-1"),
+      getEmailFinderFile: () => sdk.getEmailFinderFile("file-1"),
+      getDomainSearchFile: () => sdk.getDomainSearchFile("file-1"),
+    };
+    expect(Object.keys(downloads).sort()).toEqual(publicMethods(ZeroBounceSDK).filter((name) => /^get\w*File$/.test(name)));
+    for (const [page, body] of Object.entries(pages)) {
+      global.fetch = async () => httpResponse(200, body, "text/csv");
+      for (const [name, run] of Object.entries(downloads)) {
+        let outcome;
+        try {
+          outcome = { resolved: await run() };
+        } catch (error) {
+          outcome = { status: error.statusCode, name: error.name };
+        }
+        expect({ page, name, outcome }).toEqual({ page, name, outcome: { status: 200, name: "ZBApiError" } });
+      }
+    }
+  });
+
+  it("keeps an email finder or domain search result with an empty message field as a result", async () => {
+    const sdk = client("parity-key");
+    // Not message-only: it has other keys. Only a body whose every key is a
+    // message key is an error.
+    const result = { email: "ada@example.com", domain: "example.com", email_confidence: "high", message: "" };
+    global.fetch = async () => httpResponse(200, JSON.stringify(result), "application/json");
+    const finderCalls = callAll(sdk).filter(([name]) => /^(findEmail|guessFormat)/.test(name));
+    expect(finderCalls.length).toBe(5);
+    for (const [name, run] of finderCalls) {
+      expect({ name, result: await run() }).toEqual({ name, result });
+    }
+  });
+
   it("rejects a scoring body that is only an error, as the other SDKs do", async () => {
     const sdk = client("score-item-1");
     await expect(sdk.scoreEmail("not-an-email")).rejects.toMatchObject({
@@ -754,6 +825,65 @@ describe("offline API", () => {
     fake.records.length = 0;
     await sdk.sendDomainSearchFile({ file, domain_column: 1, has_header_row: false });
     expect(fake.only().fields.has_header_row).toBe("false");
+  });
+
+  it("sends every multipart field under its documented name, on every upload method", async () => {
+    const sdk = client("parity-key");
+    const api_key = "parity-key";
+    const return_url = "https://example.com/done";
+    // Distinct values, so a field sent under another field's name fails too.
+    const bulk = {
+      email_address_column: 1, first_name_column: 2, last_name_column: 3, gender_column: 4,
+      ip_address_column: 5, return_url, has_header_row: true, remove_duplicate: false, allowPhase2: true,
+    };
+    const bulkWire = {
+      api_key, file: "<file>", email_address_column: "1", first_name_column: "2", last_name_column: "3",
+      gender_column: "4", ip_address_column: "5", return_url, has_header_row: "true",
+      remove_duplicate: "false", allow_phase_2: "true",
+    };
+    const scoring = { email_address_column: 6, return_url, has_header_row: true, remove_duplicate: false };
+    const scoringWire = {
+      api_key, file: "<file>", email_address_column: "6", return_url, has_header_row: "true", remove_duplicate: "false",
+    };
+    const finder = {
+      domain_column: 1, first_name_column: 2, last_name_column: 3, middle_name_column: 4,
+      full_name_column: 5, has_header_row: true,
+    };
+    const finderWire = {
+      api_key, file: "<file>", domain_column: "1", first_name_column: "2", last_name_column: "3",
+      middle_name_column: "4", full_name_column: "5", has_header_row: "true",
+    };
+    const domain = { domain_column: 7, has_header_row: true };
+    const domainWire = { api_key, file: "<file>", domain_column: "7", has_header_row: "true" };
+    const evaluator = { email_address_column: 8 };
+    const evaluatorWire = { api_key, file: "<file>", email_address_column: "8" };
+    const table = {
+      sendFile: [() => sdk.sendFile({ file, ...bulk }), bulkWire],
+      sendFileStream: [() => sdk.sendFileStream(file, "emails.csv", bulk), bulkWire],
+      sendScoringFile: [() => sdk.sendScoringFile({ file, ...scoring }), scoringWire],
+      sendScoringFileStream: [() => sdk.sendScoringFileStream(file, "emails.csv", scoring), scoringWire],
+      sendEmailFinderFile: [() => sdk.sendEmailFinderFile({ file, ...finder }), finderWire],
+      sendEmailFinderFileStream: [() => sdk.sendEmailFinderFileStream(file, "emails.csv", finder), finderWire],
+      sendDomainSearchFile: [() => sdk.sendDomainSearchFile({ file, ...domain }), domainWire],
+      sendDomainSearchFileStream: [() => sdk.sendDomainSearchFileStream(file, "emails.csv", domain), domainWire],
+      sendListEvaluatorFile: [() => sdk.sendListEvaluatorFile({ file, ...evaluator }), evaluatorWire],
+      sendListEvaluatorFileStream: [() => sdk.sendListEvaluatorFileStream(file, "emails.csv", evaluator), evaluatorWire],
+      sendEvaluatedFile: [() => sdk.sendEvaluatedFile("eval-file-1"), { api_key, file_id: "eval-file-1" }],
+    };
+    // Complete by construction: the table holds exactly the public methods
+    // (callAll covers every one) that send a multipart body.
+    const multipart = [];
+    for (const [name, run] of callAll(sdk)) {
+      fake.records.length = 0;
+      await run().catch(() => {});
+      if (fake.records.some((record) => record.multipart)) multipart.push(name);
+    }
+    expect(Object.keys(table).sort()).toEqual(multipart.sort());
+    for (const [name, [run, wire]] of Object.entries(table)) {
+      fake.records.length = 0;
+      await run();
+      expect({ name, body: fake.only().body }).toEqual({ name, body: wire });
+    }
   });
 
   it("sends column index 0 for required columns and leaves optional 0 columns out", async () => {
@@ -1566,27 +1696,10 @@ describe("offline API", () => {
     expect(covered.sort()).toEqual(publicMethods(ZeroBounceSDK));
   });
 
-  it("masks the API key in each of its forms, URL-encoded JSON-escaped included, needing every one", async () => {
-    // A space, a quote, "/", "+", "%", "&", "=", "<", ">", "'" and "\\": every
-    // form below differs from every other.
+  it("masks the API key in every composed form (JSON-escaped up to twice, with and without \\/, URL- and form-encoded), needing every one", async () => {
     const key = `api SeCrEt"/+%&=<>'\\z`;
-    const json = JSON.stringify(key).slice(1, -1);
-    const form = (text) => new URLSearchParams({ s: text }).toString().slice(2);
-    const bases = {
-      raw: key,
-      json,
-      "json, / as \\/": json.replace(/\//g, "\\/"),
-      "json twice": JSON.stringify(json).slice(1, -1),
-    };
-    const forms = { "escape()": escape(key) };
-    for (const [name, base] of Object.entries(bases)) {
-      forms[name] = base;
-      forms[`${name}, URL-encoded (%20)`] = encodeURIComponent(base);
-      forms[`${name}, form-encoded (+)`] = form(base);
-    }
-    expect(new Set(Object.values(forms)).size).toBe(Object.keys(forms).length);
     const sdk = client(key);
-    const messageFor = async (echo) => {
+    await expectEveryFormRedacted(key, async (echo) => {
       global.fetch = async () => httpResponse(400, `Bad Request: [${echo}]`, "text/plain");
       try {
         await sdk.validateEmail("a@example.com");
@@ -1594,14 +1707,7 @@ describe("offline API", () => {
         return error.message;
       }
       return "resolved";
-    };
-    // Each form, echoed on its own, must come back exactly as "***" would: a
-    // form left out leaks, or leaves the tail of a longer form behind.
-    const expected = await messageFor("***");
-    expect(expected).toContain("[***]");
-    const got = {};
-    for (const [name, echo] of Object.entries(forms)) got[name] = await messageFor(echo);
-    expect(got).toEqual(Object.fromEntries(Object.keys(forms).map((name) => [name, expected])));
+    });
   });
 
   it("redacts the api_key query value in a transport error even in a form no literal replacement covers", async () => {

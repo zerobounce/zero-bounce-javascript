@@ -299,7 +299,11 @@ async function inboxPlacement(): Promise<void> {
   const seeds: string[] = created.emailAddressList;
   const result: InboxPlacementTestResult = await zb.getInboxPlacementTest(created.id);
   const status: "running" | "finished" = result.status;
-  const deleted: InboxPlacementTestDeleted | null = await zb.deleteInboxPlacementTest(created.id);
+  // 4.0.1 declared Promise<InboxPlacementTestDeleted>; a patch release must keep
+  // this compiling under strictNullChecks (no `| null`).
+  const deleted: InboxPlacementTestDeleted = await zb.deleteInboxPlacementTest(created.id);
+  const deletedStatus: string = deleted.status;
+  void deletedStatus;
   const webhook: InboxPlacementWebhookResponse = await zb.getInboxPlacementWebhook();
   const webhookUrl: string = webhook.webhookUrl;
   void seeds;

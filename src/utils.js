@@ -94,22 +94,39 @@ export function pathSegment(value, name) {
   return encodeURIComponent(text);
 }
 
+/** The body of JSON.stringify(text): the form a JSON request body quotes it in. */
+const jsonEscaped = (text) => JSON.stringify(text).slice(1, -1);
+/** The same with "/" escaped as "\/", as PHP's json_encode and others write it. */
+const jsonEscapedSlash = (text) => jsonEscaped(text).replace(/\//g, "\\/");
+/** URL-encoded with spaces as %20. */
+const urlEncoded = (text) => encodeURIComponent(text);
+/** Form-encoded as URLSearchParams writes it: spaces as "+", "'" as %27. */
+const formEncoded = (text) => new URLSearchParams({ s: text }).toString().slice(2);
+
+/** The quoting steps a secret can go through before a body echoes it, up to depth 2. */
+const QUOTINGS = [jsonEscaped, jsonEscapedSlash];
+/** How the quoted copy can then be encoded: as is, URL-encoded, form-encoded. */
+const ENCODINGS = [(text) => text, urlEncoded, formEncoded];
+
 /**
- * Every form a secret can take in a message. The bases: raw, JSON-escaped (a
- * body or proxy that quotes a JSON request body), the same with "/" escaped as
- * "\/", and JSON-escaped twice (a JSON copy of that quote). Each base also
- * URL-encoded (spaces as %20) and form-encoded as URLSearchParams writes it
- * (spaces as "+", "'" as %27): a server that echoes a URL-encoded request
- * body. Plus escape() of the raw secret. Longest first, so no form leaves part
- * of a longer one behind.
+ * Every form a secret can take in a message, composed from the encoders above:
+ * the raw secret and each one- or two-step JSON quoting of it (with or without
+ * "/" as "\/"; a body or proxy quoting a JSON request body, and a JSON copy of
+ * that quote), each as is, URL-encoded and form-encoded (a server that echoes
+ * a URL-encoded request body). Plus escape() of the raw secret. Longest first,
+ * so no form leaves part of a longer one behind.
  */
 function secretForms(secret) {
   const raw = String(secret);
-  const json = JSON.stringify(raw).slice(1, -1);
-  const bases = [raw, json, json.replace(/\//g, "\\/"), JSON.stringify(json).slice(1, -1)];
+  const quoted = [raw];
+  for (const once of QUOTINGS) {
+    const first = once(raw);
+    quoted.push(first);
+    for (const twice of QUOTINGS) quoted.push(twice(first));
+  }
   const forms = [escape(raw)];
-  for (const base of bases) {
-    forms.push(base, encodeURIComponent(base), new URLSearchParams({ s: base }).toString().slice(2));
+  for (const text of quoted) {
+    for (const encode of ENCODINGS) forms.push(encode(text));
   }
   return [...new Set(forms.filter(Boolean))].sort((a, b) => b.length - a.length);
 }
@@ -533,9 +550,10 @@ export async function createRequest({
   }
 
   const status = responseStatus(response);
-  // Only for calls documented to answer 204 No Content (Inbox Placement DELETE).
+  // Only for calls documented to answer 204 No Content (Inbox Placement DELETE):
+  // an empty object, so the declared result type holds (as C/C++ "{}", iOS [:]).
   if (emptyIsSuccess && status >= 200 && status < 300 && !String(finalResult).trim()) {
-    return null;
+    return {};
   }
   const contentType = responseContentType(response);
   if (

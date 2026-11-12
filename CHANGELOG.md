@@ -31,7 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Error messages are also redacted for the URL-encoded forms of every
   secret's JSON-escaped copy (spaces as `%20` and, as `URLSearchParams`
   writes them, as `+`), for the `URLSearchParams` form of the secret itself,
-  and for a twice JSON-escaped copy. Earlier, an SMTP password or key
+  and for a twice JSON-escaped copy (with or without `/` escaped as `\/` at
+  either step, also URL- and form-encoded). Earlier, an SMTP password or key
   containing `"`, `\`, `'` or a space stayed readable in a message built
   from a body that echoes the request URL-encoded (for example a 500 quoting
   `testSmtpConfiguration`'s JSON body URL-encoded, or quoting it as a JSON
@@ -53,14 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `deleteInboxPlacementTest` resolves to `null` when the API answers with an
-  empty 2xx (204 No Content or an empty 200), as the Python, Rust and PHP SDKs
-  do. 4.0.1 rejected that success with "Empty response from ZeroBounce (HTTP
-  204)". Every other call still rejects an empty 2xx, and an empty error
-  answer still rejects with its status. The declared return type is now
-  `Promise<InboxPlacementTestDeleted | null>`, so TypeScript code that assigns
-  the result to `InboxPlacementTestDeleted` under `strictNullChecks` needs a
-  null check.
+- `deleteInboxPlacementTest` resolves to an empty object `{}` (no `id` or
+  `status`) when the API answers with an empty 2xx (204 No Content or an empty
+  200), as the C and C++ SDKs return `{}`. 4.0.1 rejected that success with
+  "Empty response from ZeroBounce (HTTP 204)". Every other call still rejects
+  an empty 2xx, and an empty error answer still rejects with its status. The
+  declared return type is unchanged (`Promise<InboxPlacementTestDeleted>`).
 - `ZeroBounceWarmup.downloadSeeds` and `downloadStatistics` reject a JSON
   answer whatever its content type: a JSON object or array body (also under
   `text/csv` or with no content type) and any JSON media type, such as
