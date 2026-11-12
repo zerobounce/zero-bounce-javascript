@@ -297,6 +297,43 @@ async function expectRejected(promise) {
   return thrown;
 }
 
+/** The public methods of a client class, from its prototype, sorted. */
+function publicMethods(cls) {
+  return Object.getOwnPropertyNames(cls.prototype)
+    .filter((name) => name !== "constructor" && name !== "init" && !name.startsWith("_"))
+    .filter((name) => typeof cls.prototype[name] === "function")
+    .sort();
+}
+
+/**
+ * Turns every https base URL a client holds (strings, and strings one level
+ * down in objects) into http, and returns the number it changed.
+ */
+function downgradeBaseUrls(target) {
+  let changed = 0;
+  const downgrade = (value) => {
+    if (typeof value === "string" && value.startsWith("https://")) {
+      changed += 1;
+      return `http://${value.slice("https://".length)}`;
+    }
+    return value;
+  };
+  for (const name of Object.getOwnPropertyNames(target)) {
+    const value = target[name];
+    if (value && typeof value === "object") {
+      for (const key of Object.keys(value)) value[key] = downgrade(value[key]);
+    } else {
+      target[name] = downgrade(value);
+    }
+  }
+  return changed;
+}
+
+/** Whether any https URL is left on the client after downgradeBaseUrls. */
+function holdsHttpsUrl(target) {
+  return JSON.stringify(Object.getOwnPropertyNames(target).map((name) => target[name])).includes("https://");
+}
+
 function client(key, base = ZeroBounceSDK.ApiURL.DEFAULT_API_URL) {
   const sdk = new ZeroBounceSDK();
   sdk.init(key, base);
@@ -1346,6 +1383,94 @@ describe("offline API", () => {
     );
     expect(error.message).toBe("Provided return URL is not permitted: None");
     expect(error.statusCode).toBe(400);
+  });
+
+  it("refuses a non-https URL on every request path, not only in init", async () => {
+    // init() refuses an http base URL; this is the per-request check behind
+    // it, reached by turning every base URL the client holds into http.
+    const sdk = client("parity-key");
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    expect(downgradeBaseUrls(sdk)).toBeGreaterThan(0);
+    expect(holdsHttpsUrl(sdk)).toBe(false);
+    const sent = [];
+    global.fetch = async (url) => {
+      sent.push(String(url));
+      throw new TypeError("fetch must not be reached");
+    };
+    const refused = [];
+    for (const [name, run] of callAll(sdk)) {
+      let message = null;
+      try {
+        await run();
+      } catch (error) {
+        message = error.message;
+      }
+      expect({ name, message }).toEqual({ name, message: "ZeroBounce: request URL must be an https:// URL" });
+      refused.push(name);
+    }
+    expect(sent).toEqual([]);
+    // Complete by construction: every public method was exercised.
+    expect(refused.sort()).toEqual(publicMethods(ZeroBounceSDK));
+  });
+
+  it("gives every request on every public method the 120 s timeout signal", async () => {
+    const sdk = client("parity-key");
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    const marker = new AbortController().signal;
+    const timeouts = [];
+    const spy = jest.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      timeouts.push(ms);
+      return marker;
+    });
+    const signals = [];
+    const answerWith = global.fetch;
+    global.fetch = async (url, init = {}) => {
+      signals.push(init.signal);
+      return answerWith(url, init);
+    };
+    const covered = [];
+    try {
+      for (const [name, run] of callAll(sdk)) {
+        signals.length = 0;
+        timeouts.length = 0;
+        await run();
+        expect({ name, marked: signals.map((signal) => signal === marker), timeouts }).toEqual({
+          name,
+          marked: [true],
+          timeouts: [120000],
+        });
+        covered.push(name);
+      }
+    } finally {
+      spy.mockRestore();
+    }
+    expect(covered.sort()).toEqual(publicMethods(ZeroBounceSDK));
+  });
+
+  it("redacts the api_key query value in a transport error even in a form no literal replacement covers", async () => {
+    // URLSearchParams writes a space as "+" and "+" as "%2B": none of the raw,
+    // encodeURIComponent or escape forms. Only the api_key=... pattern
+    // catches it.
+    const key = "secret key+1";
+    const queryForm = new URLSearchParams({ api_key: key }).toString().slice("api_key=".length);
+    expect([key, encodeURIComponent(key), escape(key)]).not.toContain(queryForm);
+    const sdk = client(key);
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    global.fetch = async (url) => {
+      throw new TypeError(`fetch failed for ${url}`);
+    };
+    let quoted = 0;
+    for (const [name, run] of callAll(sdk)) {
+      let message = "";
+      try {
+        await run();
+      } catch (error) {
+        message = `${error.message}\n${error.stack}`;
+      }
+      if (message.includes("api_key=***")) quoted += 1;
+      expect({ name, leaked: message.includes(queryForm) }).toEqual({ name, leaked: false });
+    }
+    expect(quoted).toBeGreaterThan(0);
   });
 
   it("keeps API keys isolated across concurrent clients", async () => {

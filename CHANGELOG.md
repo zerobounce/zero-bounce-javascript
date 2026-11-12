@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- `init` is all or nothing: the key and every base URL are checked before any
+  of them is stored, so an `init` that throws leaves the client exactly as it
+  was. In 4.0.1 and earlier, `init` stored the new key and main base URL
+  before checking the optional base URLs: after
+  `init("key-B", ApiURL.EU_API_URL, { domainSearchBaseURL: "http://..." })`
+  threw, a caller that caught the error sent its next requests to the EU host
+  with `key-B`, and a fresh client whose `init` threw on an `http://` base URL
+  still held the key.
+
 ## [4.0.1] - 2026-11-11
 
 ### Fixed

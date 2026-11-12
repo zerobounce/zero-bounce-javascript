@@ -55,6 +55,47 @@ async function rejects(promise) {
   return thrown;
 }
 
+/** Every public method of the Warmup client, called with valid arguments. */
+function allWarmupCalls(c) {
+  const from = "sender@example.com";
+  return [
+    ["listSendingAccounts", () => c.listSendingAccounts()],
+    ["getSendingAccount", () => c.getSendingAccount(from)],
+    ["addSendingAccount", () => c.addSendingAccount({ fromAddress: from, onboardingModel: "self_managed", engagementRuleId: 0 })],
+    ["updateSendingAccount", () => c.updateSendingAccount({ fromAddress: from, engagementRuleId: 1, statusId: 4, autoEnable: false })],
+    ["deleteSendingAccount", () => c.deleteSendingAccount(from)],
+    ["changeFromAddress", () => c.changeFromAddress(from, "new@example.com")],
+    ["listFromAddresses", () => c.listFromAddresses()],
+    ["getEngagementRules", () => c.getEngagementRules()],
+    ["setEngagementRule", () => c.setEngagementRule(from, 2)],
+    ["getCustomEngagement", () => c.getCustomEngagement(from)],
+    ["createCustomEngagement", () => c.createCustomEngagement({ cFrom: from, replyPct: 10, importantPct: 10, clickPct: 5 })],
+    ["updateCustomEngagement", () => c.updateCustomEngagement({ cFrom: from, replyPct: 10, importantPct: 10, clickPct: 5 })],
+    ["deleteCustomEngagement", () => c.deleteCustomEngagement(from, 1)],
+    ["getSeeds", () => c.getSeeds()],
+    ["downloadSeeds", () => c.downloadSeeds()],
+    ["getSeedCount", () => c.getSeedCount()],
+    ["getProgressToday", () => c.getProgressToday()],
+    ["getSentToday", () => c.getSentToday()],
+    ["getEmailsPerDay", () => c.getEmailsPerDay()],
+    ["getStatistics", () => c.getStatistics(from)],
+    ["getStatisticsPerDay", () => c.getStatisticsPerDay({ fromAddress: from, startDate: "2026-01-01", endDate: "2026-01-31" })],
+    ["getStatisticsDetailed", () => c.getStatisticsDetailed(from)],
+    ["downloadStatistics", () => c.downloadStatistics(from)],
+    ["getFromAddressStatistics", () => c.getFromAddressStatistics(from)],
+    ["checkDomainDmarc", () => c.checkDomainDmarc(from)],
+    ["testSmtpConfiguration", () => c.testSmtpConfiguration({ fromAddress: from, username: "u", password: "p", server: "smtp.example.com", port: 587 })],
+  ];
+}
+
+/** The public methods of the Warmup client, from its prototype, sorted. */
+function publicWarmupMethods() {
+  return Object.getOwnPropertyNames(ZeroBounceWarmup.prototype)
+    .filter((name) => name !== "constructor" && !name.startsWith("_"))
+    .filter((name) => typeof ZeroBounceWarmup.prototype[name] === "function")
+    .sort();
+}
+
 describe("Warmup API client", () => {
   const originalFetch = global.fetch;
   afterEach(() => {
@@ -353,6 +394,77 @@ describe("Warmup API client", () => {
     expect(error.message).not.toContain(KEY);
     // The original, unredacted error must not survive as the cause.
     expect(error.cause).toBeUndefined();
+  });
+
+  it("lists every public method in allWarmupCalls, so the sweeps that use it miss none", () => {
+    expect(allWarmupCalls(new ZeroBounceWarmup(KEY)).map(([name]) => name).sort()).toEqual(publicWarmupMethods());
+  });
+
+  it("refuses a non-https URL on every request path, not only in the constructor", async () => {
+    const c = new ZeroBounceWarmup(KEY);
+    // The constructor refuses an http base URL; this is the per-request check
+    // behind it, reached by turning every URL the client holds into http.
+    let changed = 0;
+    for (const name of Object.getOwnPropertyNames(c)) {
+      if (typeof c[name] === "string" && c[name].startsWith("https://")) {
+        c[name] = `http://${c[name].slice("https://".length)}`;
+        changed += 1;
+      }
+    }
+    expect(changed).toBeGreaterThan(0);
+    const fake = installFake();
+    const refused = [];
+    for (const [name, call] of allWarmupCalls(c)) {
+      const error = await rejects(call());
+      expect([name, error.message]).toEqual([name, "ZeroBounce: request URL must be an https:// URL"]);
+      refused.push(name);
+    }
+    expect(fake.records).toEqual([]);
+    expect(refused.sort()).toEqual(publicWarmupMethods());
+  });
+
+  it("gives every request on every public method the 120 s timeout signal", async () => {
+    const marker = new AbortController().signal;
+    const timeouts = [];
+    const spy = jest.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      timeouts.push(ms);
+      return marker;
+    });
+    const signals = [];
+    global.fetch = async (url, init = {}) => {
+      signals.push(init.signal);
+      return httpResponse(200, "seed\na@example.com\n", "text/csv");
+    };
+    const covered = [];
+    try {
+      for (const [name, call] of allWarmupCalls(new ZeroBounceWarmup(KEY))) {
+        signals.length = 0;
+        timeouts.length = 0;
+        // Only the request matters here; a CSV body is not every method's answer.
+        await call().catch(() => {});
+        expect({ name, marked: signals.map((signal) => signal === marker), timeouts }).toEqual({
+          name,
+          marked: [true],
+          timeouts: [120000],
+        });
+        covered.push(name);
+      }
+    } finally {
+      spy.mockRestore();
+    }
+    expect(covered.sort()).toEqual(publicWarmupMethods());
+  });
+
+  it("rejects a download answered with JSON instead of returning it as CSV text", async () => {
+    const c = new ZeroBounceWarmup(KEY);
+    for (const [name, call] of [
+      ["downloadSeeds", () => c.downloadSeeds()],
+      ["downloadStatistics", () => c.downloadStatistics("sender@example.com")],
+    ]) {
+      installFake({ body: JSON.stringify({ detail: "No statistics yet" }), contentType: "application/json; charset=utf-8" });
+      const error = await rejects(call());
+      expect([name, error.message, error.statusCode]).toEqual([name, "No statistics yet", 200]);
+    }
   });
 
   it("does not follow a redirect", async () => {

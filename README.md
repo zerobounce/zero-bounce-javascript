@@ -244,7 +244,8 @@ try {
 ```javascript
 // The list evaluator, the Inbox Placement Tester, the bulk email finder and
 // bulk domain search each have their own base URL, separate from the main and
-// bulk hosts. Every one of them must be https://.
+// bulk hosts. Every one of them must be https://. If the key or any URL is
+// rejected, init throws and leaves the client exactly as it was.
 zeroBounce.init("<YOUR_API_KEY>", ZeroBounceSDK.ApiURL.DEFAULT_API_URL, {
   listEvaluatorBaseURL: "https://bulkapi.zerobounce.net/v2/listevaluator",
   inboxPlacementBaseURL: "https://bulkapi.zerobounce.net/api/ipt",
