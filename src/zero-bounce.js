@@ -1400,12 +1400,13 @@ export class ZeroBounceSDK {
   // INBOX PLACEMENT TESTER (bulkapi.zerobounce.net/api/ipt)
   // The API key goes in an Authorization: Bearer header and bodies are JSON with camelCase fields.
 
-  _iptRequest(requestType, path, { params = null, jsonBody = null } = {}) {
+  _iptRequest(requestType, path, { params = null, jsonBody = null, emptyIsSuccess = false } = {}) {
     return createRequest({
       requestType,
       path,
       params,
       jsonBody,
+      emptyIsSuccess,
       // Documented auth for this API is a Bearer header, not an api_key query.
       bearerToken: this._api_key,
       secrets: [this._api_key],
@@ -1549,7 +1550,7 @@ export class ZeroBounceSDK {
     return this._iptRequest("GET", "/tests", { params });
   }
 
-  /** Delete a finished test. DELETE /test/{id} */
+  /** Delete a finished test. DELETE /test/{id}. Resolves to null on an empty 2xx (204 No Content). */
   async deleteInboxPlacementTest(testId) {
     if (!this._initialized) {
       notInitialized();
@@ -1559,7 +1560,10 @@ export class ZeroBounceSDK {
       parameterIsMissing("testId");
       return;
     }
-    return this._iptRequest("DELETE", `/test/${encodeURIComponent(String(testId).trim())}`);
+    // A 204 No Content (or an empty 200) is a success: it resolves to null.
+    return this._iptRequest("DELETE", `/test/${encodeURIComponent(String(testId).trim())}`, {
+      emptyIsSuccess: true,
+    });
   }
 
   /** The webhook URL saved on this API key. GET /webhook */

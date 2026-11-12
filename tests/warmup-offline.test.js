@@ -2,6 +2,7 @@
  * Offline suite for the Warmup API client. Replaces global fetch; no network
  * and no real key.
  */
+import { inspect } from "util";
 import { ZeroBounceWarmup } from "../src/warmup.js";
 
 const KEY = "warmup-test-key";
@@ -465,6 +466,85 @@ describe("Warmup API client", () => {
       const error = await rejects(call());
       expect([name, error.message, error.statusCode]).toEqual([name, "No statistics yet", 200]);
     }
+  });
+
+  it("rejects a download answered with an HTML page instead of returning it as CSV text", async () => {
+    const c = new ZeroBounceWarmup(KEY);
+    const page = `<!DOCTYPE html><html><head><title>Just a moment ${KEY}</title></head><body>${"x".repeat(5000)}</body></html>`;
+    for (const [name, call] of [
+      ["downloadSeeds", () => c.downloadSeeds()],
+      ["downloadStatistics", () => c.downloadStatistics("sender@example.com")],
+    ]) {
+      // A proxy or challenge page, served as HTML or mislabelled as CSV.
+      for (const contentType of ["text/html; charset=UTF-8", "text/csv"]) {
+        installFake({ body: page, contentType });
+        const error = await rejects(call());
+        expect([name, contentType, error.message, error.statusCode]).toEqual([
+          name,
+          contentType,
+          "ZeroBounce returned an HTML error page instead of an API response.",
+          200,
+        ]);
+      }
+    }
+  });
+
+  it("keeps every form of the key out of every error, on every public method", async () => {
+    // A key whose URL-encoded and escape() forms differ from the raw one.
+    const key = "warmup-secret+key/1";
+    const forms = [key, encodeURIComponent(key), escape(key)];
+    const detail = `${forms.join(" ")} https://warmup-api.zerobounce.net/api/v1/warmup?API-Key=${encodeURIComponent(key)}`;
+    // [status, content type, body], or a body read that fails.
+    const echoes = {
+      "2xx error JSON": [200, "application/json", JSON.stringify({ error: `Invalid API key ${detail}` })],
+      "2xx success false": [200, "application/json", JSON.stringify({ success: false, message: `rejected ${detail}` })],
+      "2xx not JSON": [200, "text/plain", `rejected ${detail}`],
+      "2xx HTML": [200, "text/html", `<html><head><title>${detail}</title></head></html>`],
+      "4xx JSON": [400, "application/json", JSON.stringify({ error: `rejected ${detail}` })],
+      "4xx text": [400, "text/plain", `Bad Request: ${detail}`],
+      "body read": null,
+    };
+    // Which answers each kind of method must reject; on the others a JSON
+    // method or a download may resolve with the body as its result.
+    const downloads = publicWarmupMethods().filter((name) => name.startsWith("download"));
+    expect(downloads).toEqual(["downloadSeeds", "downloadStatistics"]);
+    const mustReject = (echo, name) =>
+      echo.startsWith("4xx") ||
+      echo === "body read" ||
+      echo === "2xx HTML" ||
+      (downloads.includes(name) ? echo.startsWith("2xx error") || echo.startsWith("2xx success") : echo === "2xx not JSON");
+    const covered = new Set();
+    for (const [echo, answer] of Object.entries(echoes)) {
+      for (const [name, call] of allWarmupCalls(new ZeroBounceWarmup(key))) {
+        global.fetch = async () => {
+          if (!answer) {
+            return {
+              status: 200,
+              headers: { get: () => "application/json" },
+              text: async () => {
+                throw new TypeError(`terminated: ${detail}`);
+              },
+            };
+          }
+          return httpResponse(answer[0], answer[2], answer[1]);
+        };
+        let text = null;
+        try {
+          await call();
+        } catch (error) {
+          text = `${error.message}\n${error.stack}\n${inspect(error, { showHidden: true, depth: 5 })}`;
+        }
+        const leaked = text !== null && forms.some((form) => text.includes(form));
+        expect({ name, echo, rejected: text !== null || !mustReject(echo, name), leaked }).toEqual({
+          name,
+          echo,
+          rejected: true,
+          leaked: false,
+        });
+        covered.add(name);
+      }
+    }
+    expect([...covered].sort()).toEqual(publicWarmupMethods());
   });
 
   it("does not follow a redirect", async () => {

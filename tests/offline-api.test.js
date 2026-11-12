@@ -1,6 +1,7 @@
 /**
  * Offline API suite. Replaces global fetch; no network and no real API key.
  */
+import { inspect } from "util";
 import { ZeroBounceSDK } from "../src/zero-bounce.js";
 
 const HTML_PAGE = (() => {
@@ -446,11 +447,22 @@ describe("offline API", () => {
     const forms = [key, encodeURIComponent(key), escape(key)];
     const sdk = client(key);
     jest.spyOn(console, "warn").mockImplementation(() => {});
+    // [status, content type, body]: API and proxy answers that quote the key.
     const echoes = {
-      "success false": (detail) => JSON.stringify({ success: false, message: `rejected ${detail}` }),
-      "error field": (detail) => JSON.stringify({ error: `rejected ${detail}` }),
-      "HTTP 400": (detail) => JSON.stringify({ message: `rejected ${detail}` }),
+      "success false": (detail) => [200, "application/json", JSON.stringify({ success: false, message: `rejected ${detail}` })],
+      "error field": (detail) => [200, "application/json", JSON.stringify({ error: `rejected ${detail}` })],
+      "dead key": (detail) => [200, "application/json", JSON.stringify({ error: `Invalid API key ${detail}` })],
+      "not JSON on 2xx": (detail) => [200, "application/json", `rejected ${detail}`],
+      "message only": (detail) => [200, "application/json", JSON.stringify({ Message: `rejected ${detail}` })],
+      "HTTP 400": (detail) => [400, "application/json", JSON.stringify({ message: `rejected ${detail}` })],
+      "HTTP 400 error": (detail) => [400, "application/json", JSON.stringify({ error: `rejected ${detail}` })],
+      "HTTP 400 text": (detail) => [400, "text/plain", `Bad Request: GET /v2/x?api_key=${key} ${detail}`],
     };
+    // A message-only body is a result everywhere but email finder and domain
+    // search (validate's greylist answer), so only those must reject on it.
+    const mustReject = (failure, name) => failure !== "message only" || /^(findEmail|guessFormat)/.test(name);
+    const finderNames = callAll(sdk).map(([name]) => name).filter((name) => mustReject("message only", name));
+    expect(finderNames.length).toBeGreaterThanOrEqual(5);
     for (const failure of ["fetch", "body", ...Object.keys(echoes)]) {
       for (const [name, run] of callAll(sdk)) {
         // Some fetch implementations and polyfills quote the request URL, or
@@ -459,9 +471,8 @@ describe("offline API", () => {
           const detail = `${forms.join(" ")} ${url}`;
           if (failure === "fetch") throw new TypeError(`fetch failed: ${detail}`);
           if (echoes[failure]) {
-            const body = echoes[failure](detail);
-            const status = failure === "HTTP 400" ? 400 : 200;
-            return { status, headers: { get: () => "application/json" }, text: async () => body };
+            const [status, contentType, body] = echoes[failure](detail);
+            return { status, headers: { get: () => contentType }, text: async () => body };
           }
           return {
             status: 200,
@@ -475,12 +486,61 @@ describe("offline API", () => {
         try {
           await run();
         } catch (error) {
-          message = `${error.message}\n${error.stack}`;
+          // Every field, the stack and any cause, not only the message.
+          message = `${error.message}\n${error.stack}\n${inspect(error, { showHidden: true, depth: 5 })}`;
         }
         const leaked = message !== null && forms.some((form) => message.includes(form));
-        expect({ name, failure, rejected: message !== null, leaked }).toEqual({ name, failure, rejected: true, leaked: false });
+        expect({ name, failure, rejected: message !== null || !mustReject(failure, name), leaked }).toEqual({
+          name,
+          failure,
+          rejected: true,
+          leaked: false,
+        });
       }
     }
+  });
+
+  it("resolves an empty 2xx to deleteInboxPlacementTest as null, and rejects every other empty answer with its status", async () => {
+    const sdk = client("parity-key");
+    const answerWith = (status, body = "") => {
+      global.fetch = async () => ({
+        status,
+        headers: { get: () => (body ? "application/json" : null) },
+        text: async () => body,
+      });
+    };
+    const settle = async (run) => {
+      try {
+        return { resolved: await run() };
+      } catch (error) {
+        return { status: error.statusCode, message: error.message };
+      }
+    };
+    const iptCalls = callAll(sdk).filter(([, , , , path]) => path.startsWith("/api/ipt/"));
+    expect(iptCalls.map(([name]) => name)).toContain("deleteInboxPlacementTest");
+    for (const [name, run] of iptCalls) {
+      for (const [status, body] of [[204, ""], [200, ""], [200, "  \n"]]) {
+        answerWith(status, body);
+        const expected =
+          name === "deleteInboxPlacementTest"
+            ? { resolved: null }
+            : { status, message: `Empty response from ZeroBounce (HTTP ${status})` };
+        expect({ name, status, outcome: await settle(run) }).toEqual({ name, status, outcome: expected });
+      }
+    }
+    // An empty error answer is still an error with its status, on DELETE too.
+    for (const status of [404, 500]) {
+      answerWith(status);
+      expect(await settle(() => sdk.deleteInboxPlacementTest("t-1"))).toEqual({
+        status,
+        message: `Empty response from ZeroBounce (HTTP ${status})`,
+      });
+    }
+    // A JSON answer to DELETE is still returned as it is.
+    answerWith(200, '{"id":"t-1","status":"deleted"}');
+    expect(await settle(() => sdk.deleteInboxPlacementTest("t-1"))).toEqual({
+      resolved: { id: "t-1", status: "deleted" },
+    });
   });
 
   it("uses the regional host selected in init", async () => {

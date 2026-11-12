@@ -13,6 +13,7 @@
 import {
   apiError,
   checkApiKey,
+  looksLikeHtml,
   pathSegment,
   redactSecrets,
   requireHttpsUrl,
@@ -124,7 +125,15 @@ export class ZeroBounceWarmup {
         status
       );
     }
-    const body = typeof response.text === "function" ? await response.text() : "";
+    let body = "";
+    try {
+      if (typeof response.text === "function") body = await response.text();
+    } catch (error) {
+      // A body cut short can quote the request, so it is raised redacted, on its own.
+      const name = error && error.name ? error.name : "Error";
+      const message = error && error.message ? error.message : String(error);
+      throw new Error(redactSecrets(`${name}: ${message}`, all));
+    }
     if (status > 299) {
       throw apiError(redactSecrets(warmupMessage(body, status), all), status);
     }
@@ -152,7 +161,13 @@ export class ZeroBounceWarmup {
       response && response.headers && typeof response.headers.get === "function"
         ? String(response.headers.get("content-type") || "").toLowerCase()
         : "";
-    if (!String(body).trim() || contentType.includes("application/json")) {
+    // A JSON answer or an HTML page (a proxy or challenge page) is never the CSV.
+    if (
+      !String(body).trim() ||
+      contentType.includes("application/json") ||
+      contentType.includes("text/html") ||
+      looksLikeHtml(body)
+    ) {
       throw apiError(redactSecrets(warmupMessage(body, status), [this._api_key]), status);
     }
     return body;

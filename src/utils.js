@@ -164,7 +164,7 @@ function responseContentType(response) {
   return String(response.headers.get("content-type") || "").toLowerCase();
 }
 
-function looksLikeHtml(body) {
+export function looksLikeHtml(body) {
   const head = String(body).slice(0, 2000).toLowerCase();
   return (
     head.includes("<!doctype html") ||
@@ -462,6 +462,7 @@ export async function createRequest({
   secrets = [],
   regionalWarningState = null,
   messageOnlyIsFailure = false,
+  emptyIsSuccess = false,
 }) {
   const url = buildRequestUrl({ batch, bulkBase, bulkURLs, apiBaseURL, baseURL, path, params });
   requireHttpsUrl(url, "request URL");
@@ -515,6 +516,10 @@ export async function createRequest({
   }
 
   const status = responseStatus(response);
+  // Only for calls documented to answer 204 No Content (Inbox Placement DELETE).
+  if (emptyIsSuccess && status >= 200 && status < 300 && !String(finalResult).trim()) {
+    return null;
+  }
   const contentType = responseContentType(response);
   if (
     looksLikeHtml(finalResult) ||
