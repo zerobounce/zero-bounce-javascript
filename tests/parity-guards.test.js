@@ -265,8 +265,8 @@ describe("booleans", () => {
     await sdk.sendFile({ file, email_address_column: 1, has_header_row: null });
     expect(sent()).toMatchObject({ has_header_row: "false" });
     expect(sent().allow_phase_2).toBeUndefined();
-    // remove_duplicate is sent only when the caller sets it, on every sendfile
-    // variant, so the API's own default (remove duplicates) applies otherwise.
+    // remove_duplicate is always sent on every sendfile variant, "false" when
+    // left out or null: the released 4.0.x default (standard.md exception).
     for (const call of [
       () => sdk.sendFile({ file, email_address_column: 1 }),
       () => sdk.sendFile({ file, email_address_column: 1, remove_duplicate: null }),
@@ -276,7 +276,17 @@ describe("booleans", () => {
     ]) {
       respond('{"success":true,"file_id":"f1"}');
       await call();
-      expect(sent().remove_duplicate).toBeUndefined();
+      expect(sent().remove_duplicate).toBe("false");
+    }
+    for (const call of [
+      () => sdk.sendFile({ file, email_address_column: 1, remove_duplicate: true }),
+      () => sdk.sendFileStream(file, "a.csv", { email_address_column: 1, remove_duplicate: "true" }),
+      () => sdk.sendScoringFile({ file, email_address_column: 1, remove_duplicate: 1 }),
+      () => sdk.sendScoringFileStream(file, "a.csv", { email_address_column: 1, remove_duplicate: true }),
+    ]) {
+      respond('{"success":true,"file_id":"f1"}');
+      await call();
+      expect(sent().remove_duplicate).toBe("true");
     }
     respond('{"status":"valid"}');
     await sdk.validateEmail("a@example.com", { activityData: null });

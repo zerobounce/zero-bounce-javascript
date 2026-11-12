@@ -328,7 +328,7 @@ export interface SendFileOptions {
   ip_address_column?: number | false;
   /** Whether the first row is a header row. */
   has_header_row?: boolean;
-  /** Whether to remove duplicate emails. Sent only when set; the API defaults to true. */
+  /** Whether to remove duplicate emails. Always sent; defaults to `false` (duplicates are kept). */
   remove_duplicate?: boolean;
   /**
    * When set, sends `allow_phase_2` (validation bulk only).

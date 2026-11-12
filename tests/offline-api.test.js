@@ -3,6 +3,7 @@
  */
 import { inspect } from "util";
 import { ZeroBounceSDK } from "../src/zero-bounce.js";
+import { MAX_JSON_DEPTH, UNEXPECTED_SHAPE_MESSAGE } from "../src/utils.js";
 import { expectEveryFormRedacted } from "./secret-forms.js";
 import { fetchLikeResponse, strictJsonCorpus } from "./strict-json-corpus.js";
 
@@ -108,6 +109,14 @@ function successBody(request) {
       status: 200,
       contentType: "application/json",
       body: `{"email":"person@example.com","score":10,"echo_api_key":${key}}`,
+    };
+  }
+  if (ends("/listS3files")) {
+    // Documented as a list of files (S3ListFileEntry[]).
+    return {
+      status: 200,
+      contentType: "application/json",
+      body: `[{"file_name":"in/list.csv","echo_api_key":${key}}]`,
     };
   }
   if (path.includes("getcredits")) {
@@ -491,6 +500,8 @@ describe("offline API", () => {
             outcome = "parsed";
           } catch (error) {
             outcome = error.name === "ZBApiError" && error.statusCode === 200 ? "rejected" : `threw ${error}`;
+            // Strict JSON of the wrong shape for the call (E7): it was parsed.
+            if (outcome === "rejected" && error.message === UNEXPECTED_SHAPE_MESSAGE) outcome = "parsed";
           }
           // E8: an empty 2xx (no bytes at all) is the documented success of
           // deleteInboxPlacementTest. A whitespace-only body is not empty.
@@ -498,6 +509,87 @@ describe("offline API", () => {
           const expected = verdict === "REJECT" && !emptyDelete ? "rejected" : "parsed";
           if (outcome !== expected) wrong.push(`${name} ${verdict} ${JSON.stringify(body)}: ${outcome}`);
         }
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  // The JSON shape each call declares (zeroBounceSDK.d.ts); every other JSON call answers an object.
+  const DECLARED_SHAPES = {
+    listS3files: "array",
+    listFilters: "objectOrArray",
+    getInboxPlacementTestTypes: "json",
+    listInboxPlacementTests: "json",
+    setInboxPlacementWebhook: "json",
+  };
+
+  it("rejects strict JSON of the wrong shape for the call with status 200, on every JSON method (E7)", async () => {
+    const sdk = client("parity-key");
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    const jsonCalls = callAll(sdk).filter(([name]) => !/^get\w*File$/.test(name));
+    expect(jsonCalls.length).toBe(publicMethods(ZeroBounceSDK).length - 4);
+    for (const name of Object.keys(DECLARED_SHAPES)) expect(jsonCalls.map(([call]) => call)).toContain(name);
+    // [body, the shapes it fits]
+    const bodies = [
+      ["0", ["json"]],
+      ['"x"', ["json"]],
+      ["true", ["json"]],
+      ["null", ["json"]],
+      ["[]", ["json", "array", "objectOrArray"]],
+      ['[{"a":1}]', ["json", "array", "objectOrArray"]],
+      ['{"a":1}', ["json", "object", "objectOrArray"]],
+    ];
+    const wrong = [];
+    for (const [body, fits] of bodies) {
+      global.fetch = async () => fetchLikeResponse(body);
+      for (const [name, run] of jsonCalls) {
+        const shape = DECLARED_SHAPES[name] || "object";
+        let outcome;
+        try {
+          await run();
+          outcome = "resolved";
+        } catch (error) {
+          outcome = error.message === UNEXPECTED_SHAPE_MESSAGE ? `wrong shape ${error.statusCode}` : `threw ${error}`;
+        }
+        const expected = fits.includes(shape) ? "resolved" : "wrong shape 200";
+        if (outcome !== expected) wrong.push(`${name} (${shape}) ${body}: ${outcome}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it("rejects a body nested deeper than the JSON depth limit with status 200, on every JSON method", async () => {
+    const sdk = client("parity-key");
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    const jsonCalls = callAll(sdk).filter(([name]) => !/^get\w*File$/.test(name));
+    expect(jsonCalls.length).toBe(publicMethods(ZeroBounceSDK).length - 4);
+    const deep = 200000;
+    const nested = (depth) => `{"a":${"[".repeat(depth - 1)}${"]".repeat(depth - 1)}}`;
+    const bodies = {
+      "deep array": "[".repeat(deep) + "]".repeat(deep),
+      "deep array in an object": nested(deep),
+      "unclosed": "[".repeat(deep),
+      "just past the limit": nested(MAX_JSON_DEPTH + 1),
+    };
+    const wrong = [];
+    for (const [name, run] of jsonCalls) {
+      for (const [kind, body] of Object.entries(bodies)) {
+        global.fetch = async () => fetchLikeResponse(body);
+        let outcome;
+        try {
+          await run();
+          outcome = "resolved";
+        } catch (error) {
+          outcome = `${error.name} ${error.statusCode}`;
+        }
+        if (outcome !== "ZBApiError 200") wrong.push(`${name} ${kind}: ${outcome}`);
+      }
+      // At the limit it is still read (an array call then finds an object,
+      // the wrong shape); brackets inside strings do not count.
+      for (const body of [nested(MAX_JSON_DEPTH), `{"a":"${"[".repeat(deep)}"}`]) {
+        global.fetch = async () => fetchLikeResponse(body);
+        const outcome = await run().then(() => "resolved", (error) => error.message);
+        if (outcome !== "resolved" && outcome !== UNEXPECTED_SHAPE_MESSAGE) wrong.push(`${name} within the limit: ${outcome}`);
       }
     }
     expect(wrong).toEqual([]);
@@ -830,8 +922,8 @@ describe("offline API", () => {
     request = fake.only();
     expect(request.fields.allow_phase_2).toBeUndefined();
     expect(request.fields.has_header_row).toBe("false");
-    // Left to the API's own default unless the caller sets it.
-    expect(request.fields.remove_duplicate).toBeUndefined();
+    // Always sent, "false" when left out (the released 4.0.x default).
+    expect(request.fields.remove_duplicate).toBe("false");
 
     fake.records.length = 0;
     await sdk.sendScoringFile({ file, email_address_column: 1, has_header_row: false, remove_duplicate: false });

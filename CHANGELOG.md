@@ -11,9 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Redaction is closed under encoding. After the known spellings of every
   secret (the API key, the Warmup key, the SMTP username and password) are
-  replaced with `***`, the rest of the message is decoded up to three layers
-  deep in any order (URL `%XX`, form `+` and `%XX`, JSON escapes including
-  `\/` and `\uXXXX`); if any decoded view still contains a secret, the whole
+  replaced with `***`, the rest of the message is decoded up to four layers
+  deep in any order (the SDK's own request encoding plus three echo layers:
+  URL `%XX` in upper or lower case, form `+` and `%XX`, JSON escapes including
+  `\/` and `\uXXXX`); a `%XX` run that is not valid UTF-8 as a whole (a stray
+  `%FF` in front of a percent-encoded secret) is decoded one UTF-8 sequence at
+  a time, so a non-ASCII secret such as an SMTP password is still recognised
+  in it; if any decoded view still contains a secret, the whole
   message is replaced with "ZeroBounce: the response text was omitted because
   it contained a credential." 4.0.1 and earlier matched a fixed list of
   spellings (raw, URL-encoded, `escape()`), so a body echoing the key
@@ -50,19 +54,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (a proxy or challenge page) with a `ZBApiError`, even when its body parses
   as JSON. 4.0.1 and earlier returned such a body as the result.
 
-### Changed
-
-- **Behaviour change:** `sendFile`, `sendFileStream`, `sendScoringFile` and
-  `sendScoringFileStream` send `remove_duplicate` only when you set it, so the
-  API's own default applies otherwise (ZeroBounce documents it as `true`:
-  duplicates are removed). 4.0.1 and earlier always sent
-  `remove_duplicate=false` when the option was left out, so duplicates were
-  kept. To keep duplicates, pass `remove_duplicate: false`. Note the API's
-  safety net: with duplicate removal on, a file that loses more than half its
-  lines to duplicates is rejected with HTTP 400.
-
 ### Fixed
 
+- A 2xx body that is strict JSON but not the shape the call declares rejects
+  with a `ZBApiError` with status 200 ("ZeroBounce returned JSON of an
+  unexpected shape for this call."): a number, string, boolean, `null` or array
+  where an object is declared, and an object where `listS3files` declares an
+  array. 4.0.1 resolved such a body as the result (for example `validateEmail`
+  resolved to `0`). The calls typed `unknown` (`getInboxPlacementTestTypes`,
+  `listInboxPlacementTests`, `setInboxPlacementWebhook` and the
+  `ZeroBounceWarmup` JSON methods) still return any JSON; `listFilters`
+  accepts an object or an array.
+- A JSON body nested deeper than 512 arrays or objects rejects with a
+  `ZBApiError` with status 200 ("ZeroBounce returned a response nested too
+  deeply to read."), on every JSON call, Warmup included. 4.0.1 returned it,
+  so printing or walking the result (`JSON.stringify`) overflowed the stack.
 - JSON responses are strict RFC 8259 JSON on every JSON call, Warmup
   included (checked against the shared strict JSON corpus). A body starting
   with a UTF-8 byte order mark is rejected with status 200: 4.0.1 read

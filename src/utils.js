@@ -139,13 +139,50 @@ function secretForms(secret) {
 export const CREDENTIAL_OMITTED_MESSAGE =
   "ZeroBounce: the response text was omitted because it contained a credential.";
 
-/** %XX sequences decoded as UTF-8; a sequence that is not valid UTF-8 stays as it is. */
+/** The UTF-8 sequence length a lead byte announces, or 0 for a byte no sequence starts with. */
+function utf8SequenceLength(byte) {
+  if (byte < 0x80) return 1;
+  if (byte >= 0xc2 && byte <= 0xdf) return 2;
+  if (byte >= 0xe0 && byte <= 0xef) return 3;
+  if (byte >= 0xf0 && byte <= 0xf4) return 4;
+  return 0;
+}
+
+/**
+ * A run of %XX that is not valid UTF-8 as a whole, decoded one UTF-8 sequence
+ * at a time: each valid sequence becomes its character and each byte that
+ * starts none stays as its %XX. A stray %FF in front of a percent-encoded
+ * secret therefore still leaves the secret readable in this view, whatever
+ * its characters (a Latin-1 reading of the run would turn "ä" into "Ã¤").
+ */
+function percentRunDecoded(run) {
+  const bytes = run.match(/%[0-9A-Fa-f]{2}/g);
+  let out = "";
+  let i = 0;
+  while (i < bytes.length) {
+    const length = utf8SequenceLength(parseInt(bytes[i].slice(1), 16));
+    if (length) {
+      try {
+        out += decodeURIComponent(bytes.slice(i, i + length).join(""));
+        i += length;
+        continue;
+      } catch {
+        // Not a complete, valid sequence: keep this byte as it is.
+      }
+    }
+    out += bytes[i];
+    i += 1;
+  }
+  return out;
+}
+
+/** %XX sequences decoded as UTF-8; a byte that is not part of valid UTF-8 stays as its %XX. */
 function percentDecoded(text) {
   return text.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
     try {
       return decodeURIComponent(run);
     } catch {
-      return run.replace(/%([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+      return percentRunDecoded(run);
     }
   });
 }
@@ -164,9 +201,10 @@ function jsonUnescaped(text) {
  * space, then %XX, so a form-encoded layer takes one step) and JSON.
  */
 const DECODERS = [percentDecoded, (text) => percentDecoded(text.split("+").join(" ")), jsonUnescaped];
-const DECODE_LAYERS = 3;
+/** The SDK's own request encoding plus three echo layers (standard.md §3). */
+const DECODE_LAYERS = 4;
 
-/** The text and every view of it reached by up to three decodings, in any order. */
+/** The text and every view of it reached by up to four decodings, in any order. */
 function decodedViews(text) {
   const views = new Set([text]);
   let layer = [text];
@@ -198,7 +236,7 @@ export function holdsSecret(text, secrets = []) {
 
 /**
  * Replace every form a secret could take in a message with ***. Then decode
- * what is left (URL, "+", JSON, up to three layers in any order): a spelling
+ * what is left (URL, "+", JSON, up to four layers in any order): a spelling
  * the list above misses still decodes to the secret, and the whole text is
  * dropped for a fixed message rather than returned.
  */
@@ -212,6 +250,60 @@ export function redactSecrets(text, secrets = []) {
   }
   value = value.replace(/([?&](?:api_key|API-Key)=)[^&\s"']+/gi, "$1***");
   return holdsSecret(value, secrets) ? CREDENTIAL_OMITTED_MESSAGE : value;
+}
+
+/** Deeper JSON than any ZeroBounce answer; a body nested past it is refused unparsed. */
+export const MAX_JSON_DEPTH = 512;
+
+/** Whether the JSON text nests arrays or objects deeper than the limit (strings skipped). */
+function jsonNestedTooDeep(text, limit = MAX_JSON_DEPTH) {
+  let depth = 0;
+  let inString = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (inString) {
+      if (char === "\\") i += 1;
+      else if (char === '"') inString = false;
+    } else if (char === '"') {
+      inString = true;
+    } else if (char === "[" || char === "{") {
+      depth += 1;
+      if (depth > limit) return true;
+    } else if (char === "]" || char === "}") {
+      depth -= 1;
+    }
+  }
+  return false;
+}
+
+/**
+ * JSON.parse with a nesting limit: a body nested past MAX_JSON_DEPTH rejects
+ * with a ZBApiError (no status here; the caller adds it) instead of being
+ * returned, where printing or walking it would overflow the caller's stack.
+ */
+export function parseJsonBody(text) {
+  if (jsonNestedTooDeep(String(text))) {
+    throw new ZBApiError("ZeroBounce returned a response nested too deeply to read.", null);
+  }
+  return JSON.parse(text);
+}
+
+export const UNEXPECTED_SHAPE_MESSAGE =
+  "ZeroBounce returned JSON of an unexpected shape for this call.";
+
+/**
+ * Whether a parsed body has the shape the call declares: "object" (a JSON
+ * object, not an array), "array", "objectOrArray", or "json" (any JSON, for
+ * the calls typed `unknown`). A number, string, boolean or null is never an
+ * API answer where an object or array is declared.
+ */
+export function hasShape(parsed, shape) {
+  const isArray = Array.isArray(parsed);
+  const isObject = parsed !== null && typeof parsed === "object" && !isArray;
+  if (shape === "json") return true;
+  if (shape === "array") return isArray;
+  if (shape === "objectOrArray") return isArray || isObject;
+  return isObject;
 }
 
 function fetchTimeoutSignal() {
@@ -580,6 +672,7 @@ export async function createRequest({
   regionalWarningState = null,
   messageOnlyIsFailure = false,
   emptyIsSuccess = false,
+  shape = "object",
 }) {
   const url = buildRequestUrl({ batch, bulkBase, bulkURLs, apiBaseURL, baseURL, path, params });
   requireHttpsUrl(url, "request URL");
@@ -651,8 +744,9 @@ export async function createRequest({
 
   let parsed;
   try {
-    parsed = JSON.parse(finalResult);
-  } catch {
+    parsed = parseJsonBody(finalResult);
+  } catch (error) {
+    if (error instanceof ZBApiError) throw apiError(error.message, status);
     throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
   }
   const account = accountLevelMessage(parsed);
@@ -667,6 +761,7 @@ export async function createRequest({
       throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
     }
   }
+  if (!hasShape(parsed, shape)) throw apiError(UNEXPECTED_SHAPE_MESSAGE, status);
   return parsed;
 }
 

@@ -16,12 +16,14 @@ import {
   isJsonContentType,
   looksLikeHtml,
   looksLikeJson,
+  parseJsonBody,
   pathSegment,
   readJsonBodyText,
   redactSecrets,
   requireHttpsUrl,
   strictBoolean,
   trimTrailingSlashes,
+  ZBApiError,
 } from "./utils.js";
 
 const DEFAULT_BASE_URL = "https://warmup-api.zerobounce.net";
@@ -159,8 +161,9 @@ export class ZeroBounceWarmup {
       );
     }
     try {
-      return JSON.parse(body);
-    } catch {
+      return parseJsonBody(body);
+    } catch (error) {
+      if (error instanceof ZBApiError) throw apiError(error.message, status);
       throw apiError(
         redactSecrets(warmupMessage(body, status), [this._api_key, ...(options.secrets || [])]),
         status

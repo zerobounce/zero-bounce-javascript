@@ -4,6 +4,7 @@
  */
 import { inspect } from "util";
 import { ZeroBounceWarmup } from "../src/warmup.js";
+import { MAX_JSON_DEPTH } from "../src/utils.js";
 import { expectEveryFormRedacted } from "./secret-forms.js";
 import { fetchLikeResponse, strictJsonCorpus } from "./strict-json-corpus.js";
 
@@ -734,6 +735,37 @@ describe("Warmup API client", () => {
           expect({ kind, name, outcome }).toEqual({ kind, name, outcome: { name: "ZBApiError", status } });
         }
       }
+    }
+  });
+
+  it("rejects a body nested deeper than the JSON depth limit with status 200, on every JSON method", async () => {
+    const c = new ZeroBounceWarmup(KEY);
+    const jsonCalls = allWarmupCalls(c).filter(([name]) => !name.startsWith("download"));
+    expect(jsonCalls.length).toBe(publicWarmupMethods().length - 2);
+    const deep = 200000;
+    const bodies = {
+      "deep array": "[".repeat(deep) + "]".repeat(deep),
+      "deep array in an object": `{"a":${"[".repeat(deep)}${"]".repeat(deep)}}`,
+      "unclosed": "[".repeat(deep),
+    };
+    // Just inside the limit is still an answer (the limit is not a hard-coded small depth).
+    const nested = (depth) => `{"a":${"[".repeat(depth - 1)}${"]".repeat(depth - 1)}}`;
+    for (const [name, call] of jsonCalls) {
+      for (const [kind, body] of Object.entries(bodies)) {
+        global.fetch = async () => fetchLikeResponse(body);
+        let outcome;
+        try {
+          await call();
+          outcome = "resolved";
+        } catch (error) {
+          outcome = `${error.name} ${error.statusCode}`;
+        }
+        expect({ name, kind, outcome }).toEqual({ name, kind, outcome: "ZBApiError 200" });
+      }
+      global.fetch = async () => fetchLikeResponse(nested(MAX_JSON_DEPTH));
+      await expect(call()).resolves.toBeDefined();
+      global.fetch = async () => fetchLikeResponse(nested(MAX_JSON_DEPTH + 1));
+      await expect(call()).rejects.toMatchObject({ statusCode: 200, message: expect.stringMatching(/nested too deeply/) });
     }
   });
 
