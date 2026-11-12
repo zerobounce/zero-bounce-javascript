@@ -6,6 +6,8 @@
  * redirect guard and keeping the key out of inspect / JSON output. Replaces
  * global fetch; no network and no real key.
  */
+import fs from "fs";
+import path from "path";
 import util from "util";
 import { ZeroBounceSDK } from "../src/zero-bounce.js";
 import { ZeroBounceWarmup } from "../src/warmup.js";
@@ -172,6 +174,34 @@ describe("base URLs", () => {
       const url = new URL(calls[0].url);
       expect(`${url.origin}${url.pathname}`).toBe(expected);
     }
+  });
+
+  it("strip trailing slashes from the Warmup client's base URL", async () => {
+    const warmup = new ZeroBounceWarmup(KEY, "https://warmup-api.zerobounce.net//");
+    respond('{"success":true}');
+    await warmup.listSendingAccounts();
+    const url = new URL(calls[0].url);
+    expect(`${url.origin}${url.pathname}`).toBe(
+      "https://warmup-api.zerobounce.net/api/v1/warmup/sending-accounts"
+    );
+  });
+
+  it("cover every base URL the public API accepts", () => {
+    // Every base-URL parameter or option declared in the shipped types must
+    // be in one of the two tests above; a new one fails here until it is.
+    const covered = [
+      "apiBaseURL",
+      "listEvaluatorBaseURL",
+      "inboxPlacementBaseURL",
+      "emailFinderBaseURL",
+      "domainSearchBaseURL",
+      "baseURL", // ZeroBounceWarmup constructor
+    ].sort();
+    const types = fs.readFileSync(path.join(__dirname, "..", "zeroBounceSDK.d.ts"), "utf8");
+    const declared = [...types.matchAll(/\b(\w*(?:base|Base)(?:URL|Url|_url))\??\s*:/g)]
+      .map((m) => m[1])
+      .sort();
+    expect(declared).toEqual(covered);
   });
 });
 
