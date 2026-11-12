@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that error was rethrown as it came from `fetch`, so a `fetch` implementation
   that quotes the request or the key in it passed the key to the caller.
 
+### Changed
+
+- **Behaviour change:** `sendFile`, `sendFileStream`, `sendScoringFile` and
+  `sendScoringFileStream` send `remove_duplicate` only when you set it, so the
+  API's own default applies otherwise (ZeroBounce documents it as `true`:
+  duplicates are removed). 4.0.1 and earlier always sent
+  `remove_duplicate=false` when the option was left out, so duplicates were
+  kept. To keep duplicates, pass `remove_duplicate: false`. Note the API's
+  safety net: with duplicate removal on, a file that loses more than half its
+  lines to duplicates is rejected with HTTP 400.
+
 ### Fixed
 
 - `deleteInboxPlacementTest` resolves to `null` when the API answers with an
@@ -36,6 +47,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (served as `text/html`, or an HTML body under any content type, such as a
   proxy or challenge page) with a `ZBApiError` carrying the HTTP status. 4.0.1
   resolved it as if it were the CSV text.
+- `ZeroBounceWarmup.addSendingAccount` parses `managedSending.weekdays_only`
+  strictly, like every other boolean: `true` / `false`, `"true"` / `"false"`
+  (any case) or `1` / `0`, sent as a JSON boolean. 4.0.1 sent the value as
+  given, so `"false"` reached the API as a string; anything else now rejects
+  with "weekdays_only parameter is invalid. Must be true or false." before a
+  request is sent.
+- `ZeroBounceWarmup.addSendingAccount` rejects a `managedSending.timezone_offset`
+  of `NaN` with "timezone_offset parameter is invalid. Must be -11 to 14.".
+  4.0.1 accepted it and sent `null`. Fractional offsets in range (5.5, -9.5)
+  are still accepted.
 
 ## [4.0.1] - 2026-11-11
 

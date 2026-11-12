@@ -234,8 +234,13 @@ export class ZeroBounceWarmup {
     if (managedSending != null) {
       const sending = { ...managedSending };
       const offset = sending.timezone_offset;
-      if (offset != null && (typeof offset !== "number" || offset < -11 || offset > 14)) {
+      // Fractional offsets (5.5, -9.5) are valid; NaN is not a number here.
+      if (offset != null && (typeof offset !== "number" || !Number.isFinite(offset) || offset < -11 || offset > 14)) {
         throw clientError("timezone_offset parameter is invalid. Must be -11 to 14.");
+      }
+      if (sending.weekdays_only != null) {
+        // Parsed like every other boolean, so "false" is never sent as given.
+        sending.weekdays_only = strictBoolean(sending.weekdays_only, "weekdays_only");
       }
       if (sending.warmup_start_date != null) {
         sending.warmup_start_date = isoDate(sending.warmup_start_date, "warmup_start_date");

@@ -363,7 +363,8 @@ try {
 // has_header_row: Boolean (Optional)
 //     If the first row from the submitted file is a header row.
 // remove_duplicate: Boolean (Optional)
-//     If you want the system to remove duplicate emails.
+//     If you want the system to remove duplicate emails. Sent only when set;
+//     the API removes duplicates by default.
 // allowPhase2: Boolean (Optional)
 //     When set, sends allow_phase_2 (validation bulk only). See v2 send file API.
 // `file` is a File, for example from an <input type="file"> in a browser.
@@ -406,7 +407,8 @@ Bulk validation uses `https://bulkapi.zerobounce.net/v2`. See [v2 send file](htt
 // has_header_row: Boolean (Optional)
 //     If the first row from the submitted file is a header row.
 // remove_duplicate: Boolean (Optional)
-//     If you want the system to remove duplicate emails.
+//     If you want the system to remove duplicate emails. Sent only when set;
+//     the API removes duplicates by default.
 // `file` is a File, for example from an <input type="file"> in a browser.
 // From a Blob, use sendScoringFileStream(blob, "emails.csv", options).
 const payload = {

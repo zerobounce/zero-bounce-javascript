@@ -328,7 +328,7 @@ export interface SendFileOptions {
   ip_address_column?: number | false;
   /** Whether the first row is a header row. */
   has_header_row?: boolean;
-  /** Whether to remove duplicate emails. */
+  /** Whether to remove duplicate emails. Sent only when set; the API defaults to true. */
   remove_duplicate?: boolean;
   /**
    * When set, sends `allow_phase_2` (validation bulk only).
@@ -1042,9 +1042,10 @@ export interface WarmupEmailContent {
 }
 
 export interface WarmupManagedSending {
+  /** true / false, "true" / "false" or 1 / 0; sent as a JSON boolean. */
   weekdays_only?: boolean;
   timezone?: string;
-  /** -11 to 14. */
+  /** -11 to 14; fractional offsets such as 5.5 are allowed. */
   timezone_offset?: number;
   /** YYYY-MM-DD, or a Date. */
   warmup_start_date?: string | Date;

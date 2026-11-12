@@ -263,8 +263,21 @@ describe("booleans", () => {
     const file = new Blob(["a@example.com\n"]);
     respond('{"success":true,"file_id":"f1"}');
     await sdk.sendFile({ file, email_address_column: 1, has_header_row: null });
-    expect(sent()).toMatchObject({ has_header_row: "false", remove_duplicate: "false" });
+    expect(sent()).toMatchObject({ has_header_row: "false" });
     expect(sent().allow_phase_2).toBeUndefined();
+    // remove_duplicate is sent only when the caller sets it, on every sendfile
+    // variant, so the API's own default (remove duplicates) applies otherwise.
+    for (const call of [
+      () => sdk.sendFile({ file, email_address_column: 1 }),
+      () => sdk.sendFile({ file, email_address_column: 1, remove_duplicate: null }),
+      () => sdk.sendFileStream(file, "a.csv", { email_address_column: 1 }),
+      () => sdk.sendScoringFile({ file, email_address_column: 1 }),
+      () => sdk.sendScoringFileStream(file, "a.csv", { email_address_column: 1 }),
+    ]) {
+      respond('{"success":true,"file_id":"f1"}');
+      await call();
+      expect(sent().remove_duplicate).toBeUndefined();
+    }
     respond('{"status":"valid"}');
     await sdk.validateEmail("a@example.com", { activityData: null });
     expect(sent().activity_data).toBeUndefined();
@@ -429,4 +442,116 @@ describe("init", () => {
       expect(sdk._api_key).toBeNull();
     }
   });
+});
+
+/**
+ * Every boolean input either client declares in zeroBounceSDK.d.ts, as
+ * "Interface.property" (or "method.property" for an inline options object),
+ * read from the declarations so that a boolean added later cannot escape the
+ * sweep below. Response fields (…Response, …Result, …Payload) are outputs.
+ */
+function declaredBooleanInputs() {
+  const lines = fs.readFileSync(path.join(__dirname, "..", "zeroBounceSDK.d.ts"), "utf8").split("\n");
+  const inputs = [];
+  const unclassified = [];
+  let context = null;
+  for (const line of lines) {
+    const declared = line.match(/^export (?:interface|class|type) (\w+)/);
+    if (declared) context = declared[1];
+    const inline = line.match(/^\s+(\w+)\(\w+\??: \{\s*$/);
+    if (inline) context = inline[1];
+    if (/^\s*(\/\/|\*|\/\*\*)/.test(line) || !/\bboolean\b/.test(line)) continue;
+    const property = line.match(/^\s+(\w+)\??: [^;]*\bboolean\b[^;]*;\s*$/);
+    if (!property) {
+      unclassified.push(`unparsed: ${line.trim()}`);
+    } else if (/(Response|Result|Payload)$/.test(context)) {
+      continue;
+    } else if (/Options$/.test(context) || /^Warmup/.test(context) || /^[a-z]/.test(context)) {
+      inputs.push(`${context}.${property[1]}`);
+    } else {
+      unclassified.push(`${context}.${property[1]}`);
+    }
+  }
+  expect(unclassified).toEqual([]);
+  return [...new Set(inputs)].sort();
+}
+
+describe("every boolean parameter", () => {
+  const file = () => new Blob(["a@example.com\n"]);
+  const job = { file_name: "emails/list.csv", return_url: "https://example.com/done", has_header_row: true };
+  const sdkCall = (run, reply = '{"success":true,"file_id":"f1"}', contentType) => ({
+    run: (value) => {
+      respond(reply, contentType ? { contentType } : undefined);
+      return run(client(), value);
+    },
+  });
+  const warmupCall = (run) => ({
+    run: (value) => {
+      respond('{"ok":true}');
+      return run(new ZeroBounceWarmup(KEY), value);
+    },
+    json: true,
+  });
+  const managed = (extra) => ({ fromAddress: "me@example.com", onboardingModel: "zb_managed", ...extra });
+  const update = { fromAddress: "me@example.com", engagementRuleId: 1, statusId: 4 };
+
+  // How each declared boolean is exercised, and its name on the wire.
+  // `realBooleanOnly`: only true / false are accepted, as in the other SDKs.
+  const sweep = {
+    "ValidateEmailOptions.activityData": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { activityData: v }), '{"status":"valid"}'), wire: "activity_data" },
+    "ValidateEmailOptions.verifyPlus": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { verifyPlus: v }), '{"status":"valid"}'), wire: "verify_plus" },
+    "ValidateEmailOptions.domainInfo": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { domainInfo: v }), '{"status":"valid"}'), wire: "domain_info" },
+    "ValidateEmailOptions.greylistProcessing": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { greylistProcessing: v }), '{"status":"valid"}'), wire: "greylist_processing" },
+    "ValidateBatchOptions.activityData": { ...sdkCall((s, v) => s.validateBatch([{ email_address: "a@example.com" }], { activityData: v }), '{"email_batch":[],"errors":[]}'), wire: "activity_data", json: true },
+    "ValidateBatchOptions.verifyPlus": { ...sdkCall((s, v) => s.validateBatch([{ email_address: "a@example.com" }], { verifyPlus: v }), '{"email_batch":[],"errors":[]}'), wire: "verify_plus", json: true },
+    "GetFileOptions.activityData": { ...sdkCall((s, v) => s.getFile("f1", { activityData: v }), "a,b\n", "text/csv"), wire: "activity_data" },
+    "SendFileOptions.has_header_row": { ...sdkCall((s, v) => s.sendFile({ file: file(), email_address_column: 1, has_header_row: v })), wire: "has_header_row" },
+    "SendFileOptions.remove_duplicate": { ...sdkCall((s, v) => s.sendFile({ file: file(), email_address_column: 1, remove_duplicate: v })), wire: "remove_duplicate" },
+    "SendFileOptions.allowPhase2": { ...sdkCall((s, v) => s.sendFile({ file: file(), email_address_column: 1, allowPhase2: v })), wire: "allow_phase_2" },
+    "SendFileStreamOptions.has_header_row": { ...sdkCall((s, v) => s.sendFileStream(file(), "a.csv", { email_address_column: 1, has_header_row: v })), wire: "has_header_row" },
+    "SendFileStreamOptions.remove_duplicate": { ...sdkCall((s, v) => s.sendFileStream(file(), "a.csv", { email_address_column: 1, remove_duplicate: v })), wire: "remove_duplicate" },
+    "SendFileStreamOptions.allowPhase2": { ...sdkCall((s, v) => s.sendFileStream(file(), "a.csv", { email_address_column: 1, allowPhase2: v })), wire: "allow_phase_2" },
+    "SendScoringFileOptions.has_header_row": { ...sdkCall((s, v) => s.sendScoringFile({ file: file(), email_address_column: 1, has_header_row: v })), wire: "has_header_row" },
+    "SendScoringFileOptions.remove_duplicate": { ...sdkCall((s, v) => s.sendScoringFile({ file: file(), email_address_column: 1, remove_duplicate: v })), wire: "remove_duplicate" },
+    "SendScoringFileStreamOptions.has_header_row": { ...sdkCall((s, v) => s.sendScoringFileStream(file(), "a.csv", { email_address_column: 1, has_header_row: v })), wire: "has_header_row" },
+    "SendScoringFileStreamOptions.remove_duplicate": { ...sdkCall((s, v) => s.sendScoringFileStream(file(), "a.csv", { email_address_column: 1, remove_duplicate: v })), wire: "remove_duplicate" },
+    "SendEmailFinderFileOptions.has_header_row": { ...sdkCall((s, v) => s.sendEmailFinderFile({ file: file(), domain_column: 1, first_name_column: 2, has_header_row: v })), wire: "has_header_row" },
+    "SendEmailFinderFileStreamOptions.has_header_row": { ...sdkCall((s, v) => s.sendEmailFinderFileStream(file(), "a.csv", { domain_column: 1, full_name_column: 2, has_header_row: v })), wire: "has_header_row" },
+    "SendDomainSearchFileOptions.has_header_row": { ...sdkCall((s, v) => s.sendDomainSearchFile({ file: file(), domain_column: 1, has_header_row: v })), wire: "has_header_row" },
+    "SendDomainSearchFileStreamOptions.has_header_row": { ...sdkCall((s, v) => s.sendDomainSearchFileStream(file(), "a.csv", { domain_column: 1, has_header_row: v })), wire: "has_header_row" },
+    "BulkRootFileJobOptions.has_header_row": { ...sdkCall((s, v) => s.validateS3file({ ...job, has_header_row: v }), '{"success":true}'), wire: "has_header_row" },
+    "BulkRootFileJobOptions.remove_duplicates": { ...sdkCall((s, v) => s.validateS3file({ ...job, remove_duplicates: v }), '{"success":true}'), wire: "remove_duplicates" },
+    "addSendingAccount.ignoreConflict": { ...warmupCall((w, v) => w.addSendingAccount({ fromAddress: "me@example.com", onboardingModel: "self_managed", engagementRuleId: 0, ignoreConflict: v })), wire: "ignore_conflict" },
+    "WarmupManagedSending.weekdays_only": { ...warmupCall((w, v) => w.addSendingAccount(managed({ managedSending: { weekdays_only: v } }))), wire: (body) => body.managed_sending.weekdays_only },
+    "updateSendingAccount.autoEnable": { ...warmupCall((w, v) => w.updateSendingAccount({ ...update, autoEnable: v })), wire: "auto_enable", realBooleanOnly: true },
+  };
+
+  it("covers every boolean the type declarations accept, on both clients", () => {
+    expect(Object.keys(sweep).sort()).toEqual(declaredBooleanInputs());
+  });
+
+  for (const [name, entry] of Object.entries(sweep)) {
+    it(`${name}: is sent as a boolean, and anything else is rejected before a request`, async () => {
+      const read = () => {
+        const fields = sent();
+        return typeof entry.wire === "function" ? entry.wire(fields) : fields[entry.wire];
+      };
+      const asWire = (value) => (entry.json ? value : String(value));
+
+      const accepted = [[true, true], [false, false]];
+      if (!entry.realBooleanOnly) accepted.push(["false", false], ["TRUE", true], [0, false], [1, true]);
+      for (const [given, expected] of accepted) {
+        await entry.run(given);
+        expect([name, given, read()]).toEqual([name, given, asWire(expected)]);
+      }
+
+      const rejected = ["maybe", "no", 2, {}];
+      if (entry.realBooleanOnly) rejected.push("false", "true", 0, 1);
+      for (const given of rejected) {
+        const result = await outcome(entry.run(given));
+        expect([name, given, result.rejected]).toEqual([name, given, expect.stringMatching(/Must be true or false\.$/)]);
+        expect([name, given, calls]).toEqual([name, given, []]);
+      }
+    });
+  }
 });

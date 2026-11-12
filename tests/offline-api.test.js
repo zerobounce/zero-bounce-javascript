@@ -722,7 +722,8 @@ describe("offline API", () => {
     request = fake.only();
     expect(request.fields.allow_phase_2).toBeUndefined();
     expect(request.fields.has_header_row).toBe("false");
-    expect(request.fields.remove_duplicate).toBe("false");
+    // Left to the API's own default unless the caller sets it.
+    expect(request.fields.remove_duplicate).toBeUndefined();
 
     fake.records.length = 0;
     await sdk.sendScoringFile({ file, email_address_column: 1, has_header_row: false, remove_duplicate: false });

@@ -475,7 +475,7 @@ export class ZeroBounceSDK {
    * @param gender_column: number or null - The column index of the gender column.
    * @param ip_address_column: number or null - The IP Address the email signed up from.
    * @param has_header_row: Boolean - If the first row from the submitted file is a header row.
-   * @param remove_duplicate: Boolean - If you want the system to remove duplicate emails.
+   * @param remove_duplicate: Boolean - If you want the system to remove duplicate emails. Sent only when set.
    * @param allowPhase2: Boolean|null - Optional. When set, sends {@code allow_phase_2} (validation bulk only; see v2 send file API).
    * */
   async sendFile({
@@ -487,7 +487,7 @@ export class ZeroBounceSDK {
     gender_column = false,
     ip_address_column = false,
     has_header_row = false,
-    remove_duplicate = false,
+    remove_duplicate = null,
     allowPhase2 = null,
   }) {
     if (!this._initialized) {
@@ -521,7 +521,10 @@ export class ZeroBounceSDK {
     body.append("email_address_column", email_address_column);
     body.append("file", file);
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
-    body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
+    // Sent only when set: the API's own default (remove duplicates) applies otherwise.
+    if (remove_duplicate != null) {
+      body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate"));
+    }
     body.append("api_key", this._api_key);
     if (allowPhase2 != null) {
       body.append("allow_phase_2", jobBooleanText(allowPhase2, "allowPhase2"));
@@ -551,7 +554,7 @@ export class ZeroBounceSDK {
     gender_column = false,
     ip_address_column = false,
     has_header_row = false,
-    remove_duplicate = false,
+    remove_duplicate = null,
     allowPhase2 = null,
   } = {}) {
     if (!this._initialized) {
@@ -577,7 +580,10 @@ export class ZeroBounceSDK {
     body.append("email_address_column", email_address_column);
     body.append("file", fileStreamOrBlob, fileName);
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
-    body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
+    // Sent only when set: the API's own default (remove duplicates) applies otherwise.
+    if (remove_duplicate != null) {
+      body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate"));
+    }
     body.append("api_key", this._api_key);
     if (allowPhase2 != null) {
       body.append("allow_phase_2", jobBooleanText(allowPhase2, "allowPhase2"));
@@ -598,14 +604,14 @@ export class ZeroBounceSDK {
    * @param email_address_column: number - The column index of the email address in the file. Index starts from 1.
    * @param return_url: str or null - The URL will be used to call back when the validation is completed.
    * @param has_header_row: Boolean - If the first row from the submitted file is a header row.
-   * @param remove_duplicate: Boolean - If you want the system to remove duplicate emails.
+   * @param remove_duplicate: Boolean - If you want the system to remove duplicate emails. Sent only when set.
    * */
   async sendScoringFile({
     file,
     email_address_column,
     return_url = false,
     has_header_row = false,
-    remove_duplicate = false,
+    remove_duplicate = null,
   }) {
     if (!this._initialized) {
       notInitialized();
@@ -628,7 +634,10 @@ export class ZeroBounceSDK {
     body.append("email_address_column", email_address_column);
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
     body.append("api_key", this._api_key);
-    body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
+    // Sent only when set: the API's own default (remove duplicates) applies otherwise.
+    if (remove_duplicate != null) {
+      body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate"));
+    }
 
     return createRequest({
       requestType: "POST",
@@ -650,7 +659,7 @@ export class ZeroBounceSDK {
     email_address_column,
     return_url = false,
     has_header_row = false,
-    remove_duplicate = false,
+    remove_duplicate = null,
   } = {}) {
     if (!this._initialized) {
       notInitialized();
@@ -672,7 +681,10 @@ export class ZeroBounceSDK {
     body.append("email_address_column", email_address_column);
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
     body.append("api_key", this._api_key);
-    body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
+    // Sent only when set: the API's own default (remove duplicates) applies otherwise.
+    if (remove_duplicate != null) {
+      body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate"));
+    }
 
     return createRequest({
       requestType: "POST",

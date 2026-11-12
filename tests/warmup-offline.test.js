@@ -547,6 +547,61 @@ describe("Warmup API client", () => {
     expect([...covered].sort()).toEqual(publicWarmupMethods());
   });
 
+  it("rejects a download served as text/html even when the body does not look like a page", async () => {
+    const c = new ZeroBounceWarmup(KEY);
+    for (const [name, call] of [
+      ["downloadSeeds", () => c.downloadSeeds()],
+      ["downloadStatistics", () => c.downloadStatistics("sender@example.com")],
+    ]) {
+      // A bare fragment: no doctype, <html>, <head> or <body>, so only the
+      // content type tells it apart from CSV text.
+      installFake({ body: "<h1>403 Forbidden</h1>", contentType: "text/html; charset=UTF-8" });
+      const error = await rejects(call());
+      expect([name, error.name, error.statusCode]).toEqual([name, "ZBApiError", 200]);
+    }
+  });
+
+  it("sends every documented zb_managed field, and accepts a fractional timezone_offset", async () => {
+    const fake = installFake();
+    const c = new ZeroBounceWarmup(KEY);
+    const emailContent = {
+      company_name: "Example Inc",
+      company_website: "https://example.com",
+      company_description: "We send newsletters.",
+      types_of_emails: ["transactional", "newsletter", "marketing"],
+      example_email: "Hello from Example Inc.",
+    };
+    const managedSending = {
+      weekdays_only: true,
+      timezone: "Asia/Kolkata",
+      timezone_offset: 5.5,
+      warmup_start_date: "2026-12-01",
+    };
+
+    await c.addSendingAccount({ fromAddress: "sender@example.com", onboardingModel: "zb_managed", emailContent, managedSending });
+    expect(fake.only().json).toEqual({
+      from_address: "sender@example.com",
+      onboarding_model: "zb_managed",
+      email_content: emailContent,
+      managed_sending: managedSending,
+    });
+
+    // -11 to 14, fractional offsets included.
+    for (const offset of [5.5, 3.0, -11, 14, -9.5, 0]) {
+      fake.records.length = 0;
+      await c.addSendingAccount({ fromAddress: "sender@example.com", onboardingModel: "zb_managed", managedSending: { timezone_offset: offset } });
+      expect(fake.only().json.managed_sending).toEqual({ timezone_offset: offset });
+    }
+    fake.records.length = 0;
+    for (const offset of [-11.5, 14.5, Number.NaN, Infinity, "5.5", true]) {
+      const error = await rejects(
+        c.addSendingAccount({ fromAddress: "sender@example.com", onboardingModel: "zb_managed", managedSending: { timezone_offset: offset } })
+      );
+      expect([offset, error.message]).toEqual([offset, "ZeroBounce: timezone_offset parameter is invalid. Must be -11 to 14."]);
+    }
+    expect(fake.records).toHaveLength(0);
+  });
+
   it("does not follow a redirect", async () => {
     installFake({ status: 302, body: "" });
     const c = new ZeroBounceWarmup(KEY);
