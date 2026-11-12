@@ -5,6 +5,7 @@
 import { inspect } from "util";
 import { ZeroBounceWarmup } from "../src/warmup.js";
 import { expectEveryFormRedacted } from "./secret-forms.js";
+import { fetchLikeResponse, strictJsonCorpus } from "./strict-json-corpus.js";
 
 const KEY = "warmup-test-key";
 
@@ -484,6 +485,111 @@ describe("Warmup API client", () => {
     expect(error.cause).toBeUndefined();
   });
 
+  it("sends exactly the documented request, field names included, for every public method", async () => {
+    // One row per call shape; values differ per field so a swap fails too.
+    const F = "from@example.com";
+    const P = "/api/v1/warmup";
+    const csv = { body: "seed,provider\na@example.com,gmail\n", contentType: "text/csv" };
+    const rows = [
+      ["listSendingAccounts", (c) => c.listSendingAccounts(), ["GET", "/sending-accounts", {}, null]],
+      ["getSendingAccount", (c) => c.getSendingAccount(F), ["GET", "/sending-account", { from_address: F }, null]],
+      [
+        "addSendingAccount",
+        (c) => c.addSendingAccount({ fromAddress: F, onboardingModel: "self_managed", engagementRuleId: 2, ignoreConflict: true }),
+        ["POST", "/sending-accounts", {}, { from_address: F, onboarding_model: "self_managed", engagement_rule_id: 2, ignore_conflict: true }],
+      ],
+      [
+        "addSendingAccount",
+        (c) =>
+          c.addSendingAccount({
+            fromAddress: F,
+            onboardingModel: "zb_managed",
+            emailContent: { company_name: "Acme", company_website: "https://acme.example", company_description: "d", types_of_emails: ["newsletter"], example_email: "e" },
+            managedSending: { weekdays_only: true, timezone: "Europe/Berlin", timezone_offset: 5.5, warmup_start_date: "2026-02-03" },
+          }),
+        [
+          "POST",
+          "/sending-accounts",
+          {},
+          {
+            from_address: F,
+            onboarding_model: "zb_managed",
+            email_content: { company_name: "Acme", company_website: "https://acme.example", company_description: "d", types_of_emails: ["newsletter"], example_email: "e" },
+            managed_sending: { weekdays_only: true, timezone: "Europe/Berlin", timezone_offset: 5.5, warmup_start_date: "2026-02-03" },
+          },
+        ],
+      ],
+      [
+        "updateSendingAccount",
+        (c) => c.updateSendingAccount({ fromAddress: F, engagementRuleId: 3, statusId: 4, autoEnable: false }),
+        ["PUT", "/sending-accounts", {}, { team_id: 1, from_address: F, engagement_rule_id: 3, status_id: 4, auto_enable: false }],
+      ],
+      ["deleteSendingAccount", (c) => c.deleteSendingAccount(F), ["DELETE", "/sending-accounts", { from_address: F }, null]],
+      [
+        "changeFromAddress",
+        (c) => c.changeFromAddress("old@example.com", "new@example.com"),
+        ["PUT", "/smtp-credentials", {}, { team_id: 1, old_from_address: "old@example.com", new_from_address: "new@example.com" }],
+      ],
+      [
+        "listFromAddresses",
+        (c) => c.listFromAddresses({ searchFrom: "acme", offset: 5, limit: 50 }),
+        ["GET", "/from-addresses", { search_from: "acme", offset: "5", limit: "50" }, null],
+      ],
+      ["getEngagementRules", (c) => c.getEngagementRules(), ["GET", "/engagement-rules", {}, null]],
+      ["setEngagementRule", (c) => c.setEngagementRule(F, 2), ["PUT", "/engagement-rule", { c_from: F }, { rule_id: 2 }]],
+      ["getCustomEngagement", (c) => c.getCustomEngagement(F), ["GET", "/custom-engagement/from%40example.com", {}, null]],
+      [
+        "createCustomEngagement",
+        (c) => c.createCustomEngagement({ cFrom: F, replyPct: 20, importantPct: 30, clickPct: 40 }),
+        ["POST", "/custom-engagement", {}, { c_from: F, reply_pct: 20, important_pct: 30, click_pct: 40 }],
+      ],
+      [
+        "updateCustomEngagement",
+        (c) => c.updateCustomEngagement({ cFrom: F, replyPct: 21, importantPct: 31, clickPct: 41 }),
+        ["PUT", "/custom-engagement", {}, { c_from: F, reply_pct: 21, important_pct: 31, click_pct: 41 }],
+      ],
+      [
+        "deleteCustomEngagement",
+        (c) => c.deleteCustomEngagement(F, 3),
+        ["DELETE", "/custom-engagement", {}, { c_from: F, engagement_rule_id: 3 }],
+      ],
+      ["getSeeds", (c) => c.getSeeds(), ["GET", "/seeds", {}, null]],
+      ["downloadSeeds", (c) => c.downloadSeeds(), ["GET", "/seeds/download", {}, null], csv],
+      ["getSeedCount", (c) => c.getSeedCount(), ["GET", "/seed-count", {}, null]],
+      ["getProgressToday", (c) => c.getProgressToday(), ["GET", "/progress-today", {}, null]],
+      ["getSentToday", (c) => c.getSentToday(), ["GET", "/sent-today", {}, null]],
+      ["getEmailsPerDay", (c) => c.getEmailsPerDay(), ["GET", "/emails-per-day", {}, null]],
+      ["getStatistics", (c) => c.getStatistics(F), ["GET", "/statistics", { from_address: F }, null]],
+      [
+        "getStatisticsPerDay",
+        (c) => c.getStatisticsPerDay({ fromAddress: F, startDate: "2026-01-02", endDate: "2026-01-30" }),
+        ["GET", "/statistics-per-day", { from_address: F, start_date: "2026-01-02", end_date: "2026-01-30" }, null],
+      ],
+      ["getStatisticsDetailed", (c) => c.getStatisticsDetailed(F), ["GET", "/statistics-detailed", { c_from: F }, null]],
+      ["downloadStatistics", (c) => c.downloadStatistics(F), ["GET", "/statistics/download", { c_from: F }, null], csv],
+      ["getFromAddressStatistics", (c) => c.getFromAddressStatistics(F), ["GET", "/from-address-statistics", { from_address: F }, null]],
+      ["checkDomainDmarc", (c) => c.checkDomainDmarc(F, "sel1"), ["GET", "/check-domain-dmarc", { from_address: F, dkim_selector: "sel1" }, null]],
+      [
+        "testSmtpConfiguration",
+        (c) => c.testSmtpConfiguration({ fromAddress: F, username: "smtp-user", password: "smtp-pass", server: "smtp.example.com", port: 587 }),
+        ["POST", "/test-smtp-configuration", {}, { from_address: F, username: "smtp-user", password: "smtp-pass", server: "smtp.example.com", port: 587 }],
+      ],
+    ];
+    expect([...new Set(rows.map(([name]) => name))].sort()).toEqual(publicWarmupMethods());
+    for (const [name, call, [method, path, query, json], response = {}] of rows) {
+      const fake = installFake(response);
+      await call(new ZeroBounceWarmup(KEY));
+      const sent = fake.only();
+      expect({ name, method: sent.method, path: sent.path, query: sent.query, json: sent.json }).toEqual({
+        name,
+        method,
+        path: `${P}${path}`,
+        query,
+        json,
+      });
+    }
+  });
+
   it("lists every public method in allWarmupCalls, so the sweeps that use it miss none", () => {
     expect(allWarmupCalls(new ZeroBounceWarmup(KEY)).map(([name]) => name).sort()).toEqual(publicWarmupMethods());
   });
@@ -629,6 +735,34 @@ describe("Warmup API client", () => {
         }
       }
     }
+  });
+
+  it("rejects every REJECT body and parses every ACCEPT body of the strict JSON corpus, on every JSON method", async () => {
+    const { reject, accept } = strictJsonCorpus();
+    expect(reject.length).toBeGreaterThan(30);
+    const c = new ZeroBounceWarmup(KEY);
+    const jsonCalls = allWarmupCalls(c).filter(([name]) => !name.startsWith("download"));
+    expect(jsonCalls.length).toBe(publicWarmupMethods().length - 2);
+    const wrong = [];
+    for (const [verdict, bodies] of [["REJECT", reject], ["ACCEPT", accept]]) {
+      for (const body of bodies) {
+        for (const [name, call] of jsonCalls) {
+          global.fetch = async () => fetchLikeResponse(body);
+          let outcome;
+          try {
+            await call();
+            outcome = "parsed";
+          } catch (error) {
+            outcome = error.name === "ZBApiError" && error.statusCode === 200 ? "rejected" : `threw ${error}`;
+          }
+          // A 200 with no bytes at all is the Warmup client's documented empty
+          // success (null), as in the other SDKs. A whitespace-only body is not empty.
+          const expected = verdict === "REJECT" && body !== "" ? "rejected" : "parsed";
+          if (outcome !== expected) wrong.push(`${name} ${verdict} ${JSON.stringify(body)}: ${outcome}`);
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
   });
 
   it("keeps every form of the key out of every error, on every public method", async () => {

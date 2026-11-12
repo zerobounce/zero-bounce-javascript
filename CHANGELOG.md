@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Redaction is closed under encoding. After the known spellings of every
+  secret (the API key, the Warmup key, the SMTP username and password) are
+  replaced with `***`, the rest of the message is decoded up to three layers
+  deep in any order (URL `%XX`, form `+` and `%XX`, JSON escapes including
+  `\/` and `\uXXXX`); if any decoded view still contains a secret, the whole
+  message is replaced with "ZeroBounce: the response text was omitted because
+  it contained a credential." 4.0.1 and earlier matched a fixed list of
+  spellings (raw, URL-encoded, `escape()`), so a body echoing the key
+  URL-encoded twice passed it to the caller.
 - `init` is all or nothing: the key and every base URL are checked before any
   of them is stored, so an `init` that throws leaves the client exactly as it
   was. In 4.0.1 and earlier, `init` stored the new key and main base URL
@@ -54,9 +63,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- JSON responses are strict RFC 8259 JSON on every JSON call, Warmup
+  included (checked against the shared strict JSON corpus). A body starting
+  with a UTF-8 byte order mark is rejected with status 200: 4.0.1 read
+  bodies with `Response.text()`, which drops the mark, so such a body was
+  accepted. `ZeroBounceWarmup` JSON methods return `null` only for a 204 or a
+  200 with no body at all; 4.0.1 also returned `null` for a whitespace-only
+  body (and, through `String.prototype.trim`, for one of U+00A0, U+2003 and
+  similar), which now rejects with status 200.
 - `deleteInboxPlacementTest` resolves to an empty object `{}` (no `id` or
-  `status`) when the API answers with an empty 2xx (204 No Content or an empty
-  200), as the C and C++ SDKs return `{}`. 4.0.1 rejected that success with
+  `status`) when the API answers with an empty 2xx (204 No Content or a 200
+  with no body at all; a whitespace-only body is not JSON and rejects), as the
+  C and C++ SDKs return `{}`. 4.0.1 rejected that success with
   "Empty response from ZeroBounce (HTTP 204)". Every other call still rejects
   an empty 2xx, and an empty error answer still rejects with its status. The
   declared return type is unchanged (`Promise<InboxPlacementTestDeleted>`).

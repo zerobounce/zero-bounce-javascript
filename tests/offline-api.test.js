@@ -4,6 +4,7 @@
 import { inspect } from "util";
 import { ZeroBounceSDK } from "../src/zero-bounce.js";
 import { expectEveryFormRedacted } from "./secret-forms.js";
+import { fetchLikeResponse, strictJsonCorpus } from "./strict-json-corpus.js";
 
 const HTML_PAGE = (() => {
   const head =
@@ -470,6 +471,38 @@ describe("offline API", () => {
     }
   });
 
+  it("rejects every REJECT body and parses every ACCEPT body of the strict JSON corpus, on every JSON method", async () => {
+    const { reject, accept } = strictJsonCorpus();
+    expect(reject.length).toBeGreaterThan(30);
+    expect(accept.length).toBeGreaterThan(5);
+    const sdk = client("parity-key");
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    // Downloads return CSV text; every other public method expects JSON.
+    const jsonCalls = callAll(sdk).filter(([name]) => !/^get\w*File$/.test(name));
+    expect(jsonCalls.length).toBe(publicMethods(ZeroBounceSDK).length - 4);
+    const wrong = [];
+    for (const [verdict, bodies] of [["REJECT", reject], ["ACCEPT", accept]]) {
+      for (const body of bodies) {
+        global.fetch = async () => fetchLikeResponse(body);
+        for (const [name, run] of jsonCalls) {
+          let outcome;
+          try {
+            await run();
+            outcome = "parsed";
+          } catch (error) {
+            outcome = error.name === "ZBApiError" && error.statusCode === 200 ? "rejected" : `threw ${error}`;
+          }
+          // E8: an empty 2xx (no bytes at all) is the documented success of
+          // deleteInboxPlacementTest. A whitespace-only body is not empty.
+          const emptyDelete = name === "deleteInboxPlacementTest" && body === "";
+          const expected = verdict === "REJECT" && !emptyDelete ? "rejected" : "parsed";
+          if (outcome !== expected) wrong.push(`${name} ${verdict} ${JSON.stringify(body)}: ${outcome}`);
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
   it("keeps every form of the key out of a transport or API error, on every public method", async () => {
     // A key whose URL-encoded, escape()d and JSON-escaped forms all differ
     // from the raw one and from each other.
@@ -553,8 +586,9 @@ describe("offline API", () => {
     for (const [name, run] of iptCalls) {
       for (const [status, body] of [[204, ""], [200, ""], [200, "  \n"]]) {
         answerWith(status, body);
+        // Only a body with no bytes is empty: whitespace is not JSON (E7, strict JSON corpus).
         const expected =
-          name === "deleteInboxPlacementTest"
+          name === "deleteInboxPlacementTest" && body === ""
             ? { resolved: {} }
             : { status, message: `Empty response from ZeroBounce (HTTP ${status})` };
         expect({ name, status, outcome: await settle(run) }).toEqual({ name, status, outcome: expected });

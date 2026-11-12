@@ -96,8 +96,12 @@ export function pathSegment(value, name) {
 
 /** The body of JSON.stringify(text): the form a JSON request body quotes it in. */
 const jsonEscaped = (text) => JSON.stringify(text).slice(1, -1);
-/** The same with "/" escaped as "\/", as PHP's json_encode and others write it. */
-const jsonEscapedSlash = (text) => jsonEscaped(text).replace(/\//g, "\\/");
+/**
+ * The same with "/" written as "\/", as PHP's json_encode and others write it.
+ * jsonEscaped has already escaped every backslash, so turning each "/" into
+ * "\/" here is a complete JSON escape, not a partial one.
+ */
+const jsonEscapedSlash = (text) => jsonEscaped(text).split("/").join("\\/");
 /** URL-encoded with spaces as %20. */
 const urlEncoded = (text) => encodeURIComponent(text);
 /** Form-encoded as URLSearchParams writes it: spaces as "+", "'" as %27. */
@@ -131,7 +135,73 @@ function secretForms(secret) {
   return [...new Set(forms.filter(Boolean))].sort((a, b) => b.length - a.length);
 }
 
-/** Replace every form a secret could take in a message with ***. */
+/** What a message says instead when a decoded view of it still holds a secret. */
+export const CREDENTIAL_OMITTED_MESSAGE =
+  "ZeroBounce: the response text was omitted because it contained a credential.";
+
+/** %XX sequences decoded as UTF-8; a sequence that is not valid UTF-8 stays as it is. */
+function percentDecoded(text) {
+  return text.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+    try {
+      return decodeURIComponent(run);
+    } catch {
+      return run.replace(/%([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    }
+  });
+}
+
+const JSON_UNESCAPES = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" };
+
+/** Each JSON string escape (\" \\ \/ \b \f \n \r \t \uXXXX) decoded, in one left-to-right pass. */
+function jsonUnescaped(text) {
+  return text.replace(/\\(?:u([0-9A-Fa-f]{4})|(["\\/bfnrt]))/g, (_, hex, simple) =>
+    hex ? String.fromCharCode(parseInt(hex, 16)) : JSON_UNESCAPES[simple]
+  );
+}
+
+/**
+ * The decoders a body's encodings are undone with: URL (%XX), form ("+" as a
+ * space, then %XX, so a form-encoded layer takes one step) and JSON.
+ */
+const DECODERS = [percentDecoded, (text) => percentDecoded(text.split("+").join(" ")), jsonUnescaped];
+const DECODE_LAYERS = 3;
+
+/** The text and every view of it reached by up to three decodings, in any order. */
+function decodedViews(text) {
+  const views = new Set([text]);
+  let layer = [text];
+  for (let depth = 0; depth < DECODE_LAYERS; depth += 1) {
+    const next = [];
+    for (const view of layer) {
+      for (const decode of DECODERS) {
+        const decoded = decode(view);
+        if (!views.has(decoded)) {
+          views.add(decoded);
+          next.push(decoded);
+        }
+      }
+    }
+    layer = next;
+  }
+  return views;
+}
+
+/** Whether any decoded view of the text still contains one of the secrets. */
+export function holdsSecret(text, secrets = []) {
+  const present = secrets.filter(Boolean).map(String);
+  if (!present.length) return false;
+  for (const view of decodedViews(String(text))) {
+    if (present.some((secret) => view.includes(secret))) return true;
+  }
+  return false;
+}
+
+/**
+ * Replace every form a secret could take in a message with ***. Then decode
+ * what is left (URL, "+", JSON, up to three layers in any order): a spelling
+ * the list above misses still decodes to the secret, and the whole text is
+ * dropped for a fixed message rather than returned.
+ */
 export function redactSecrets(text, secrets = []) {
   let value = String(text);
   for (const secret of secrets) {
@@ -140,7 +210,8 @@ export function redactSecrets(text, secrets = []) {
       value = value.split(form).join("***");
     }
   }
-  return value.replace(/([?&](?:api_key|API-Key)=)[^&\s"']+/gi, "$1***");
+  value = value.replace(/([?&](?:api_key|API-Key)=)[^&\s"']+/gi, "$1***");
+  return holdsSecret(value, secrets) ? CREDENTIAL_OMITTED_MESSAGE : value;
 }
 
 function fetchTimeoutSignal() {
@@ -407,6 +478,18 @@ export function warnOnRegionalBulkHost(url, apiBaseURL, state) {
   }
 }
 
+/**
+ * A JSON body exactly as sent. Response.text() drops a leading UTF-8 byte
+ * order mark, and a BOM is not JSON (RFC 8259, strict JSON corpus), so the
+ * bytes are decoded with the mark kept, where the platform allows.
+ */
+export async function readJsonBodyText(response) {
+  if (response && typeof response.arrayBuffer === "function" && typeof TextDecoder !== "undefined") {
+    return new TextDecoder("utf-8", { ignoreBOM: true }).decode(await response.arrayBuffer());
+  }
+  return readBodyText(response);
+}
+
 async function readBodyText(response) {
   if (response && typeof response.text === "function") return await response.text();
   if (response && typeof response.json === "function") {
@@ -535,7 +618,7 @@ export async function createRequest({
 
   let finalResult;
   try {
-    finalResult = await readBodyText(response);
+    finalResult = returnText ? await readBodyText(response) : await readJsonBodyText(response);
   } catch (error) {
     throw transportError(error, secrets);
   }
@@ -552,7 +635,8 @@ export async function createRequest({
   const status = responseStatus(response);
   // Only for calls documented to answer 204 No Content (Inbox Placement DELETE):
   // an empty object, so the declared result type holds (as C/C++ "{}", iOS [:]).
-  if (emptyIsSuccess && status >= 200 && status < 300 && !String(finalResult).trim()) {
+  // Empty means no bytes at all: a whitespace-only body is not JSON (E7).
+  if (emptyIsSuccess && status >= 200 && status < 300 && String(finalResult) === "") {
     return {};
   }
   const contentType = responseContentType(response);

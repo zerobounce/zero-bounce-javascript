@@ -17,6 +17,7 @@ import {
   looksLikeHtml,
   looksLikeJson,
   pathSegment,
+  readJsonBodyText,
   redactSecrets,
   requireHttpsUrl,
   strictBoolean,
@@ -91,7 +92,7 @@ export class ZeroBounceWarmup {
 
   // -- transport --------------------------------------------------------------
 
-  async _send(method, path, { params = null, jsonBody = null, secrets = [] } = {}) {
+  async _send(method, path, { params = null, jsonBody = null, secrets = [], csv = false } = {}) {
     const query =
       params && Object.keys(params).length ? `?${new URLSearchParams(params)}` : "";
     const url = `${this._root}${path}${query}`;
@@ -129,7 +130,9 @@ export class ZeroBounceWarmup {
     }
     let body = "";
     try {
-      if (typeof response.text === "function") body = await response.text();
+      // A JSON answer is read with any byte order mark kept, so it is rejected (E7).
+      if (!csv) body = await readJsonBodyText(response);
+      else if (typeof response.text === "function") body = await response.text();
     } catch (error) {
       // A body cut short can quote the request, so it is raised redacted, on its own.
       const name = error && error.name ? error.name : "Error";
@@ -145,7 +148,8 @@ export class ZeroBounceWarmup {
   /** The JSON payload of a 200, or null for a documented empty success (204, empty 200). */
   async _json(method, path, options = {}) {
     const { status, body, response } = await this._send(method, path, options);
-    if (status === 204 || !String(body).trim()) return null;
+    // Empty means no bytes at all: a whitespace-only body is not JSON (E7).
+    if (status === 204 || String(body) === "") return null;
     // An HTML page (a proxy or challenge page) is never the API's answer, even
     // when its body happens to parse as JSON.
     if (contentTypeOf(response).includes("text/html")) {
@@ -166,7 +170,7 @@ export class ZeroBounceWarmup {
 
   /** A CSV download, returned as text. */
   async _csv(path, params = null) {
-    const { status, body, response } = await this._send("GET", path, { params });
+    const { status, body, response } = await this._send("GET", path, { params, csv: true });
     const contentType = contentTypeOf(response);
     // A JSON answer (by content type, or a JSON object or array under any
     // type) or an HTML page (a proxy or challenge page) is never the CSV.
