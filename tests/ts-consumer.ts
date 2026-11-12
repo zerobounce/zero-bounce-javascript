@@ -299,7 +299,7 @@ async function inboxPlacement(): Promise<void> {
   const seeds: string[] = created.emailAddressList;
   const result: InboxPlacementTestResult = await zb.getInboxPlacementTest(created.id);
   const status: "running" | "finished" = result.status;
-  const deleted: InboxPlacementTestDeleted = await zb.deleteInboxPlacementTest(created.id);
+  const deleted: InboxPlacementTestDeleted | null = await zb.deleteInboxPlacementTest(created.id);
   const webhook: InboxPlacementWebhookResponse = await zb.getInboxPlacementWebhook();
   const webhookUrl: string = webhook.webhookUrl;
   void seeds;

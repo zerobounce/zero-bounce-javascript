@@ -17,6 +17,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   threw, a caller that caught the error sent its next requests to the EU host
   with `key-B`, and a fresh client whose `init` threw on an `http://` base URL
   still held the key.
+- `ZeroBounceWarmup` redacts a failure to read the response body (for example
+  a connection closed mid-body) like every other error. In 4.0.1 and earlier
+  that error was rethrown as it came from `fetch`, so a `fetch` implementation
+  that quotes the request or the key in it passed the key to the caller.
+
+### Fixed
+
+- `deleteInboxPlacementTest` resolves to `null` when the API answers with an
+  empty 2xx (204 No Content or an empty 200), as the Python, Rust and PHP SDKs
+  do. 4.0.1 rejected that success with "Empty response from ZeroBounce (HTTP
+  204)". Every other call still rejects an empty 2xx, and an empty error
+  answer still rejects with its status. The declared return type is now
+  `Promise<InboxPlacementTestDeleted | null>`, so TypeScript code that assigns
+  the result to `InboxPlacementTestDeleted` under `strictNullChecks` needs a
+  null check.
+- `ZeroBounceWarmup.downloadSeeds` and `downloadStatistics` reject an HTML page
+  (served as `text/html`, or an HTML body under any content type, such as a
+  proxy or challenge page) with a `ZBApiError` carrying the HTTP status. 4.0.1
+  resolved it as if it were the CSV text.
 
 ## [4.0.1] - 2026-11-11
 

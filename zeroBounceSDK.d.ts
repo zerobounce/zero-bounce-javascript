@@ -969,8 +969,11 @@ export class ZeroBounceSDK {
    */
   listInboxPlacementTests(options?: ListInboxPlacementTestsOptions | null): Promise<unknown>;
 
-  /** Inbox Placement Tester: delete a finished test. DELETE /api/ipt/test/{id} */
-  deleteInboxPlacementTest(testId: string | number): Promise<InboxPlacementTestDeleted>;
+  /**
+   * Inbox Placement Tester: delete a finished test. DELETE /api/ipt/test/{id}.
+   * Resolves to null when the API answers with an empty 2xx (204 No Content).
+   */
+  deleteInboxPlacementTest(testId: string | number): Promise<InboxPlacementTestDeleted | null>;
 
   /** Inbox Placement Tester: the webhook saved on this API key. GET /api/ipt/webhook */
   getInboxPlacementWebhook(): Promise<InboxPlacementWebhookResponse>;
