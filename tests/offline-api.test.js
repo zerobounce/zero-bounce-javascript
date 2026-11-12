@@ -442,9 +442,12 @@ describe("offline API", () => {
   });
 
   it("keeps every form of the key out of a transport or API error, on every public method", async () => {
-    // A key whose URL-encoded form differs from the raw one.
-    const key = "transport-secret+key/1";
-    const forms = [key, encodeURIComponent(key), escape(key)];
+    // A key whose URL-encoded, escape()d and JSON-escaped forms all differ
+    // from the raw one and from each other.
+    const key = 'transport"secret/+%1';
+    const json = JSON.stringify(key).slice(1, -1);
+    const forms = [key, encodeURIComponent(key), escape(key), json, json.replace(/\//g, "\\/")];
+    expect(new Set(forms).size).toBe(forms.length);
     const sdk = client(key);
     jest.spyOn(console, "warn").mockImplementation(() => {});
     // [status, content type, body]: API and proxy answers that quote the key.
@@ -1140,6 +1143,61 @@ describe("offline API", () => {
     const csvSdk = client("parity-key");
     jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     await expect(csvSdk.getFile("file-1")).resolves.toBe("result.csv");
+  });
+
+  it("rejects a JSON, HTML or empty download on every getfile method, with status 200", async () => {
+    const sdk = client("parity-key");
+    const downloads = callAll(sdk).filter(([, , , , path]) => path.includes("getfile"));
+    expect(downloads.map(([name]) => name).sort()).toEqual([
+      "getDomainSearchFile",
+      "getEmailFinderFile",
+      "getFile",
+      "getScoringFile",
+    ]);
+    // Each answer is caught by one check only, so dropping any one check fails here.
+    const answers = {
+      "JSON array under text/csv": ["text/csv", '["File not found"]'],
+      "JSON object under no content type": [null, '{"detail":"Not found"}'],
+      "problem+json content type": ["application/problem+json", "email\na@example.com\n"],
+      "JSON content type with charset": ["application/json; charset=utf-8", "email\na@example.com\n"],
+      "text/html content type, body not a page": ["text/html; charset=UTF-8", "<h1>403 Forbidden</h1>"],
+      "HTML page under text/csv": ["text/csv", "<!DOCTYPE html><html><body>Blocked</body></html>"],
+      "empty body": ["text/csv", ""],
+    };
+    for (const [answer, [contentType, body]] of Object.entries(answers)) {
+      for (const [name, run] of downloads) {
+        global.fetch = async () => httpResponse(200, body, contentType);
+        let outcome;
+        try {
+          outcome = { resolved: await run() };
+        } catch (error) {
+          outcome = { status: error.statusCode, name: error.name };
+        }
+        expect({ answer, name, outcome }).toEqual({ answer, name, outcome: { status: 200, name: "ZBApiError" } });
+      }
+    }
+  });
+
+  it("rejects a 2xx JSON call served as text/html even when the body is valid JSON", async () => {
+    const sdk = client("parity-key");
+    global.fetch = async () => httpResponse(200, '{"Credits":"5"}', "text/html");
+    const error = await expectRejected(sdk.getCredits());
+    expect([error.name, error.statusCode]).toEqual(["ZBApiError", 200]);
+  });
+
+  it('rejects success "false", "False" and false on a 2xx, each with status 200', async () => {
+    const sdk = client("parity-key");
+    for (const success of [false, "false", "False"]) {
+      global.fetch = async () =>
+        httpResponse(200, JSON.stringify({ success, message: "File not found" }), "application/json");
+      let outcome;
+      try {
+        outcome = { resolved: await sdk.getFileStatus("file-1") };
+      } catch (error) {
+        outcome = { status: error.statusCode, message: error.message };
+      }
+      expect({ success, outcome }).toEqual({ success, outcome: { status: 200, message: "File not found" } });
+    }
   });
 
   it("sends validateBatch as JSON with the JSON content type", async () => {

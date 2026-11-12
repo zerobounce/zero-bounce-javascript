@@ -13,7 +13,9 @@
 import {
   apiError,
   checkApiKey,
+  isJsonContentType,
   looksLikeHtml,
+  looksLikeJson,
   pathSegment,
   redactSecrets,
   requireHttpsUrl,
@@ -161,10 +163,12 @@ export class ZeroBounceWarmup {
       response && response.headers && typeof response.headers.get === "function"
         ? String(response.headers.get("content-type") || "").toLowerCase()
         : "";
-    // A JSON answer or an HTML page (a proxy or challenge page) is never the CSV.
+    // A JSON answer (by content type, or a JSON object or array under any
+    // type) or an HTML page (a proxy or challenge page) is never the CSV.
     if (
       !String(body).trim() ||
-      contentType.includes("application/json") ||
+      isJsonContentType(contentType) ||
+      looksLikeJson(body) ||
       contentType.includes("text/html") ||
       looksLikeHtml(body)
     ) {

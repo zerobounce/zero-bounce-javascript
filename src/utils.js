@@ -94,13 +94,25 @@ export function pathSegment(value, name) {
   return encodeURIComponent(text);
 }
 
+/**
+ * Every form a secret can take in a message: raw, URL-encoded, escape()d, and
+ * JSON-escaped (a body or proxy that quotes a JSON request body), with and
+ * without "/" escaped as "\/". Longest first, so no form leaves part of a
+ * longer one behind.
+ */
+function secretForms(secret) {
+  const json = JSON.stringify(String(secret)).slice(1, -1);
+  const forms = [secret, encodeURIComponent(secret), escape(secret), json, json.replace(/\//g, "\\/")];
+  return [...new Set(forms.filter(Boolean))].sort((a, b) => b.length - a.length);
+}
+
 /** Replace every form a secret could take in a message with ***. */
 export function redactSecrets(text, secrets = []) {
   let value = String(text);
   for (const secret of secrets) {
     if (!secret) continue;
-    for (const form of [secret, encodeURIComponent(secret), escape(secret)]) {
-      if (form) value = value.split(form).join("***");
+    for (const form of secretForms(secret)) {
+      value = value.split(form).join("***");
     }
   }
   return value.replace(/([?&](?:api_key|API-Key)=)[^&\s"']+/gi, "$1***");
@@ -141,12 +153,6 @@ export function getFileJsonIndicatesFailure(o) {
   );
 }
 
-function shouldReturnGetFileAsJsonError(parsed) {
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
-  if (getFileJsonIndicatesFailure(parsed)) return true;
-  return Object.prototype.hasOwnProperty.call(parsed, "success");
-}
-
 function isBrowserEnvironment() {
   return (
     typeof window !== "undefined" &&
@@ -162,6 +168,18 @@ function responseStatus(response) {
 function responseContentType(response) {
   if (!response || !response.headers || typeof response.headers.get !== "function") return "";
   return String(response.headers.get("content-type") || "").toLowerCase();
+}
+
+/** A JSON media type: application/json, or any "+json" type such as application/problem+json. */
+export function isJsonContentType(contentType) {
+  const media = String(contentType || "").split(";")[0].trim().toLowerCase();
+  return media === "application/json" || media.endsWith("+json");
+}
+
+/** A body that is a JSON object or array (or tries to be one): never a CSV file. */
+export function looksLikeJson(body) {
+  const trimmed = String(body).trim();
+  return trimmed.startsWith("{") || trimmed.startsWith("[");
 }
 
 export function looksLikeHtml(body) {
@@ -383,21 +401,12 @@ function processGetFileResponseBody(finalResult, response, scoring) {
     throw apiError(`Empty response from ZeroBounce (HTTP ${status})`, status);
   }
 
-  // A file download is never JSON: a body served as application/json, or a
-  // JSON object that reads as an API error, rejects with the status (as in
-  // the Python and Go SDKs) rather than resolving as an object or as CSV text.
-  const trimmed = finalResult.trim();
-  const isJsonType = ct.includes("application/json");
-  if (isJsonType || trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    let parsed;
-    try {
-      parsed = JSON.parse(finalResult);
-    } catch {
-      throw apiError("ZeroBounce returned a response that is not valid JSON.", status);
-    }
-    if (isJsonType || shouldReturnGetFileAsJsonError(parsed)) {
-      throw apiError(messageFromBody(finalResult, status), status);
-    }
+  // A file download is never JSON: a body served with a JSON content type
+  // (application/json, application/problem+json), or a JSON object or array
+  // under any content type, rejects with the status rather than resolving as
+  // CSV text.
+  if (isJsonContentType(ct) || looksLikeJson(finalResult)) {
+    throw apiError(messageFromBody(finalResult, status), status);
   }
 
   if (!isBrowserEnvironment()) {

@@ -357,6 +357,47 @@ describe("Warmup API client", () => {
     expect(error.message).not.toContain("<html");
   });
 
+  it("sends testSmtpConfiguration as exactly the documented JSON body", async () => {
+    const fake = installFake({ body: '{"success":true}' });
+    const c = new ZeroBounceWarmup(KEY);
+    await c.testSmtpConfiguration({
+      fromAddress: "a@example.com",
+      username: "smtp-user",
+      password: "smtp-pass",
+      server: "smtp.example.com",
+      port: 587,
+    });
+    const request = fake.only();
+    expect([request.method, request.path]).toEqual(["POST", "/api/v1/warmup/test-smtp-configuration"]);
+    expect(request.json).toEqual({
+      from_address: "a@example.com",
+      username: "smtp-user",
+      password: "smtp-pass",
+      server: "smtp.example.com",
+      port: 587,
+    });
+  });
+
+  it("masks every form of the SMTP credentials, JSON-escaped included, in errors", async () => {
+    const password = 'smtp"pass/+%1';
+    const username = 'smtp"user/+%2';
+    const forms = (secret) => {
+      const json = JSON.stringify(secret).slice(1, -1);
+      return [secret, encodeURIComponent(secret), escape(secret), json, json.replace(/\//g, "\\/")];
+    };
+    const all = [...forms(password), ...forms(username)];
+    // A server that quotes the JSON request body it received, and each form.
+    global.fetch = async (url, init) =>
+      httpResponse(500, `SMTP login failed: ${init.body} ${all.join(" ")}`, "text/plain");
+    const c = new ZeroBounceWarmup(KEY);
+    const error = await rejects(
+      c.testSmtpConfiguration({ fromAddress: "a@example.com", username, password, server: "smtp.example.com", port: 587 })
+    );
+    const text = `${error.message}\n${error.stack}\n${inspect(error, { showHidden: true, depth: 5 })}`;
+    expect(all.filter((form) => text.includes(form))).toEqual([]);
+    expect(error.statusCode).toBe(500);
+  });
+
   it("masks the key and the SMTP credentials in errors", async () => {
     const password = "super-secret-password";
     const username = "smtp-user";
@@ -468,6 +509,35 @@ describe("Warmup API client", () => {
     }
   });
 
+  it("rejects a JSON or empty download whatever its content type, with status 200", async () => {
+    const c = new ZeroBounceWarmup(KEY);
+    // Each answer is caught by one check only, so dropping any one check fails here.
+    const answers = {
+      "JSON object under text/csv": ["text/csv", '{"detail":"Not found"}'],
+      "JSON array under text/csv": ["text/csv", '["No statistics yet"]'],
+      "JSON object, no content type": [null, '{"error":"Not found"}'],
+      "problem+json content type": ["application/problem+json", "seed\na@example.com\n"],
+      "JSON content type": ["application/json", "seed\na@example.com\n"],
+      "empty body": ["text/csv", ""],
+      "blank body": ["text/csv", " \n"],
+    };
+    for (const [answer, [contentType, body]] of Object.entries(answers)) {
+      for (const [name, call] of [
+        ["downloadSeeds", () => c.downloadSeeds()],
+        ["downloadStatistics", () => c.downloadStatistics("sender@example.com")],
+      ]) {
+        installFake({ body, contentType });
+        let outcome;
+        try {
+          outcome = { resolved: await call() };
+        } catch (error) {
+          outcome = { status: error.statusCode, name: error.name };
+        }
+        expect({ answer, name, outcome }).toEqual({ answer, name, outcome: { status: 200, name: "ZBApiError" } });
+      }
+    }
+  });
+
   it("rejects a download answered with an HTML page instead of returning it as CSV text", async () => {
     const c = new ZeroBounceWarmup(KEY);
     const page = `<!DOCTYPE html><html><head><title>Just a moment ${KEY}</title></head><body>${"x".repeat(5000)}</body></html>`;
@@ -490,9 +560,12 @@ describe("Warmup API client", () => {
   });
 
   it("keeps every form of the key out of every error, on every public method", async () => {
-    // A key whose URL-encoded and escape() forms differ from the raw one.
-    const key = "warmup-secret+key/1";
-    const forms = [key, encodeURIComponent(key), escape(key)];
+    // A key whose URL-encoded, escape()d and JSON-escaped forms all differ
+    // from the raw one and from each other.
+    const key = 'warmup"secret/+%1';
+    const json = JSON.stringify(key).slice(1, -1);
+    const forms = [key, encodeURIComponent(key), escape(key), json, json.replace(/\//g, "\\/")];
+    expect(new Set(forms).size).toBe(forms.length);
     const detail = `${forms.join(" ")} https://warmup-api.zerobounce.net/api/v1/warmup?API-Key=${encodeURIComponent(key)}`;
     // [status, content type, body], or a body read that fails.
     const echoes = {

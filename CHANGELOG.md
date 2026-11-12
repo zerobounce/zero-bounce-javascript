@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a connection closed mid-body) like every other error. In 4.0.1 and earlier
   that error was rethrown as it came from `fetch`, so a `fetch` implementation
   that quotes the request or the key in it passed the key to the caller.
+- Error messages are also redacted for the JSON-escaped form of every secret
+  (the API key, the Warmup key, and the SMTP username and password), with and
+  without `/` escaped as `\/`. 4.0.1 and earlier removed the raw,
+  URL-encoded and `escape()` forms only, so a secret containing `"` or `\`
+  (or `/`, where the body escapes it as `\/`) stayed readable in a message
+  built from a body that quotes a JSON request (for example a 400 echoing
+  `validateBatch`'s body or `testSmtpConfiguration`'s password).
 
 ### Changed
 
@@ -43,6 +50,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Promise<InboxPlacementTestDeleted | null>`, so TypeScript code that assigns
   the result to `InboxPlacementTestDeleted` under `strictNullChecks` needs a
   null check.
+- `ZeroBounceWarmup.downloadSeeds` and `downloadStatistics` reject a JSON
+  answer whatever its content type: a JSON object or array body (also under
+  `text/csv` or with no content type) and any JSON media type, such as
+  `application/problem+json`, reject with a `ZBApiError` carrying the HTTP
+  status. 4.0.1 rejected only an `application/json` content type and resolved
+  the others as if they were the CSV text.
+- `getFile`, `getScoringFile`, `getEmailFinderFile` and `getDomainSearchFile`
+  reject any JSON body (a JSON array, or an object that is not shaped as an
+  error) and any JSON media type such as `application/problem+json` with a
+  `ZBApiError` carrying the HTTP status. 4.0.1 resolved a JSON array, or an
+  `application/problem+json` body with a non-error shape, as the file text.
 - `ZeroBounceWarmup.downloadSeeds` and `downloadStatistics` reject an HTML page
   (served as `text/html`, or an HTML body under any content type, such as a
   proxy or challenge page) with a `ZBApiError` carrying the HTTP status. 4.0.1
