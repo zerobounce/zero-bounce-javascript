@@ -28,6 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (or `/`, where the body escapes it as `\/`) stayed readable in a message
   built from a body that quotes a JSON request (for example a 400 echoing
   `validateBatch`'s body or `testSmtpConfiguration`'s password).
+- Error messages are also redacted for the URL-encoded forms of every
+  secret's JSON-escaped copy (spaces as `%20` and, as `URLSearchParams`
+  writes them, as `+`), for the `URLSearchParams` form of the secret itself,
+  and for a twice JSON-escaped copy. Earlier, an SMTP password or key
+  containing `"`, `\`, `'` or a space stayed readable in a message built
+  from a body that echoes the request URL-encoded (for example a 500 quoting
+  `testSmtpConfiguration`'s JSON body URL-encoded, or quoting it as a JSON
+  string).
+- `ZeroBounceWarmup` JSON methods reject a 2xx answer served as `text/html`
+  (a proxy or challenge page) with a `ZBApiError`, even when its body parses
+  as JSON. 4.0.1 and earlier returned such a body as the result.
 
 ### Changed
 

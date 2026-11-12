@@ -144,8 +144,16 @@ export class ZeroBounceWarmup {
 
   /** The JSON payload of a 200, or null for a documented empty success (204, empty 200). */
   async _json(method, path, options = {}) {
-    const { status, body } = await this._send(method, path, options);
+    const { status, body, response } = await this._send(method, path, options);
     if (status === 204 || !String(body).trim()) return null;
+    // An HTML page (a proxy or challenge page) is never the API's answer, even
+    // when its body happens to parse as JSON.
+    if (contentTypeOf(response).includes("text/html")) {
+      throw apiError(
+        redactSecrets(warmupMessage(body, status), [this._api_key, ...(options.secrets || [])]),
+        status
+      );
+    }
     try {
       return JSON.parse(body);
     } catch {
@@ -159,10 +167,7 @@ export class ZeroBounceWarmup {
   /** A CSV download, returned as text. */
   async _csv(path, params = null) {
     const { status, body, response } = await this._send("GET", path, { params });
-    const contentType =
-      response && response.headers && typeof response.headers.get === "function"
-        ? String(response.headers.get("content-type") || "").toLowerCase()
-        : "";
+    const contentType = contentTypeOf(response);
     // A JSON answer (by content type, or a JSON object or array under any
     // type) or an HTML page (a proxy or challenge page) is never the CSV.
     if (
@@ -497,6 +502,13 @@ function engagementBody(cFrom, replyPct, importantPct, clickPct) {
     throw clientError("click_pct parameter is invalid. At most important_pct x 1.75.");
   }
   return { c_from: cFrom, reply_pct: replyPct, important_pct: importantPct, click_pct: clickPct };
+}
+
+/** The response's Content-Type in lower case, or "" when it has none. */
+function contentTypeOf(response) {
+  return response && response.headers && typeof response.headers.get === "function"
+    ? String(response.headers.get("content-type") || "").toLowerCase()
+    : "";
 }
 
 /** A Warmup error body as a short message. Mirrors the validation client's rules. */

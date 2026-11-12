@@ -1566,6 +1566,44 @@ describe("offline API", () => {
     expect(covered.sort()).toEqual(publicMethods(ZeroBounceSDK));
   });
 
+  it("masks the API key in each of its forms, URL-encoded JSON-escaped included, needing every one", async () => {
+    // A space, a quote, "/", "+", "%", "&", "=", "<", ">", "'" and "\\": every
+    // form below differs from every other.
+    const key = `api SeCrEt"/+%&=<>'\\z`;
+    const json = JSON.stringify(key).slice(1, -1);
+    const form = (text) => new URLSearchParams({ s: text }).toString().slice(2);
+    const bases = {
+      raw: key,
+      json,
+      "json, / as \\/": json.replace(/\//g, "\\/"),
+      "json twice": JSON.stringify(json).slice(1, -1),
+    };
+    const forms = { "escape()": escape(key) };
+    for (const [name, base] of Object.entries(bases)) {
+      forms[name] = base;
+      forms[`${name}, URL-encoded (%20)`] = encodeURIComponent(base);
+      forms[`${name}, form-encoded (+)`] = form(base);
+    }
+    expect(new Set(Object.values(forms)).size).toBe(Object.keys(forms).length);
+    const sdk = client(key);
+    const messageFor = async (echo) => {
+      global.fetch = async () => httpResponse(400, `Bad Request: [${echo}]`, "text/plain");
+      try {
+        await sdk.validateEmail("a@example.com");
+      } catch (error) {
+        return error.message;
+      }
+      return "resolved";
+    };
+    // Each form, echoed on its own, must come back exactly as "***" would: a
+    // form left out leaks, or leaves the tail of a longer form behind.
+    const expected = await messageFor("***");
+    expect(expected).toContain("[***]");
+    const got = {};
+    for (const [name, echo] of Object.entries(forms)) got[name] = await messageFor(echo);
+    expect(got).toEqual(Object.fromEntries(Object.keys(forms).map((name) => [name, expected])));
+  });
+
   it("redacts the api_key query value in a transport error even in a form no literal replacement covers", async () => {
     // URLSearchParams writes a space as "+" and "+" as "%2B": none of the raw,
     // encodeURIComponent or escape forms. Only the api_key=... pattern

@@ -95,14 +95,22 @@ export function pathSegment(value, name) {
 }
 
 /**
- * Every form a secret can take in a message: raw, URL-encoded, escape()d, and
- * JSON-escaped (a body or proxy that quotes a JSON request body), with and
- * without "/" escaped as "\/". Longest first, so no form leaves part of a
- * longer one behind.
+ * Every form a secret can take in a message. The bases: raw, JSON-escaped (a
+ * body or proxy that quotes a JSON request body), the same with "/" escaped as
+ * "\/", and JSON-escaped twice (a JSON copy of that quote). Each base also
+ * URL-encoded (spaces as %20) and form-encoded as URLSearchParams writes it
+ * (spaces as "+", "'" as %27): a server that echoes a URL-encoded request
+ * body. Plus escape() of the raw secret. Longest first, so no form leaves part
+ * of a longer one behind.
  */
 function secretForms(secret) {
-  const json = JSON.stringify(String(secret)).slice(1, -1);
-  const forms = [secret, encodeURIComponent(secret), escape(secret), json, json.replace(/\//g, "\\/")];
+  const raw = String(secret);
+  const json = JSON.stringify(raw).slice(1, -1);
+  const bases = [raw, json, json.replace(/\//g, "\\/"), JSON.stringify(json).slice(1, -1)];
+  const forms = [escape(raw)];
+  for (const base of bases) {
+    forms.push(base, encodeURIComponent(base), new URLSearchParams({ s: base }).toString().slice(2));
+  }
   return [...new Set(forms.filter(Boolean))].sort((a, b) => b.length - a.length);
 }
 

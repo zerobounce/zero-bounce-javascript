@@ -398,6 +398,63 @@ describe("Warmup API client", () => {
     expect(error.statusCode).toBe(500);
   });
 
+  it("masks the SMTP password in each of its forms, URL-encoded JSON-escaped included, needing every one", async () => {
+    // A space, a quote, "/", "+", "%", "&", "=", "<", ">", "'" and "\\": every
+    // form below differs from every other.
+    const password = `pw SeCrEt"/+%&=<>'\\z`;
+    const json = JSON.stringify(password).slice(1, -1);
+    const form = (text) => new URLSearchParams({ s: text }).toString().slice(2);
+    const bases = {
+      raw: password,
+      json,
+      "json, / as \\/": json.replace(/\//g, "\\/"),
+      "json twice": JSON.stringify(json).slice(1, -1),
+    };
+    const forms = { "escape()": escape(password) };
+    for (const [name, base] of Object.entries(bases)) {
+      forms[name] = base;
+      forms[`${name}, URL-encoded (%20)`] = encodeURIComponent(base);
+      forms[`${name}, form-encoded (+)`] = form(base);
+    }
+    expect(new Set(Object.values(forms)).size).toBe(Object.keys(forms).length);
+    const c = new ZeroBounceWarmup(KEY);
+    const messageFor = async (echo) => {
+      global.fetch = async () => httpResponse(500, `SMTP login failed: [${echo}]`, "text/plain");
+      const error = await rejects(
+        c.testSmtpConfiguration({ fromAddress: "a@example.com", username: "u", password, server: "s", port: 587 })
+      );
+      return error.message;
+    };
+    // Each form, echoed on its own, must come back exactly as "***" would: a
+    // form left out leaks, or leaves the tail of a longer form behind.
+    const expected = await messageFor("***");
+    expect(expected).toContain("[***]");
+    const got = {};
+    for (const [name, echo] of Object.entries(forms)) got[name] = await messageFor(echo);
+    expect(got).toEqual(Object.fromEntries(Object.keys(forms).map((name) => [name, expected])));
+  });
+
+  it("masks the SMTP password when a server echoes the request body URL-encoded or quoted as JSON", async () => {
+    const password = `pw SeCrEt"/+%&=<>'\\z`;
+    const echoes = {
+      raw: (body) => body,
+      "URL-encoded": (body) => encodeURIComponent(body),
+      "form-encoded": (body) => new URLSearchParams({ body }).toString(),
+      "quoted as JSON": (body) => JSON.stringify(body),
+      "quoted as JSON, URL-encoded": (body) => encodeURIComponent(JSON.stringify(body)),
+    };
+    const c = new ZeroBounceWarmup(KEY);
+    const leaked = {};
+    for (const [name, echo] of Object.entries(echoes)) {
+      global.fetch = async (url, init) => httpResponse(500, `Error ${echo(init.body)}`, "text/plain");
+      const error = await rejects(
+        c.testSmtpConfiguration({ fromAddress: "a@example.com", username: "u", password, server: "s", port: 587 })
+      );
+      leaked[name] = /SeCrEt/.test(`${error.message}\n${error.stack}`);
+    }
+    expect(leaked).toEqual(Object.fromEntries(Object.keys(echoes).map((name) => [name, false])));
+  });
+
   it("masks the key and the SMTP credentials in errors", async () => {
     const password = "super-secret-password";
     const username = "smtp-user";
@@ -618,6 +675,28 @@ describe("Warmup API client", () => {
       }
     }
     expect([...covered].sort()).toEqual(publicWarmupMethods());
+  });
+
+  it("rejects a JSON answer served as text/html on every JSON method, though the body parses", async () => {
+    const c = new ZeroBounceWarmup(KEY);
+    const calls = allWarmupCalls(c).filter(([name]) => !name.startsWith("download"));
+    expect(calls.length).toBe(publicWarmupMethods().length - 2);
+    const outcome = {};
+    for (const [name, call] of calls) {
+      // The same body under a JSON content type is a result, so only the
+      // content type tells the two apart.
+      installFake({ body: '{"a":1}', contentType: "application/json" });
+      const json = await call();
+      installFake({ body: '{"a":1}', contentType: "text/html; charset=UTF-8" });
+      let html;
+      try {
+        html = await call();
+      } catch (error) {
+        html = [error.name, error.statusCode];
+      }
+      outcome[name] = [json, html];
+    }
+    expect(outcome).toEqual(Object.fromEntries(calls.map(([name]) => [name, [{ a: 1 }, ["ZBApiError", 200]]])));
   });
 
   it("rejects a download served as text/html even when the body does not look like a page", async () => {
