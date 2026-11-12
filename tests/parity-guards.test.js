@@ -126,6 +126,14 @@ describe("getfile and its variants", () => {
     }
   });
 
+  it("reject a 4xx or 5xx answer even when its body reads as a CSV file", async () => {
+    for (const [name, call] of variants) {
+      respond("email\nperson@example.com\n", { status: 500, contentType: "text/csv" });
+      const result = await outcome(call(client()));
+      expect([name, result.status, "rejected" in result]).toEqual([name, 500, true]);
+    }
+  });
+
   it("reject any body served as application/json rather than return it as CSV text", async () => {
     for (const [name, call] of variants) {
       respond('{"foo":"bar"}');
@@ -338,5 +346,57 @@ describe("the API key", () => {
     respond("[]");
     await warmup.listSendingAccounts();
     expect(calls[0].init.headers["API-Key"]).toBe(KEY);
+  });
+});
+
+describe("init", () => {
+  /** Everything init can set, including the non-enumerable key. */
+  function state(sdk) {
+    return { _api_key: sdk._api_key, ...sdk };
+  }
+
+  it("leaves an initialised client exactly as it was when it throws", async () => {
+    const sdk = client();
+    const before = state(sdk);
+    const bad = [
+      ["key-B", ZeroBounceSDK.ApiURL.EU_API_URL, { domainSearchBaseURL: "http://evil.example" }],
+      ["key-B", ZeroBounceSDK.ApiURL.EU_API_URL, { listEvaluatorBaseURL: "http://evil.example" }],
+      ["key-B", ZeroBounceSDK.ApiURL.EU_API_URL, { inboxPlacementBaseURL: "http://evil.example" }],
+      ["key-B", ZeroBounceSDK.ApiURL.EU_API_URL, { emailFinderBaseURL: "http://evil.example" }],
+      ["key-B", "http://api-eu.zerobounce.net/v2"],
+      ["key-B\n", ZeroBounceSDK.ApiURL.EU_API_URL],
+      ["", ZeroBounceSDK.ApiURL.EU_API_URL],
+    ];
+    for (const args of bad) {
+      expect(() => sdk.init(...args)).toThrow(/ZeroBounce:/);
+      expect([args, state(sdk)]).toEqual([args, before]);
+    }
+    respond('{"Credits":"5"}');
+    await sdk.getCredits();
+    expect(new URL(calls[0].url).host).toBe("api.zerobounce.net");
+    expect(sent().api_key).toBe(KEY);
+  });
+
+  it("leaves a fresh client uninitialised, with no key stored, when it throws", async () => {
+    const fresh = new ZeroBounceSDK();
+    const before = state(fresh);
+    expect(() => fresh.init("key-C", "http://evil.example/v2")).toThrow(/https/);
+    expect(state(fresh)).toEqual(before);
+    expect(fresh._api_key).toBeNull();
+    respond('{"Credits":"5"}');
+    await expect(fresh.getCredits()).rejects.toThrow(/Call init/);
+    expect(calls).toEqual([]);
+  });
+
+  it("rejects a key with surrounding whitespace or control characters, before storing it", () => {
+    for (const key of ["key\n", " key", "key\t", "ke\u0000y", "ke\u001fy", "ke\u007fy"]) {
+      const sdk = new ZeroBounceSDK();
+      expect([key, (() => { try { sdk.init(key); return null; } catch (error) { return error.message; } })()]).toEqual([
+        key,
+        "ZeroBounce: Api key has surrounding whitespace or control characters.",
+      ]);
+      expect(sdk._initialized).toBe(false);
+      expect(sdk._api_key).toBeNull();
+    }
   });
 });

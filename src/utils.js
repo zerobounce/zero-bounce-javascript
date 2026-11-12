@@ -408,8 +408,9 @@ function processGetFileResponseBody(finalResult, response, scoring) {
   return saveFile(blob, `result${scoring ? "-scoring" : ""}.csv`);
 }
 
-function bulkApiBase(bulkBase) {
-  return bulkBase === "root" ? API_BULK_ROOT_URL : API_BULK_BASE_URL;
+function bulkApiBase(bulkBase, bulkURLs) {
+  const urls = bulkURLs || { v2: API_BULK_BASE_URL, root: API_BULK_ROOT_URL };
+  return bulkBase === "root" ? urls.root : urls.v2;
 }
 
 /**
@@ -432,10 +433,10 @@ function requestSecrets({ params, body, jsonBody, bearerToken }) {
   return found.filter((value) => typeof value === "string" && value);
 }
 
-function buildRequestUrl({ batch, bulkBase, apiBaseURL, baseURL, path, params }) {
+function buildRequestUrl({ batch, bulkBase, bulkURLs, apiBaseURL, baseURL, path, params }) {
   // An explicit baseURL wins: the list evaluator, the Inbox Placement Tester and
   // the finder/domain-search families each have their own, overridable host.
-  const base = baseURL != null ? baseURL : batch ? bulkApiBase(bulkBase) : apiBaseURL;
+  const base = baseURL != null ? baseURL : batch ? bulkApiBase(bulkBase, bulkURLs) : apiBaseURL;
   const query =
     params != null && Object.keys(params).length > 0
       ? `?${new URLSearchParams(params)}`
@@ -451,6 +452,7 @@ export async function createRequest({
   path,
   batch = false,
   bulkBase = "v2",
+  bulkURLs = null,
   returnText = false,
   scoring = false,
   apiBaseURL,
@@ -461,7 +463,7 @@ export async function createRequest({
   regionalWarningState = null,
   messageOnlyIsFailure = false,
 }) {
-  const url = buildRequestUrl({ batch, bulkBase, apiBaseURL, baseURL, path, params });
+  const url = buildRequestUrl({ batch, bulkBase, bulkURLs, apiBaseURL, baseURL, path, params });
   requireHttpsUrl(url, "request URL");
   secrets = [...secrets, ...requestSecrets({ params, body, jsonBody, bearerToken })];
   warnOnRegionalBulkHost(url, apiBaseURL, regionalWarningState);

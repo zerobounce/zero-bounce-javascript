@@ -1,4 +1,4 @@
-import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid, normalizeBaseUrl, checkApiKey, pathSegment, strictBoolean } from "./utils.js";
+import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid, normalizeBaseUrl, checkApiKey, pathSegment, strictBoolean, API_BULK_BASE_URL, API_BULK_ROOT_URL } from "./utils.js";
 
 /**
  * Validation status values returned by the API (validate, validateBatch).
@@ -172,6 +172,10 @@ export class ZeroBounceSDK {
     this._inbox_placement_base_url = ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL;
     this._email_finder_base_url = ZeroBounceSDK.EmailFinderURL.DEFAULT_URL;
     this._domain_search_base_url = ZeroBounceSDK.DomainSearchURL.DEFAULT_URL;
+    // The bulk hosts are fixed (ZeroBounce documents no regional bulk host);
+    // they are kept per client so every request path goes through the same
+    // per-request https check as the overridable base URLs.
+    this._bulk_urls = { v2: API_BULK_BASE_URL, root: API_BULK_ROOT_URL };
     // One warning per client: see warnOnRegionalBulkHost.
     this._regional_warning = { warned: false };
   }
@@ -181,34 +185,43 @@ export class ZeroBounceSDK {
    * @param apiBaseURL - your preferred API, possible values being ApiURL.DEFAULT_API_URL, ApiURL.USAAPIURL, ApiURL.EUAPIURL
    * */
   init(apiKey, apiBaseURL = ZeroBounceSDK.ApiURL.DEFAULT_API_URL, options = null) {
+    // All or nothing: every argument is checked before any of them is stored,
+    // so a call that throws leaves the client exactly as it was (a caller that
+    // catches the error cannot go on with a new key and an old or http URL).
     if (apiKey == null || String(apiKey).trim() === "") {
       throw new Error("ZeroBounce: Api key parameter is missing. Please provide a valid API key.");
     }
     checkApiKey(apiKey, "Api key");
-    this._api_key = apiKey;
-    this._api_base_url = normalizeBaseUrl(apiBaseURL, "apiBaseURL");
+    const apiBase = normalizeBaseUrl(apiBaseURL, "apiBaseURL");
     const {
       listEvaluatorBaseURL,
       inboxPlacementBaseURL,
       emailFinderBaseURL,
       domainSearchBaseURL,
     } = options || {};
-    this._list_evaluator_base_url = normalizeBaseUrl(
+    const listEvaluatorBase = normalizeBaseUrl(
       listEvaluatorBaseURL ?? ZeroBounceSDK.ListEvaluatorURL.DEFAULT_URL,
       "listEvaluatorBaseURL"
     );
-    this._inbox_placement_base_url = normalizeBaseUrl(
+    const inboxPlacementBase = normalizeBaseUrl(
       inboxPlacementBaseURL ?? ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL,
       "inboxPlacementBaseURL"
     );
-    this._email_finder_base_url = normalizeBaseUrl(
+    const emailFinderBase = normalizeBaseUrl(
       emailFinderBaseURL ?? ZeroBounceSDK.EmailFinderURL.DEFAULT_URL,
       "emailFinderBaseURL"
     );
-    this._domain_search_base_url = normalizeBaseUrl(
+    const domainSearchBase = normalizeBaseUrl(
       domainSearchBaseURL ?? ZeroBounceSDK.DomainSearchURL.DEFAULT_URL,
       "domainSearchBaseURL"
     );
+
+    this._api_key = apiKey;
+    this._api_base_url = apiBase;
+    this._list_evaluator_base_url = listEvaluatorBase;
+    this._inbox_placement_base_url = inboxPlacementBase;
+    this._email_finder_base_url = emailFinderBase;
+    this._domain_search_base_url = domainSearchBase;
     this._regional_warning = { warned: false };
     this._initialized = true;
   }
@@ -518,7 +531,8 @@ export class ZeroBounceSDK {
       requestType: "POST",
       path: "/sendfile",
       body,
-      batch: true, 
+      batch: true,
+      bulkURLs: this._bulk_urls,
       apiBaseURL: this._api_base_url
     });
   }
@@ -574,6 +588,7 @@ export class ZeroBounceSDK {
       path: "/sendfile",
       body,
       batch: true,
+      bulkURLs: this._bulk_urls,
       apiBaseURL: this._api_base_url
     });
   }
@@ -619,7 +634,8 @@ export class ZeroBounceSDK {
       requestType: "POST",
       path: "/scoring/sendfile",
       body,
-      batch: true, 
+      batch: true,
+      bulkURLs: this._bulk_urls,
       apiBaseURL: this._api_base_url
     });
   }
@@ -663,6 +679,7 @@ export class ZeroBounceSDK {
       path: "/scoring/sendfile",
       body,
       batch: true,
+      bulkURLs: this._bulk_urls,
       apiBaseURL: this._api_base_url
     });
   }
@@ -685,6 +702,7 @@ export class ZeroBounceSDK {
       params,
       path,
       batch: true,
+      bulkURLs: this._bulk_urls,
       bulkBase: bulkRoot ? "root" : "v2",
       apiBaseURL: this._api_base_url,
       baseURL
@@ -702,6 +720,7 @@ export class ZeroBounceSDK {
       body: new URLSearchParams(params),
       params: {},
       batch: true,
+      bulkURLs: this._bulk_urls,
       bulkBase: "root",
       apiBaseURL: this._api_base_url,
     });
@@ -746,6 +765,7 @@ export class ZeroBounceSDK {
       params,
       path,
       batch: true,
+      bulkURLs: this._bulk_urls,
       bulkBase: bulkRoot ? "root" : "v2",
       returnText: true,
       scoring, 
@@ -787,6 +807,7 @@ export class ZeroBounceSDK {
       params,
       path,
       batch: true,
+      bulkURLs: this._bulk_urls,
       bulkBase: bulkRoot ? "root" : "v2",
       scoring, 
       apiBaseURL: this._api_base_url,
@@ -811,6 +832,7 @@ export class ZeroBounceSDK {
       path,
       body,
       batch: true,
+      bulkURLs: this._bulk_urls,
       bulkBase: "root",
       apiBaseURL: this._api_base_url,
       baseURL,
@@ -1111,6 +1133,7 @@ export class ZeroBounceSDK {
       path: "/send-evaluated-file/",
       body,
       batch: true,
+      bulkURLs: this._bulk_urls,
       secrets: [this._api_key],
       apiBaseURL: this._api_base_url,
       regionalWarningState: this._regional_warning,
@@ -1230,6 +1253,7 @@ export class ZeroBounceSDK {
       params,
       path: "/listS3files",
       batch: true,
+      bulkURLs: this._bulk_urls,
       bulkBase: "root",
       apiBaseURL: this._api_base_url,
     });
