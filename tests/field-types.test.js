@@ -209,6 +209,18 @@ const CALLS = {
 /** The public method a CALLS entry calls. */
 const methodOf = (entry) => entry.replace(/ \(POST\)$/, "");
 
+/**
+ * The JSON types a field allows: its declaration, with "string" read as
+ * "integerString" where response-fields.js narrows it to an integer (sent
+ * as a string or a JSON integer; the field-table test pins that mapping).
+ */
+function fieldTypes(name, key) {
+  const declared = jsonTypes(INTERFACES[name][key].type);
+  return [].concat((RESPONSE_FIELDS[name] || {})[key]).includes("integerString")
+    ? declared.map((type) => (type === "string" ? "integerString" : type))
+    : declared;
+}
+
 /** A valid value of a field type: required fields only, filled in. */
 const VALID_REQUIRED = { Credits: "7", address: "a@example.com", status: "valid" };
 function minimal(name) {
@@ -220,7 +232,8 @@ function wrongValue(types) {
   if (types.includes("any")) return undefined;
   const fits = (value, type) => {
     if (type.endsWith("[]") || type === "array") return Array.isArray(value);
-    if (type === "string" || type === "integerString") return typeof value === "string";
+    if (type === "string") return typeof value === "string";
+    if (type === "integerString") return typeof value === "string" || Number.isSafeInteger(value);
     if (type === "number" || type === "boolean") return typeof value === type;
     return value !== null && typeof value === "object" && !Array.isArray(value);
   };
@@ -236,8 +249,8 @@ function wrongBodies(types) {
   const objectNames = types.filter((type) => INTERFACES[type]);
   const arrayNames = types.filter((type) => type.endsWith("[]") && INTERFACES[type.slice(0, -2)]);
   const forInterface = (name, wrap, prefix, depth) => {
-    for (const [key, member] of Object.entries(INTERFACES[name])) {
-      const declared = jsonTypes(member.type);
+    for (const key of Object.keys(INTERFACES[name])) {
+      const declared = fieldTypes(name, key);
       const at = `${prefix}${key}`;
       const wrong = wrongValue(declared);
       if (wrong !== undefined) cases.push([wrap({ ...minimal(name), [key]: wrong }), at]);
@@ -346,13 +359,40 @@ describe("field types (E7)", () => {
     expect(count).toBeGreaterThan(300);
   });
 
-  it("rejects getCredits without an integer string in Credits, with status 200", async () => {
-    for (const answer of ["{}", '{"Credits":null}']) {
-      expect(await run("getCredits", answer)).toEqual(fieldError("Credits"));
+  it("rejects getCredits without an integer, as a string or a JSON integer, in Credits, with status 200", async () => {
+    for (const answer of ["{}", '{"Credits":null}', '{"Credits":5.5}', '{"Credits":1e400}', '{"Credits":9007199254740993}']) {
+      expect([answer, await run("getCredits", answer)]).toEqual([answer, fieldError("Credits")]);
     }
-    for (const credits of [true, 5, -1, "abc", "5.0", "", " 5", "1e3", {}, []]) {
+    for (const credits of [true, 5.5, "abc", "5.0", "", " 5", "+5", "1e3", {}, [], [5]]) {
       expect([credits, await run("getCredits", { Credits: credits })]).toEqual([credits, fieldError("Credits")]);
     }
+  });
+
+  it("accepts Credits as a JSON integer, as zerobounce.net's example sends it, and returns it as the declared string", async () => {
+    for (const [answer, credits] of [
+      ['{"Credits":2375323}', "2375323"],
+      ['{"Credits":-1}', "-1"],
+      ['{"Credits":0}', "0"],
+      ['{"Credits":"-1"}', "-1"],
+      ['{"Credits":"12345"}', "12345"],
+    ]) {
+      expect([answer, await run("getCredits", answer)]).toEqual([answer, { resolved: { Credits: credits } }]);
+    }
+  });
+
+  it("rejects a validatebatch row without a string address and status, or that is not an object, with status 200", async () => {
+    const batch = (row) => ({ email_batch: [row], errors: [] });
+    expect(await run("validateBatch", batch({ status: "valid" }))).toEqual(fieldError("email_batch[0].address"));
+    expect(await run("validateBatch", batch({ address: "a@b.c" }))).toEqual(fieldError("email_batch[0].status"));
+    expect(await run("validateBatch", { email_batch: [{ status: "valid" }] })).toEqual(fieldError("email_batch[0].address"));
+    expect(await run("validateBatch", { email_batch: [{ address: "a@b.c" }] })).toEqual(fieldError("email_batch[0].status"));
+    // Validate's greylist answer is a whole body, never a batch row.
+    expect(await run("validateBatch", batch({ Message: "Greylisted" }))).toEqual(fieldError("email_batch[0].address"));
+    for (const row of [5, "x", true, null, [], ["a@b.c", "valid"]]) {
+      expect([row, await run("validateBatch", batch(row))]).toEqual([row, fieldError("email_batch[0]")]);
+    }
+    const second = { email_batch: [{ address: "a@b.c", status: "valid" }, { address: "d@e.f" }], errors: [] };
+    expect(await run("validateBatch", second)).toEqual(fieldError("email_batch[1].status"));
   });
 
   it("rejects validate without a string address and status, with status 200", async () => {
@@ -370,18 +410,109 @@ describe("field types (E7)", () => {
     );
   });
 
-  // Documented example responses (zerobounce.net/docs, as the other SDKs'
-  // fixtures carry them) and the API's own null and empty values.
-  const ACCEPT = {
+  // Documented example responses, copied verbatim from zerobounce.net/docs
+  // (the success samples of each response page), as the raw text the page shows.
+  const DOCUMENTED = {
+    getCredits: [`{"Credits":2375323}`],
+    validateEmail: [
+      `{
+      "address": "john.doe@zerobounce.net",
+      "status": "valid",
+      "sub_status": "",
+      "free_email": false,
+      "catchall_domain": true,
+      "did_you_mean": null,
+      "account": "johndoe",
+      "domain": "zerobounce.net",
+      "domain_age_days": "3431",
+      "active_in_days": "30",
+      "active_first_seen": "2026-02-25",
+      "smtp_provider": "g-suite",
+      "mx_found": "true",
+      "mx_record": "aspmx.l.google.com",
+      "firstname": "dan",
+      "lastname": "cotet",
+      "gender": "male",
+      "country": null,
+      "region": null,
+      "city": null,
+      "zipcode": null,
+      "processed_at": "2026-06-18 07:05:00.033"
+  }`,
+    ],
+    sendFile: [
+      `{
+      "success": true,
+      "message": "File Accepted",
+      "file_name": "Your file name.csv",
+      "file_id": "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff"
+    }`,
+    ],
+    getFileStatus: [
+      `{
+    "success": true,
+    "file_id": "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff",
+    "file_name": "Your file name.csv",
+    "upload_date": "2023-04-28T15:25:41Z",
+    "file_status": "Complete",
+    "file_phase_2_status": "N/A",
+    "complete_percentage": "100%",
+    "return_url": "Your return URL if provided when calling sendfile API"
+  }`,
+      `{
+    "success": true,
+    "file_id": "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff",
+    "file_name": "Your file name.csv",
+    "upload_date": "2023-04-28T15:25:41Z",
+    "file_status": "Complete",
+    "file_phase_2_status": "Complete",
+    "complete_percentage": "100%",
+    "return_url": "Your return URL if provided when calling sendfile API"
+  }`,
+    ],
+    deleteFile: [
+      `{
+    "success": true,
+    "message": "File Deleted",
+    "file_name": "test2",
+    "file_id": "b222a0fd-90d5-416c-8f1a-9cc3851fc823"
+  }`,
+    ],
+    sendScoringFile: [
+      `{
+          "success": true,
+          "message": "File Accepted",
+          "file_name": "Your file name.csv",
+          "file_id": "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff"
+      }`,
+    ],
+    getScoringFileStatus: [
+      `{
+          "success": true,
+          "file_id": "aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff",
+          "file_name": "Your file name.csv",
+          "upload_date": "2023-04-28T15:25:41Z",
+          "file_status": "Complete",
+          "complete_percentage": "100%",
+          "return_url": "Your return URL if provided when calling sendfile API"
+      }`,
+    ],
+    deleteScoringFile: [
+      `{
+        "success": true,
+        "message": "File Deleted",
+        "file_name": "test2",
+        "file_id": "b222a0fd-90d5-416c-8f1a-9cc3851fc823"
+    }`,
+    ],
+  };
+
+  // Not documented examples: the API's own null, empty and string values,
+  // values added later, and the shapes of the calls the docs give no success
+  // sample for (this repo's fixtures).
+  const FIXTURES = {
     getCredits: [{ Credits: "123456" }, { Credits: "-1" }, { Credits: "0" }],
     validateEmail: [
-      {
-        address: "valid@example.com", status: "valid", sub_status: "", free_email: false, did_you_mean: null,
-        account: null, domain: null, domain_age_days: "9692", smtp_provider: "example", catchall_domain: false,
-        mx_found: "true", mx_record: "mx.example.com", firstname: "zero", lastname: "bounce", gender: "male",
-        country: "United States", region: "Florida", city: "West Palm Beach", zipcode: "33401",
-        processed_at: "2023-03-23 13:30:28.105",
-      },
       {
         address: "invalid@example.com", status: "invalid", sub_status: "failed_syntax_check", free_email: false,
         did_you_mean: null, account: "", domain: null, domain_age_days: "", smtp_provider: "", mx_found: "false",
@@ -401,18 +532,12 @@ describe("field types (E7)", () => {
     getApiUsage: [{ total: 10, status_valid: 10, sub_status_toxic: 0, start_date: "1/12/2010", end_date: "12/1/2030" }],
     getEmailActivity: [{ found: true, active_in_days: "180" }, { found: false, active_in_days: null }],
     scoreEmail: [{ email: "valid@example.com", score: 10 }],
-    sendFile: [{ success: true, message: "File Accepted", file_name: "emails2.txt", file_id: "e90e9b1d-8dc7-40eb-a7d9-999d52086a56" }],
     getFileStatus: [
-      {
-        success: true, file_id: "e90e9b1d", file_name: "emails2.txt", upload_date: "2023-04-26T17:52:23Z",
-        file_status: "Processing", complete_percentage: "100%", error_reason: null, return_url: "https://mock.value.com/",
-      },
       {
         success: true, file_id: "e90e9b1d", file_name: "emails2.txt", upload_date: "2023-04-26T17:52:23Z",
         file_status: "Deleted", complete_percentage: "0%", error_reason: "mock value", return_url: null,
       },
     ],
-    deleteFile: [{ success: true, message: "File Deleted", file_name: "emails2.txt", file_id: "e90e9b1d" }],
     findEmailByDomain: [
       { email: "john.doe@example.com", email_confidence: "high", domain: "", company_name: "Example", did_you_mean: "", failure_reason: "" },
     ],
@@ -430,7 +555,23 @@ describe("field types (E7)", () => {
         gatewayProviders: { items: [] },
       },
     ],
+    createInboxPlacementTest: [{ id: "t1", identifier: "zb-1", testType: "seed", emailAddressList: ["seed1@example.com"] }],
+    getInboxPlacementTest: [
+      {
+        id: "t1", testName: "t", testType: "seed", identifier: "zb-1", status: "Completed",
+        inboxCount: 1, spamCount: 0, otherCount: 0, notDeliveredCount: 0, pendingCount: 0, percentages: {},
+        counts: { inboxCount: 1, spamCount: 0, otherCount: 0, notDeliveredCount: 0, pendingCount: 0, percentages: {} },
+        results: [], seeds: [],
+      },
+    ],
   };
+
+  const ACCEPT = Object.fromEntries(
+    [...new Set([...Object.keys(DOCUMENTED), ...Object.keys(FIXTURES)])].map((name) => [
+      name,
+      [...(DOCUMENTED[name] || []), ...(FIXTURES[name] || [])],
+    ])
+  );
 
   it("still parses every documented example response, with nulls and fields it does not know", async () => {
     for (const [name, answers] of Object.entries(ACCEPT)) {
@@ -438,5 +579,96 @@ describe("field types (E7)", () => {
         expect([name, answer, await run(name, answer)]).toEqual([name, answer, { resolved: expect.anything() }]);
       }
     }
+  });
+
+  /** Whether a JSON value is one of the declared types (as src/response-fields.js reads them). */
+  function allows(types, value) {
+    return types.some((type) => {
+      if (type === "any") return true;
+      if (value === null) return false;
+      if (type.endsWith("[]") || type === "array") return Array.isArray(value);
+      if (type === "string") return typeof value === "string";
+      if (type === "integerString") return (typeof value === "string" && /^-?[0-9]+$/.test(value)) || Number.isSafeInteger(value);
+      if (type === "number" || type === "boolean") return typeof value === type;
+      return value !== null && typeof value === "object" && !Array.isArray(value);
+    });
+  }
+
+  const WRONG_JSON_VALUES = [5, 1.5, "x", true, null, {}, [], ["x"], [5, "x"]];
+
+  /**
+   * Every nested value of an answer (a field, an array element, a field of a
+   * nested object or row) with the types declared at it, and a setter that
+   * returns a copy of the answer with that value replaced.
+   */
+  function nestedSlots(answer, types) {
+    const slots = [];
+    const visit = (value, declared, at, replace, container) => {
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        const names = declared.filter((type) => INTERFACES[type]);
+        const required = new Set(names.flatMap((name) => REQUIRED_FIELDS[name] || []));
+        for (const key of Object.keys(value)) {
+          const types = [...new Set(names.flatMap((name) => (INTERFACES[name][key] ? fieldTypes(name, key) : [])))];
+          if (!types.length) continue; // a field the declarations do not name is kept as it is
+          const path = at ? `${at}.${key}` : key;
+          const set = (next) => replace({ ...value, [key]: next });
+          slots.push({ path, types, required: required.has(key), set, container: `${names.join("|")}.${key}` });
+          visit(value[key], types, path, set);
+        }
+      } else if (Array.isArray(value)) {
+        const elementTypes = declared.filter((type) => type.endsWith("[]")).map((type) => type.slice(0, -2));
+        if (!elementTypes.length) return; // unknown[]: any element
+        value.forEach((element, i) => {
+          const path = `${at}[${i}]`;
+          const set = (next) => replace(value.map((item, j) => (j === i ? next : item)));
+          slots.push({ path, types: elementTypes, required: true, set, container: `${elementTypes.join("|")}[]` });
+          visit(element, elementTypes, path, set);
+        });
+      }
+    };
+    visit(answer, types, "", (next) => next);
+    return slots;
+  }
+
+  it("rejects each wrong JSON type at every nested path of every example, with status 200 and that path", async () => {
+    const wrong = [];
+    const covered = new Set();
+    let count = 0;
+    for (const [name, answers] of Object.entries(ACCEPT)) {
+      for (const raw of answers) {
+        const answer = typeof raw === "string" ? JSON.parse(raw) : raw;
+        // Validate's greylist answer has no address or status to keep; its
+        // Message is checked in "rejects validate without ...".
+        if (name === "validateEmail" && answer.address === undefined) continue;
+        for (const slot of nestedSlots(answer, typedResult(name))) {
+          covered.add(slot.container);
+          for (const value of WRONG_JSON_VALUES) {
+            if (allows(slot.types, value) || (value === null && !slot.required)) continue;
+            count += 1;
+            const got = await run(name, slot.set(value));
+            if (JSON.stringify(got) !== JSON.stringify(fieldError(slot.path))) {
+              wrong.push(`${name} ${slot.path}=${JSON.stringify(value)}: ${JSON.stringify(got)}`);
+            }
+          }
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+    // Complete by construction: every typed array and every nested object a
+    // typed result declares is reached by some example.
+    const nested = [];
+    for (const name of reachable(Object.keys(METHOD_RESULTS).flatMap(typedResult))) {
+      for (const [key, member] of Object.entries(INTERFACES[name])) {
+        const types = jsonTypes(member.type);
+        if (types.some((type) => type.endsWith("[]") || INTERFACES[type])) nested.push(`${name}.${key}`);
+      }
+    }
+    const reached = (entry) => [...covered].some((container) => {
+      const [names, key] = [container.slice(0, container.lastIndexOf(".")), container.slice(container.lastIndexOf(".") + 1)];
+      return names.split("|").includes(entry.split(".")[0]) && key === entry.split(".")[1];
+    });
+    // BulkSendFileErrorResponse.message (string[]) only arrives with success:false, which rejects first.
+    expect(nested.filter((entry) => !reached(entry) && entry !== "BulkSendFileErrorResponse.message")).toEqual([]);
+    expect(count).toBeGreaterThan(500);
   });
 });

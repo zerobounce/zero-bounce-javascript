@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gatewayProviders` in `InboxPlacementProvidersResponse` (the same shape as
   before, now named).
 
+### Changed
+
+- `getCredits` returns `Credits` as the string its type declares when the API
+  sends a JSON integer: `{"Credits":2375323}` resolves to
+  `{ Credits: "2375323" }`. 4.0.1 returned the number as it came, although
+  `GetCreditsResponse.Credits` is typed `string`. The string form the API
+  sends (`"12345"`, `"-1"`) is returned unchanged.
+
 ### Fixed
 
 - A field of a typed result that arrives with another JSON type than
@@ -68,10 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (<field>)."), at any depth (for example `email_batch[0].status`), on every
   call whose result is an interface. `null` is still accepted for every field,
   and fields the declarations do not name are kept as they are. `getCredits`
-  needs `Credits` as a string holding an integer (`"12345"`, `"-1"`), and
-  `validateEmail` / `validateBatch` rows need `address` and `status` as
-  strings; validate's greylist answer, whose only field is `Message`, is
-  still a result. 4.0.1 resolved such bodies as they came, for example
+  needs `Credits` as an integer, sent as a string (`"12345"`, `"-1"`, as the
+  API sends it) or as a JSON integer (`{"Credits":2375323}`, zerobounce.net's
+  own example); `"abc"`, `"5.0"`, `5.5` and `true` reject. `validateEmail` and
+  every `validateBatch` row need `address` and `status` as strings, and a
+  batch row that is not an object (`5`, `null`) rejects; validate's greylist
+  answer, whose only field is `Message`, is still a result of `validateEmail`
+  (a batch row with only `Message` rejects). 4.0.1 resolved such bodies as they came, for example
   `getCredits` with `{"Credits": true}` or `{}` and `validateEmail` with
   `{"status": 5}`. The calls typed `unknown` and the `ZeroBounceWarmup`
   methods are unchanged.

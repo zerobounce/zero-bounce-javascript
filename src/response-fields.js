@@ -7,8 +7,9 @@
  *
  * A type is "string", "number", "boolean", "array", "object", "any", the name
  * of another entry, or such a name or primitive followed by "[]" (an array of
- * it). "integerString" is a string holding an integer, such as "-1". A list is
- * a union. null is accepted for every field except a required one.
+ * it). "integerString" is an integer sent as a JSON string, such as "-1" or
+ * "12345", or as a JSON integer, such as 2375323 (zerobounce.net's own
+ * getcredits example); "5.0", 5.5 and true are not. A list is a union. null is accepted for every field except a required one.
  */
 export const RESPONSE_FIELDS = {
   GetCreditsResponse: { Credits: "integerString" },
@@ -193,7 +194,7 @@ export const RESPONSE_FIELDS = {
 /**
  * Fields a call cannot answer without: present and not null (standard.md).
  * Validate's greylist answer, whose only field is a Message string, is a
- * result without them.
+ * result without them; a validatebatch row is not (every row needs both).
  */
 export const REQUIRED_FIELDS = {
   GetCreditsResponse: ["Credits"],
@@ -229,6 +230,7 @@ function mismatch(value, types, path) {
     if (type === "any") return null;
     if (type === "string" && typeof value === "string") return null;
     if (type === "integerString" && typeof value === "string" && /^-?[0-9]+$/.test(value)) return null;
+    if (type === "integerString" && Number.isSafeInteger(value)) return null;
     if (type === "number" && typeof value === "number") return null;
     if (type === "boolean" && typeof value === "boolean") return null;
     if (type === "object" && isPlainObject(value)) return null;
@@ -247,7 +249,8 @@ function mismatch(value, types, path) {
   if (!isPlainObject(value) || !names.length) return path;
   const prefix = path ? `${path}.` : "";
   const required = new Set(names.flatMap((name) => REQUIRED_FIELDS[name] || []));
-  if (!(names.includes("EmailValidationResult") && isGreylistMessage(value))) {
+  // Only validate's own answer (the whole body) can be the greylist message.
+  if (!(path === "" && names.includes("EmailValidationResult") && isGreylistMessage(value))) {
     for (const key of required) {
       if (value[key] == null) return `${prefix}${key}`;
     }

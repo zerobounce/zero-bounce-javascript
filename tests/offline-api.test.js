@@ -544,6 +544,10 @@ describe("offline API", () => {
       ["null", ["json"]],
       ["[]", ["json", "array", "objectOrArray"]],
       ['[{"a":1}]', ["json", "array", "objectOrArray"]],
+      // Arrays read positionally into an object by some decoders (serde, Codable).
+      ['["x"]', ["json", "array", "objectOrArray"]],
+      ['["a@example.com",10]', ["json", "array", "objectOrArray"]],
+      ['[true,"3"]', ["json", "array", "objectOrArray"]],
       ['{"a":1}', ["json", "object", "objectOrArray"]],
     ];
     const wrong = [];

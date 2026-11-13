@@ -265,7 +265,9 @@ export interface GetCreditsResponse {
   /**
    * An integer as a string, e.g. `"12345"`, or `"-1"` for an invalid key;
    * always present (optional here only so that existing code keeps compiling).
-   * Any other value, or none, rejects with a `ZBApiError` with status 200.
+   * The API may also send it as a JSON integer (`2375323`); it is returned as
+   * the same string (`"2375323"`). Any other value (`"abc"`, `"5.0"`, `5.5`,
+   * `true`), or none, rejects with a `ZBApiError` with status 200.
    */
   Credits?: string;
 }

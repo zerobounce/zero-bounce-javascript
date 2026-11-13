@@ -242,13 +242,17 @@ export class ZeroBounceSDK {
     const params = {
       api_key: this._api_key,
     };
-    return createRequest({
+    const result = await createRequest({
       requestType: "GET",
       params,
       path: "/getcredits",
       apiBaseURL: this._api_base_url,
       fields: "GetCreditsResponse",
     });
+    // The API sends Credits as a string ("12345"); zerobounce.net's example
+    // sends an integer (2375323). Either way the caller gets the declared string.
+    if (typeof result.Credits === "number") result.Credits = String(result.Credits);
+    return result;
   }
 
   /**
