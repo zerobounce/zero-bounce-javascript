@@ -54,8 +54,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (a proxy or challenge page) with a `ZBApiError`, even when its body parses
   as JSON. 4.0.1 and earlier returned such a body as the result.
 
+### Added
+
+- `InboxPlacementProviderGroup`, the type of `emailProviders` and
+  `gatewayProviders` in `InboxPlacementProvidersResponse` (the same shape as
+  before, now named).
+
 ### Fixed
 
+- A field of a typed result that arrives with another JSON type than
+  `zeroBounceSDK.d.ts` declares rejects with a `ZBApiError` with status 200
+  ("ZeroBounce returned a response field of an unexpected type for this call
+  (<field>)."), at any depth (for example `email_batch[0].status`), on every
+  call whose result is an interface. `null` is still accepted for every field,
+  and fields the declarations do not name are kept as they are. `getCredits`
+  needs `Credits` as a string holding an integer (`"12345"`, `"-1"`), and
+  `validateEmail` / `validateBatch` rows need `address` and `status` as
+  strings; validate's greylist answer, whose only field is `Message`, is
+  still a result. 4.0.1 resolved such bodies as they came, for example
+  `getCredits` with `{"Credits": true}` or `{}` and `validateEmail` with
+  `{"status": 5}`. The calls typed `unknown` and the `ZeroBounceWarmup`
+  methods are unchanged.
 - A 2xx body that is strict JSON but not the shape the call declares rejects
   with a `ZBApiError` with status 200 ("ZeroBounce returned JSON of an
   unexpected shape for this call."): a number, string, boolean, `null` or array

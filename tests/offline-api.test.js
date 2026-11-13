@@ -4,6 +4,10 @@
 import { inspect } from "util";
 import { ZeroBounceSDK } from "../src/zero-bounce.js";
 import { MAX_JSON_DEPTH, UNEXPECTED_SHAPE_MESSAGE } from "../src/utils.js";
+import { UNEXPECTED_FIELD_TYPE_MESSAGE } from "../src/response-fields.js";
+
+/** A rejection for a field type (field-types.test.js): the body itself was parsed. */
+const isFieldTypeError = (error) => String(error && error.message).startsWith(UNEXPECTED_FIELD_TYPE_MESSAGE);
 import { expectEveryFormRedacted } from "./secret-forms.js";
 import { fetchLikeResponse, strictJsonCorpus } from "./strict-json-corpus.js";
 
@@ -502,6 +506,9 @@ describe("offline API", () => {
             outcome = error.name === "ZBApiError" && error.statusCode === 200 ? "rejected" : `threw ${error}`;
             // Strict JSON of the wrong shape for the call (E7): it was parsed.
             if (outcome === "rejected" && error.message === UNEXPECTED_SHAPE_MESSAGE) outcome = "parsed";
+            // A field of the wrong type, or a required field missing ({} on
+            // getCredits): parsed, then refused (field-types.test.js).
+            if (outcome === "rejected" && isFieldTypeError(error)) outcome = "parsed";
           }
           // E8: an empty 2xx (no bytes at all) is the documented success of
           // deleteInboxPlacementTest. A whitespace-only body is not empty.
@@ -550,6 +557,8 @@ describe("offline API", () => {
           outcome = "resolved";
         } catch (error) {
           outcome = error.message === UNEXPECTED_SHAPE_MESSAGE ? `wrong shape ${error.statusCode}` : `threw ${error}`;
+          // The shape fits; a required field is missing (field-types.test.js).
+          if (isFieldTypeError(error) && error.statusCode === 200) outcome = "resolved";
         }
         const expected = fits.includes(shape) ? "resolved" : "wrong shape 200";
         if (outcome !== expected) wrong.push(`${name} (${shape}) ${body}: ${outcome}`);
@@ -588,7 +597,7 @@ describe("offline API", () => {
       // the wrong shape); brackets inside strings do not count.
       for (const body of [nested(MAX_JSON_DEPTH), `{"a":"${"[".repeat(deep)}"}`]) {
         global.fetch = async () => fetchLikeResponse(body);
-        const outcome = await run().then(() => "resolved", (error) => error.message);
+        const outcome = await run().then(() => "resolved", (error) => (isFieldTypeError(error) ? "resolved" : error.message));
         if (outcome !== "resolved" && outcome !== UNEXPECTED_SHAPE_MESSAGE) wrong.push(`${name} within the limit: ${outcome}`);
       }
     }
@@ -822,6 +831,29 @@ describe("offline API", () => {
     // -1 is the documented credit balance of an invalid key, not an error.
     await expect(sdk.getCredits()).resolves.toEqual({ Credits: "-1" });
 
+  });
+
+  it("rejects a 200 dead-key body (error, error_message or Error, no success) with status 200 on every JSON method, the sendFile family included (E2)", async () => {
+    const sdk = client("parity-key");
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    const jsonCalls = callAll(sdk).filter(([name]) => !/^get\w*File$/.test(name));
+    expect(jsonCalls.length).toBe(publicMethods(ZeroBounceSDK).length - 4);
+    const uploads = jsonCalls.map(([name]) => name).filter((name) => /^send\w*File(Stream)?$/.test(name));
+    expect(uploads).toHaveLength(11); // the ten multipart uploads plus sendEvaluatedFile
+    const wrong = [];
+    for (const key of ["error", "error_message", "Error"]) {
+      global.fetch = async () => fetchLikeResponse(JSON.stringify({ [key]: "Invalid API key or your account ran out of credits" }));
+      for (const [name, run] of jsonCalls) {
+        const outcome = await run().then(
+          () => "resolved",
+          (error) => `${error.name} ${error.statusCode} ${error.message}`
+        );
+        if (outcome !== "ZBApiError 200 Invalid API key or your account ran out of credits") {
+          wrong.push(`${name} ${key}: ${outcome}`);
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
   });
 
   it("keeps a bare Message as a result where the API means one", async () => {

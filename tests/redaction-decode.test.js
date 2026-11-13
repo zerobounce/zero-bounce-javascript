@@ -55,6 +55,30 @@ describe("redaction decode steps", () => {
     }
   });
 
+  it("decodes every UTF-8 sequence length (2, 3 and 4 bytes) in a run that is not valid UTF-8 as a whole", () => {
+    // Secrets made only of 2-, 3- or 4-byte characters: no ASCII between them
+    // splits the run, so the one-sequence-at-a-time decoder alone must read
+    // each length (dropping a length from utf8SequenceLength leaks it).
+    for (const secret of ["éééééééé", "€€€€€€€€", "\u{1F600}\u{1F600}\u{1F600}\u{1F600}"]) {
+      for (const lower of [false, true]) {
+        for (const junk of ["%FF", "%ff", "%80"]) {
+          for (const echo of [`${junk}${percentAll(secret, lower)}`, `${percentAll(secret, lower)}${junk}`]) {
+            // Upper-case hex is encodeURIComponent's own form, replaced with
+            // *** before the check; lower-case hex reaches the check alone.
+            const text = `Bad Request: [${echo}]`;
+            const redacted = redactSecrets(text, [secret]);
+            expect({ echo, held: holdsSecret(text, [secret]), leaked: holdsSecret(redacted, [secret]) }).toEqual({
+              echo,
+              held: true,
+              leaked: false,
+            });
+            if (lower) expect(redacted).toBe(CREDENTIAL_OMITTED_MESSAGE);
+          }
+        }
+      }
+    }
+  });
+
   it("keeps the bytes of an invalid run it cannot decode, so text without a secret is unchanged", () => {
     const text = "Bad Request: [%FF%41%C3 %e4]";
     expect(redactSecrets(text, [KEY])).toBe(text);

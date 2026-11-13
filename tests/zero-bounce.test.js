@@ -343,8 +343,8 @@ describe("ZeroBounceSDK", () => {
 
     it("should pass activity_data and verify_plus via options object", async () => {
       jest.spyOn(global, "fetch").mockImplementationOnce(() => Promise.resolve({
-        json: () => Promise.resolve({ status: "valid" }),
-        text: () => Promise.resolve('{"status":"valid"}'),
+        json: () => Promise.resolve({ address: email, status: "valid" }),
+        text: () => Promise.resolve(JSON.stringify({ address: email, status: "valid" })),
       }));
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
       await zeroBounceSDK.validateEmail(email, {

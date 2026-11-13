@@ -128,6 +128,14 @@ function withLowercaseMessage(result) {
 }
 
 /** Documented filter rules and targets, checked before a request is sent. */
+/**
+ * The declared result types of the calls that answer a union (see
+ * RESPONSE_FIELDS in response-fields.js): each field must have its type.
+ */
+const SCORING_RESULT = ["EmailScoringResult", "EmailScoringError"];
+const SEND_FILE_RESULT = ["BulkSendFileSuccessResponse", "BulkSendFileErrorResponse"];
+const FILTER_LIST_RESULT = ["FilterListItem[]", "FilterMessageResponse"];
+
 const FILTER_RULES = ["allow", "block"];
 const FILTER_TARGETS = ["email", "domain", "mx", "tld"];
 
@@ -234,7 +242,13 @@ export class ZeroBounceSDK {
     const params = {
       api_key: this._api_key,
     };
-    return createRequest({ requestType: "GET", params, path: "/getcredits", apiBaseURL: this._api_base_url });
+    return createRequest({
+      requestType: "GET",
+      params,
+      path: "/getcredits",
+      apiBaseURL: this._api_base_url,
+      fields: "GetCreditsResponse",
+    });
   }
 
   /**
@@ -314,6 +328,7 @@ export class ZeroBounceSDK {
         await createRequest({
           requestType: "POST",
           path: "/validate",
+          fields: "EmailValidationResult",
           body: new URLSearchParams(params),
           params: {},
           apiBaseURL: this._api_base_url,
@@ -322,7 +337,13 @@ export class ZeroBounceSDK {
     }
 
     return withLowercaseMessage(
-      await createRequest({ requestType: "GET", params, path: "/validate", apiBaseURL: this._api_base_url })
+      await createRequest({
+        requestType: "GET",
+        params,
+        path: "/validate",
+        apiBaseURL: this._api_base_url,
+        fields: "EmailValidationResult",
+      })
     );
   }
 
@@ -351,6 +372,7 @@ export class ZeroBounceSDK {
       requestType: "GET",
       params,
       path: "/getapiusage",
+      fields: "ApiUsageResponse",
       apiBaseURL: this._api_base_url,
     });
   }
@@ -398,6 +420,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/validatebatch",
+      fields: "ValidateBatchResponse",
       jsonBody: body,
       apiBaseURL: this._api_base_url
     });
@@ -422,6 +445,7 @@ export class ZeroBounceSDK {
       requestType: "GET",
       params,
       path: "/activity", 
+      fields: "EmailActivityResponse",
       apiBaseURL: this._api_base_url
     });
   }
@@ -452,6 +476,7 @@ export class ZeroBounceSDK {
       return createRequest({
         requestType: "POST",
         path: "/scoring",
+        fields: SCORING_RESULT,
         body: new URLSearchParams(params),
         params: {},
         apiBaseURL: this._api_base_url,
@@ -462,6 +487,7 @@ export class ZeroBounceSDK {
       requestType: "GET",
       params,
       path: "/scoring",
+      fields: SCORING_RESULT,
       apiBaseURL: this._api_base_url,
     });
   }
@@ -530,6 +556,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/sendfile",
+      fields: SEND_FILE_RESULT,
       body,
       batch: true,
       bulkURLs: this._bulk_urls,
@@ -586,6 +613,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/sendfile",
+      fields: SEND_FILE_RESULT,
       body,
       batch: true,
       bulkURLs: this._bulk_urls,
@@ -633,6 +661,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/scoring/sendfile",
+      fields: SEND_FILE_RESULT,
       body,
       batch: true,
       bulkURLs: this._bulk_urls,
@@ -677,6 +706,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/scoring/sendfile",
+      fields: SEND_FILE_RESULT,
       body,
       batch: true,
       bulkURLs: this._bulk_urls,
@@ -684,7 +714,7 @@ export class ZeroBounceSDK {
     });
   }
 
-  async _getStatusUtil(fileId, path, { bulkRoot = false, baseURL = null } = {}) {
+  async _getStatusUtil(fileId, path, { bulkRoot = false, baseURL = null, fields = "ValidationFileStatusResponse" } = {}) {
     if (!this._initialized) {
       notInitialized();
       return;
@@ -705,7 +735,8 @@ export class ZeroBounceSDK {
       bulkURLs: this._bulk_urls,
       bulkBase: bulkRoot ? "root" : "v2",
       apiBaseURL: this._api_base_url,
-      baseURL
+      baseURL,
+      fields,
     });
   }
 
@@ -717,6 +748,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path,
+      fields: "S3BulkJobResponse",
       body: new URLSearchParams(params),
       params: {},
       batch: true,
@@ -737,7 +769,7 @@ export class ZeroBounceSDK {
    * @param fileId - the id of a previously submmitted and accepted file
    * */
   async getScoringFileStatus(fileId) {
-    return this._getStatusUtil(fileId, "/scoring/filestatus");
+    return this._getStatusUtil(fileId, "/scoring/filestatus", { fields: "ScoringFileStatusResponse" });
   }
 
   async _getFileUtil(fileId, path, scoring = false, getFileOptions = null, { bulkRoot = false, baseURL = null } = {}) {
@@ -811,7 +843,8 @@ export class ZeroBounceSDK {
       bulkBase: bulkRoot ? "root" : "v2",
       scoring, 
       apiBaseURL: this._api_base_url,
-      baseURL
+      baseURL,
+      fields: "BulkFileDeletedResponse",
     });
   }
 
@@ -830,6 +863,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path,
+      fields: SEND_FILE_RESULT,
       body,
       batch: true,
       bulkURLs: this._bulk_urls,
@@ -1056,6 +1090,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/",
+      fields: "ListEvaluatorSubmitResponse",
       body,
       apiBaseURL: this._list_evaluator_base_url,
     });
@@ -1082,6 +1117,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/",
+      fields: "ListEvaluatorSubmitResponse",
       body,
       apiBaseURL: this._list_evaluator_base_url,
     });
@@ -1100,6 +1136,7 @@ export class ZeroBounceSDK {
       requestType: "GET",
       params,
       path: `/${encodeURIComponent(fileId)}/`,
+      fields: "ListEvaluatorResultResponse",
       apiBaseURL: this._list_evaluator_base_url,
     });
   }
@@ -1131,6 +1168,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/send-evaluated-file/",
+      fields: "ListEvaluatorSubmitResponse",
       body,
       batch: true,
       bulkURLs: this._bulk_urls,
@@ -1171,6 +1209,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/filters/add",
+      fields: "FilterMessageResponse",
       body: new URLSearchParams(params),
       params: {},
       apiBaseURL: this._api_base_url,
@@ -1189,6 +1228,7 @@ export class ZeroBounceSDK {
       return createRequest({
         requestType: "POST",
         path: "/filters/list",
+        fields: FILTER_LIST_RESULT,
         body: new URLSearchParams(params),
         params: {},
         apiBaseURL: this._api_base_url,
@@ -1199,6 +1239,7 @@ export class ZeroBounceSDK {
       requestType: "GET",
       params,
       path: "/filters/list",
+      fields: FILTER_LIST_RESULT,
       apiBaseURL: this._api_base_url,
       shape: "objectOrArray",
     });
@@ -1233,6 +1274,7 @@ export class ZeroBounceSDK {
     return createRequest({
       requestType: "POST",
       path: "/filters/delete",
+      fields: "FilterMessageResponse",
       body: new URLSearchParams(params),
       params: {},
       apiBaseURL: this._api_base_url,
@@ -1254,6 +1296,7 @@ export class ZeroBounceSDK {
       requestType: "GET",
       params,
       path: "/listS3files",
+      fields: "S3ListFileEntry[]",
       batch: true,
       bulkURLs: this._bulk_urls,
       bulkBase: "root",
@@ -1403,7 +1446,7 @@ export class ZeroBounceSDK {
   // INBOX PLACEMENT TESTER (bulkapi.zerobounce.net/api/ipt)
   // The API key goes in an Authorization: Bearer header and bodies are JSON with camelCase fields.
 
-  _iptRequest(requestType, path, { params = null, jsonBody = null, emptyIsSuccess = false, shape = "object" } = {}) {
+  _iptRequest(requestType, path, { params = null, jsonBody = null, emptyIsSuccess = false, shape = "object", fields = null } = {}) {
     return createRequest({
       requestType,
       path,
@@ -1411,6 +1454,7 @@ export class ZeroBounceSDK {
       jsonBody,
       emptyIsSuccess,
       shape,
+      fields,
       // Documented auth for this API is a Bearer header, not an api_key query.
       bearerToken: this._api_key,
       secrets: [this._api_key],
@@ -1426,7 +1470,7 @@ export class ZeroBounceSDK {
       notInitialized();
       return;
     }
-    return this._iptRequest("GET", "/providers");
+    return this._iptRequest("GET", "/providers", { fields: "InboxPlacementProvidersResponse" });
   }
 
   /** Supported test types and the default one. GET /test-types */
@@ -1497,7 +1541,7 @@ export class ZeroBounceSDK {
     if (seedIds != null) body.seedIds = seedIds;
     if (providers != null) body.providers = providers;
     if (webhookUrl != null) body.webhookUrl = webhookUrl;
-    return this._iptRequest("POST", "/test", { jsonBody: body });
+    return this._iptRequest("POST", "/test", { jsonBody: body, fields: "InboxPlacementTestCreated" });
   }
 
   /** A test and its placement results. GET /test/{id} */
@@ -1510,7 +1554,9 @@ export class ZeroBounceSDK {
       parameterIsMissing("testId");
       return;
     }
-    return this._iptRequest("GET", `/test/${encodeURIComponent(String(testId).trim())}`);
+    return this._iptRequest("GET", `/test/${encodeURIComponent(String(testId).trim())}`, {
+      fields: "InboxPlacementTestResult",
+    });
   }
 
   /**
@@ -1568,6 +1614,7 @@ export class ZeroBounceSDK {
     // A 204 No Content (or an empty 200) is a success: it resolves to {}.
     return this._iptRequest("DELETE", `/test/${encodeURIComponent(String(testId).trim())}`, {
       emptyIsSuccess: true,
+      fields: "InboxPlacementTestDeleted",
     });
   }
 
@@ -1577,7 +1624,7 @@ export class ZeroBounceSDK {
       notInitialized();
       return;
     }
-    return this._iptRequest("GET", "/webhook");
+    return this._iptRequest("GET", "/webhook", { fields: "InboxPlacementWebhookResponse" });
   }
 
   /** Save the URL finished results are posted to. PUT /webhook */
@@ -1670,6 +1717,7 @@ export class ZeroBounceSDK {
       requestType: "GET",
       params,
       path: "/guessformat",
+      fields: "EmailFinderResponse",
       apiBaseURL: this._api_base_url,
       // The finder's result is never a bare message: see messageOnlyBody.
       messageOnlyIsFailure: true,
@@ -1728,6 +1776,7 @@ export class ZeroBounceSDK {
       requestType: "GET",
       params,
       path: "/guessformat",
+      fields: "DomainFormatResponse",
       apiBaseURL: this._api_base_url,
       // The finder's result is never a bare message: see messageOnlyBody.
       messageOnlyIsFailure: true,
@@ -1769,6 +1818,7 @@ export class ZeroBounceSDK {
       requestType: "GET",
       params,
       path: "/guessformat",
+      fields: ["EmailFinderResponse", "DomainFormatResponse"],
       apiBaseURL: this._api_base_url,
       // The finder's result is never a bare message: see messageOnlyBody.
       messageOnlyIsFailure: true,

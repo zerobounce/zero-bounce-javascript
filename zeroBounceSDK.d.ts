@@ -62,6 +62,12 @@ export type ValidationSubStatus = ZBValidateSubStatusType[keyof ZBValidateSubSta
  * The API may omit optional fields on partial responses.
  */
 export interface EmailValidationResult {
+  /**
+   * Always present on a result (optional here only so that existing code
+   * keeps compiling). A validate answer without it (or without
+   * `status`) rejects with a `ZBApiError`, except the greylist answer whose
+   * only field is `Message`.
+   */
   address?: string;
   status: ValidationStatus;
   sub_status: ValidationSubStatus | "";
@@ -256,6 +262,11 @@ export interface DomainFormatResponse {
 
 /** GET /getcredits */
 export interface GetCreditsResponse {
+  /**
+   * An integer as a string, e.g. `"12345"`, or `"-1"` for an invalid key;
+   * always present (optional here only so that existing code keeps compiling).
+   * Any other value, or none, rejects with a `ZBApiError` with status 200.
+   */
   Credits?: string;
 }
 
@@ -533,10 +544,16 @@ export interface InboxPlacementProvider {
   [key: string]: unknown;
 }
 
+/** One group of seed providers in InboxPlacementProvidersResponse. */
+export interface InboxPlacementProviderGroup {
+  items: InboxPlacementProvider[];
+  [key: string]: unknown;
+}
+
 /** GET /api/ipt/providers: mailbox providers and gateway (Mimecast, Proofpoint) providers. */
 export interface InboxPlacementProvidersResponse {
-  emailProviders: { items: InboxPlacementProvider[]; [key: string]: unknown };
-  gatewayProviders: { items: InboxPlacementProvider[]; [key: string]: unknown };
+  emailProviders: InboxPlacementProviderGroup;
+  gatewayProviders: InboxPlacementProviderGroup;
   [key: string]: unknown;
 }
 

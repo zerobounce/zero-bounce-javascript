@@ -1,3 +1,5 @@
+import { responseFieldMismatch, UNEXPECTED_FIELD_TYPE_MESSAGE } from "./response-fields.js";
+
 // Constants
 export const API_BULK_BASE_URL = "https://bulkapi.zerobounce.net/v2";
 export const API_BULK_ROOT_URL = "https://bulkapi.zerobounce.net";
@@ -673,6 +675,7 @@ export async function createRequest({
   messageOnlyIsFailure = false,
   emptyIsSuccess = false,
   shape = "object",
+  fields = null,
 }) {
   const url = buildRequestUrl({ batch, bulkBase, bulkURLs, apiBaseURL, baseURL, path, params });
   requireHttpsUrl(url, "request URL");
@@ -762,6 +765,14 @@ export async function createRequest({
     }
   }
   if (!hasShape(parsed, shape)) throw apiError(UNEXPECTED_SHAPE_MESSAGE, status);
+  // A field of the declared result type that arrives with another JSON type
+  // (standard.md: field types are part of the shape).
+  if (fields != null) {
+    const field = responseFieldMismatch(parsed, fields);
+    if (field !== null) {
+      throw apiError(field ? `${UNEXPECTED_FIELD_TYPE_MESSAGE} (${field}).` : `${UNEXPECTED_FIELD_TYPE_MESSAGE}.`, status);
+    }
+  }
   return parsed;
 }
 

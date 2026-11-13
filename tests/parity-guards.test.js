@@ -169,7 +169,7 @@ describe("base URLs", () => {
       [() => sdk.getDomainSearchFileStatus("f1"), "https://bulkapi.zerobounce.net/domain-search/filestatus"],
     ];
     for (const [call, expected] of requests) {
-      respond('{"success":true}');
+      respond('{"success":true,"address":"a@example.com","status":"valid"}');
       await call();
       const url = new URL(calls[0].url);
       expect(`${url.origin}${url.pathname}`).toBe(expected);
@@ -249,7 +249,7 @@ describe("booleans", () => {
       ],
     ];
     for (const [call, expected] of checks) {
-      respond('{"success":true,"file_id":"f1"}');
+      respond('{"success":true,"file_id":"f1","address":"a@example.com","status":"valid"}');
       await call();
       expect(sent()).toMatchObject(expected);
     }
@@ -288,7 +288,7 @@ describe("booleans", () => {
       await call();
       expect(sent().remove_duplicate).toBe("true");
     }
-    respond('{"status":"valid"}');
+    respond('{"address":"a@example.com","status":"valid"}');
     await sdk.validateEmail("a@example.com", { activityData: null });
     expect(sent().activity_data).toBeUndefined();
   });
@@ -508,10 +508,10 @@ describe("every boolean parameter", () => {
   // How each declared boolean is exercised, and its name on the wire.
   // `realBooleanOnly`: only true / false are accepted, as in the other SDKs.
   const sweep = {
-    "ValidateEmailOptions.activityData": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { activityData: v }), '{"status":"valid"}'), wire: "activity_data" },
-    "ValidateEmailOptions.verifyPlus": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { verifyPlus: v }), '{"status":"valid"}'), wire: "verify_plus" },
-    "ValidateEmailOptions.domainInfo": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { domainInfo: v }), '{"status":"valid"}'), wire: "domain_info" },
-    "ValidateEmailOptions.greylistProcessing": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { greylistProcessing: v }), '{"status":"valid"}'), wire: "greylist_processing" },
+    "ValidateEmailOptions.activityData": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { activityData: v }), '{"address":"a@example.com","status":"valid"}'), wire: "activity_data" },
+    "ValidateEmailOptions.verifyPlus": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { verifyPlus: v }), '{"address":"a@example.com","status":"valid"}'), wire: "verify_plus" },
+    "ValidateEmailOptions.domainInfo": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { domainInfo: v }), '{"address":"a@example.com","status":"valid"}'), wire: "domain_info" },
+    "ValidateEmailOptions.greylistProcessing": { ...sdkCall((s, v) => s.validateEmail("a@example.com", { greylistProcessing: v }), '{"address":"a@example.com","status":"valid"}'), wire: "greylist_processing" },
     "ValidateBatchOptions.activityData": { ...sdkCall((s, v) => s.validateBatch([{ email_address: "a@example.com" }], { activityData: v }), '{"email_batch":[],"errors":[]}'), wire: "activity_data", json: true },
     "ValidateBatchOptions.verifyPlus": { ...sdkCall((s, v) => s.validateBatch([{ email_address: "a@example.com" }], { verifyPlus: v }), '{"email_batch":[],"errors":[]}'), wire: "verify_plus", json: true },
     "GetFileOptions.activityData": { ...sdkCall((s, v) => s.getFile("f1", { activityData: v }), "a,b\n", "text/csv"), wire: "activity_data" },
