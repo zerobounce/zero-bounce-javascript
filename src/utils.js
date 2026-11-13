@@ -465,17 +465,14 @@ function objectWithoutSuccess(parsed) {
   return Object.prototype.hasOwnProperty.call(parsed, "success") ? null : parsed;
 }
 
-function nonEmptyString(value) {
-  return typeof value === "string" && value.trim() !== "";
-}
-
 const MESSAGE_KEYS = new Set(["error", "message", "error_message", "Message", "Error", "detail"]);
 
 /**
  * Whether a body is nothing but a message: an object with no "success" field
- * whose keys are all message keys, at least one a non-empty string. Only for
- * the email finder and domain search, whose result is never a bare message.
- * LIVE: guessformat answers an invalid or drained key with an HTTP 200 and
+ * whose keys are all message keys. The keys decide, whatever the values (null,
+ * a list, an empty string), so the error text falls back to a generic message.
+ * Only for the email finder and domain search, whose result is never a bare
+ * message. LIVE: guessformat answers an invalid or drained key with an HTTP 200 and
  * {"Message": "Invalid API key or your account ran out of credits"}. Not for
  * validate: a repeated greylist_processing request answers
  * {"Message": "Greylist validation still in progress..."}, which is a result.
@@ -484,7 +481,7 @@ function messageOnlyBody(parsed) {
   const object = objectWithoutSuccess(parsed);
   if (!object) return false;
   const keys = Object.keys(object);
-  return keys.length > 0 && keys.every((key) => MESSAGE_KEYS.has(key)) && keys.some((key) => nonEmptyString(object[key]));
+  return keys.length > 0 && keys.every((key) => MESSAGE_KEYS.has(key));
 }
 
 function cloudflareTitle(parsed) {

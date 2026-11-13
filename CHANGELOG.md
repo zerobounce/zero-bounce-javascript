@@ -81,6 +81,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A message-only answer from the email finder or domain search is an error
+  whatever its values. `findEmailByDomain`, `findEmailByCompanyName`,
+  `findEmailFormatByDomain`, `findEmailFormatByCompanyName` and `guessFormat`
+  rejected a 200 body whose keys were all message keys (`error`, `message`,
+  `error_message`, `Message`, `Error`, `detail`) only when one of the values was
+  a non-empty string. `{"message": null}`, `{"Message": ""}`, `{"Message": 5}`,
+  `{"error": ""}` and `{"Error": ["x"]}` resolved as results. They now reject
+  with a `ZBApiError` and status 200, with the text of the message when it is a
+  string or a list of strings, and "ZeroBounce returned an unexpected response."
+  otherwise. Up to 4.0.1, the same five calls resolved these bodies. Validate's
+  greylist `{"Message": "..."}` is still a result.
 - A field of a typed result that arrives with another JSON type than
   `zeroBounceSDK.d.ts` declares rejects with a `ZBApiError` with status 200
   ("ZeroBounce returned a response field of an unexpected type for this call

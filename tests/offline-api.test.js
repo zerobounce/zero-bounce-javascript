@@ -913,6 +913,39 @@ describe("offline API", () => {
     }
   });
 
+  it("rejects a finder or domain search message-only body whatever its values, with status 200", async () => {
+    // Keys decide: a body whose every key is a message key is an error even
+    // when no value is a non-empty string (standard.md §3, check E3).
+    const sdk = client("parity-key");
+    const bodies = [
+      ['{"message":null}', "ZeroBounce returned an unexpected response."],
+      ['{"message":["a","b"]}', "a; b"],
+      ['{"Message":""}', "ZeroBounce returned an unexpected response."],
+      ['{"Message":5}', "ZeroBounce returned an unexpected response."],
+      ['{"error":""}', "ZeroBounce returned an unexpected response."],
+      ['{"Error":["x"]}', "x"],
+      ['{"detail":"   "}', "ZeroBounce returned an unexpected response."],
+      ['{"message":null,"Message":null}', "ZeroBounce returned an unexpected response."],
+    ];
+    const finderCalls = callAll(sdk).filter(([name]) => /^(findEmail|guessFormat)/.test(name));
+    expect(finderCalls.length).toBe(5);
+    const outcomes = [];
+    for (const [body, text] of bodies) {
+      global.fetch = async () => httpResponse(200, body, "application/json");
+      for (const [name, run] of finderCalls) {
+        const outcome = await run().then(
+          (value) => ({ resolved: value }),
+          (error) => ({ name: error.name, status: error.statusCode, message: error.message })
+        );
+        outcomes.push({ body, name, outcome });
+      }
+    }
+    const expected = bodies.flatMap(([body, text]) =>
+      finderCalls.map(([name]) => ({ body, name, outcome: { name: "ZBApiError", status: 200, message: text } }))
+    );
+    expect(outcomes).toEqual(expected);
+  });
+
   it("rejects a scoring body that is only an error, as the other SDKs do", async () => {
     const sdk = client("score-item-1");
     await expect(sdk.scoreEmail("not-an-email")).rejects.toMatchObject({
