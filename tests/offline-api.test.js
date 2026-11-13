@@ -1470,6 +1470,31 @@ describe("offline API", () => {
     }
   });
 
+  it("rejects an HTML page under text/csv on every getfile method when only one HTML marker shows it, with status 200", async () => {
+    const sdk = client("parity-key");
+    const downloads = callAll(sdk).filter(([, , , , path]) => path.includes("getfile"));
+    // Under text/csv only the marker tells a page from CSV text. Each of the
+    // four markers of looksLikeHtml has a body that contains that marker alone.
+    const pages = {
+      "<!doctype html> only": "<!DOCTYPE html>Blocked by policy",
+      "<html> only": "<html>Blocked by policy</html>",
+      "<head> only": "<head><title>Blocked</title></head>no",
+      "<body> only": "<body>Access denied</body>",
+    };
+    for (const [page, body] of Object.entries(pages)) {
+      for (const [name, run] of downloads) {
+        global.fetch = async () => httpResponse(200, body, "text/csv");
+        let outcome;
+        try {
+          outcome = { resolved: await run() };
+        } catch (error) {
+          outcome = { status: error.statusCode, name: error.name };
+        }
+        expect({ page, name, outcome }).toEqual({ page, name, outcome: { status: 200, name: "ZBApiError" } });
+      }
+    }
+  });
+
   it("rejects a 2xx JSON call served as text/html even when the body is valid JSON", async () => {
     const sdk = client("parity-key");
     global.fetch = async () => httpResponse(200, '{"Credits":"5"}', "text/html");

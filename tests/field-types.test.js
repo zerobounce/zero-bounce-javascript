@@ -272,6 +272,41 @@ function wrongBodies(types) {
   return cases;
 }
 
+/**
+ * Every [body, path] where one field, at any depth, is null, for each field the
+ * declarations do not make required: a null is never an error (standard.md §3).
+ */
+function nullBodies(types) {
+  const cases = [];
+  const objectNames = types.filter((type) => INTERFACES[type]);
+  const arrayNames = types.filter((type) => type.endsWith("[]") && INTERFACES[type.slice(0, -2)]);
+  const forInterface = (name, wrap, prefix, depth) => {
+    for (const key of Object.keys(INTERFACES[name])) {
+      if ((REQUIRED_FIELDS[name] || []).includes(key)) continue;
+      const at = `${prefix}${key}`;
+      cases.push([wrap({ ...minimal(name), [key]: null }), at]);
+      if (depth >= 3) continue;
+      for (const type of fieldTypes(name, key)) {
+        if (INTERFACES[type]) {
+          forInterface(type, (inner) => wrap({ ...minimal(name), [key]: inner }), `${at}.`, depth + 1);
+        } else if (type.endsWith("[]") && INTERFACES[type.slice(0, -2)]) {
+          forInterface(type.slice(0, -2), (inner) => wrap({ ...minimal(name), [key]: [inner] }), `${at}[0].`, depth + 1);
+        }
+      }
+    }
+  };
+  for (const name of objectNames) forInterface(name, (body) => body, "", 1);
+  for (const type of arrayNames) forInterface(type.slice(0, -2), (body) => [body], "[0].", 1);
+  return cases;
+}
+
+/** The value at a path such as "email_batch[0].sub_status" in a parsed answer. */
+const valueAt = (value, at) =>
+  at.match(/[^.[\]]+|\[\d+\]/g).reduce((node, part) => (node == null ? undefined : node[part.replace(/[[\]]/g, "")]), value);
+
+/** The file-job results whose message is one string (standard.md §3). */
+const FILE_JOB_RESULTS = ["BulkSendFileSuccessResponse", "BulkFileDeletedResponse", "ValidationFileStatusResponse", "ScoringFileStatusResponse"];
+
 function client() {
   const sdk = new ZeroBounceSDK();
   sdk.init(KEY);
@@ -381,20 +416,55 @@ describe("field types (E7)", () => {
     }
   });
 
-  it("reads a null in a field the declarations make non-nullable as its empty value, never an error", async () => {
-    const batch = await run("validateBatch", '{"email_batch":null,"errors":null}');
-    expect(batch).toEqual({ resolved: { email_batch: [], errors: [] } });
-    const status = await run("getFileStatus", '{"success":true,"file_id":null,"upload_date":null,"file_status":"Complete"}');
-    expect(status.resolved).toMatchObject({ file_id: "", upload_date: "" });
-    const scoring = await run("getScoringFileStatus", '{"success":true,"file_id":null,"upload_date":null,"file_status":"Complete"}');
-    expect(scoring.resolved).toMatchObject({ file_id: "", upload_date: "" });
-    const domain = await run("findEmailFormatByDomain", '{"domain":"example.com","format":"first.last","other_domain_formats":null}');
-    expect(domain.resolved).toMatchObject({ other_domain_formats: [] });
+  it("returns a null in every field the declarations do not make required as received, never an error", async () => {
+    const wrong = [];
+    let count = 0;
+    for (const name of Object.keys(CALLS)) {
+      for (const [answer, at] of nullBodies(typedResult(methodOf(name)))) {
+        count += 1;
+        const got = await run(name, answer);
+        if (got.resolved === undefined || valueAt(got.resolved, at) !== null) {
+          wrong.push(`${name} ${at}: ${JSON.stringify(got)}`);
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+    expect(count).toBeGreaterThan(150);
   });
 
-  it("joins a file job's message list with a newline where the declared message is one string", async () => {
-    const sent = await run("sendFile", '{"success":true,"message":["File Accepted","Second line"],"file_name":"a.csv","file_id":"f1"}');
-    expect(sent.resolved.message).toBe("File Accepted\nSecond line");
+  it("returns the null of a field of each non-required result as null, not as the field's empty value", async () => {
+    expect(await run("validateBatch", '{"email_batch":null,"errors":null}')).toEqual({
+      resolved: { email_batch: null, errors: null },
+    });
+    expect(await run("getFileStatus", '{"success":true,"file_id":null,"upload_date":null,"file_status":"Complete"}')).toEqual({
+      resolved: { success: true, file_id: null, upload_date: null, file_status: "Complete" },
+    });
+    expect(await run("findEmailFormatByDomain", '{"domain":"example.com","format":"first.last","other_domain_formats":null}')).toEqual({
+      resolved: { domain: "example.com", format: "first.last", other_domain_formats: null },
+    });
+  });
+
+  it("joins a file job's message list with a newline on every send, delete and file-status answer", async () => {
+    const jobs = Object.keys(CALLS).filter((name) => typedResult(methodOf(name)).some((type) => FILE_JOB_RESULTS.includes(type)));
+    // sendFile, sendFileStream, sendScoringFile, sendScoringFileStream, the
+    // two deletes and two file statuses, and the finder and domain search ones.
+    expect(jobs.length).toBeGreaterThanOrEqual(8);
+    for (const name of jobs) {
+      const got = await run(name, '{"success":true,"message":["First line","Second line"]}');
+      expect([name, got.resolved && got.resolved.message]).toEqual([name, "First line\nSecond line"]);
+      // A list with anything but strings is not a message: it rejects with status 200.
+      // (sendFile reports the element, message[1]: its failure union is a string list.)
+      const rejected = await run(name, '{"success":true,"message":["a",5]}');
+      expect([name, rejected.name, rejected.status]).toEqual([name, "ZBApiError", 200]);
+      expect(rejected.message).toContain("unexpected type");
+    }
+  });
+
+  it("joins the message list of the delete and file-status answers, scoring included", async () => {
+    for (const name of ["deleteFile", "deleteScoringFile", "getFileStatus", "getScoringFileStatus"]) {
+      const got = await run(name, '{"success":true,"message":["Deleted","Done"],"file_id":"f1"}');
+      expect([name, got.resolved.message]).toEqual([name, "Deleted\nDone"]);
+    }
   });
 
   it("accepts Credits as a JSON integer, as zerobounce.net's example sends it, and returns it as the declared string", async () => {
@@ -792,6 +862,13 @@ describe("field types (E7)", () => {
           covered.add(slot.container);
           for (const value of WRONG_JSON_VALUES) {
             if (allows(slot.types, value) || (value === null && !slot.required)) continue;
+            // A file job's message list of strings is joined, not wrong (standard.md §3).
+            const fileJobList =
+              slot.path === "message" &&
+              FILE_JOB_RESULTS.some((result) => slot.container.split(".")[0].split("|").includes(result)) &&
+              Array.isArray(value) &&
+              value.every((line) => typeof line === "string");
+            if (fileJobList) continue;
             count += 1;
             const got = await run(name, slot.set(value));
             if (JSON.stringify(got) !== JSON.stringify(fieldError(slot.path))) {

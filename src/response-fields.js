@@ -103,6 +103,7 @@ export const RESPONSE_FIELDS = {
     complete_percentage: "string",
     error_reason: "string",
     return_url: "string",
+    message: "string",
   },
   ScoringFileStatusResponse: {
     success: "boolean",
@@ -112,6 +113,7 @@ export const RESPONSE_FIELDS = {
     file_status: "string",
     complete_percentage: "string",
     return_url: "string",
+    message: "string",
   },
   BulkFileDeletedResponse: {
     success: "boolean",
@@ -281,36 +283,26 @@ export function responseFieldMismatch(parsed, types) {
 }
 
 /**
- * Non-nullable declared fields (zeroBounceSDK.d.ts) that a null answers with
- * their empty value, not an error (standard.md §3): an empty list, or "".
+ * The file-job answers whose public `message` is one string. A list of strings
+ * there is joined with "\n" (standard.md §3). Their message is declared as a
+ * string or a list, so the list is joined before the field types are checked.
  */
-const NULL_AS_EMPTY = {
-  ValidateBatchResponse: { email_batch: () => [], errors: () => [] },
-  DomainFormatResponse: { other_domain_formats: () => [] },
-  ValidationFileStatusResponse: { file_id: () => "", upload_date: () => "" },
-  ScoringFileStatusResponse: { file_id: () => "", upload_date: () => "" },
-};
+const FILE_JOB_MESSAGE_RESULTS = [
+  "BulkSendFileSuccessResponse",
+  "BulkFileDeletedResponse",
+  "ValidationFileStatusResponse",
+  "ScoringFileStatusResponse",
+];
 
 /**
- * Applies the null rules above to a parsed body that already has the declared
- * types, and joins a file job's message list into one string where the success
- * answer declares one (BulkSendFileSuccessResponse.message is a string).
+ * Joins a file job's list of message strings into the one string the public
+ * type declares, for the result types named in `types`. Any other value (a
+ * list holding a non-string, a number) is left for the field-type check.
  */
-export function nullsAsEmpty(parsed, types) {
-  if (!isPlainObject(parsed)) return parsed;
-  const names = [].concat(types ?? []);
-  for (const name of names) {
-    for (const [key, empty] of Object.entries(NULL_AS_EMPTY[name] || {})) {
-      if (parsed[key] === null) parsed[key] = empty();
-    }
-  }
-  if (
-    names.includes("BulkSendFileSuccessResponse") &&
-    parsed.success === true &&
-    Array.isArray(parsed.message) &&
-    parsed.message.every((line) => typeof line === "string")
-  ) {
-    parsed.message = parsed.message.join("\n");
-  }
+export function joinFileJobMessage(parsed, types) {
+  if (!isPlainObject(parsed) || !Array.isArray(parsed.message)) return parsed;
+  if (!parsed.message.every((line) => typeof line === "string")) return parsed;
+  if (![].concat(types ?? []).some((name) => FILE_JOB_MESSAGE_RESULTS.includes(name))) return parsed;
+  parsed.message = parsed.message.join("\n");
   return parsed;
 }

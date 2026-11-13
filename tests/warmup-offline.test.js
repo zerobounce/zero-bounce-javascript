@@ -896,6 +896,21 @@ describe("Warmup API client", () => {
     }
   });
 
+  it("rejects a Warmup download under text/csv when only one HTML marker shows it is a page", async () => {
+    const c = new ZeroBounceWarmup(KEY);
+    // Each of the four markers alone (looksLikeHtml), so dropping any one fails here.
+    for (const body of ["<!DOCTYPE html>Blocked by policy", "<html>Blocked by policy</html>", "<head><title>Blocked</title></head>no", "<body>Access denied</body>"]) {
+      for (const [name, call] of [
+        ["downloadSeeds", () => c.downloadSeeds()],
+        ["downloadStatistics", () => c.downloadStatistics("sender@example.com")],
+      ]) {
+        installFake({ body, contentType: "text/csv" });
+        const error = await rejects(call());
+        expect([body, name, error.name, error.statusCode]).toEqual([body, name, "ZBApiError", 200]);
+      }
+    }
+  });
+
   it("rejects a download served as text/html even when the body does not look like a page", async () => {
     const c = new ZeroBounceWarmup(KEY);
     for (const [name, call] of [

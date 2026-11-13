@@ -206,6 +206,8 @@ export interface ValidationFileStatusResponse {
   complete_percentage: string;
   error_reason: string | null;
   return_url: string | null;
+  /** Present when the API reports a message; a list of strings is joined with "\n". */
+  message?: string;
 }
 
 /** GET /scoring/filestatus. */
@@ -217,6 +219,8 @@ export interface ScoringFileStatusResponse {
   file_status: string;
   complete_percentage: string;
   return_url: string | null;
+  /** Present when the API reports a message; a list of strings is joined with "\n". */
+  message?: string;
 }
 
 /**

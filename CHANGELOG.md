@@ -67,6 +67,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `InboxPlacementProviderGroup`, the type of `emailProviders` and
   `gatewayProviders` in `InboxPlacementProvidersResponse` (the same shape as
   before, now named).
+- `ValidationFileStatusResponse` and `ScoringFileStatusResponse` declare the
+  optional `message` (a string) that a file-status answer can carry. 4.0.1 did not
+  declare it; the value is joined as above.
 
 ### Changed
 
@@ -151,14 +154,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   within the safe range (`5.5`, `1e400`, `9007199254740993`, or a string such
   as `"5.9"`) with a `ZBApiError` carrying status 200. 4.0.1 returned `5.5`
   as the score, and `1e400` as `Infinity`.
-- A `null` in a field the declarations make non-nullable reads as its empty
-  value instead of `null`: `validateBatch`'s `email_batch` and `errors`
-  become `[]`, a file status's `file_id` and `upload_date` become `""`, and
-  `other_domain_formats` becomes `[]`. 4.0.1 returned `null`.
-- `sendFile` and the other file-job send calls join a success answer's
-  `message` list with `"\n"` into the one string the declaration gives, as
-  `message: "File Accepted\nSecond line"`. 4.0.1 returned the array. Failure
-  messages are unchanged.
+- A file job's answer joins a list of `message` strings with `"\n"` into the
+  one string its type declares, on every send, scoring send, delete, scoring
+  delete and file-status call: `message: "File Accepted\nSecond line"`. 4.0.1
+  returned the array as it came, for `sendFile`, `deleteFile` and
+  `getFileStatus` alike. A list holding anything but strings rejects with a
+  `ZBApiError` with status 200. Failure messages are unchanged.
 
 ## [4.0.1] - 2026-11-11
 

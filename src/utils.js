@@ -1,4 +1,4 @@
-import { nullsAsEmpty, responseFieldMismatch, UNEXPECTED_FIELD_TYPE_MESSAGE } from "./response-fields.js";
+import { joinFileJobMessage, responseFieldMismatch, UNEXPECTED_FIELD_TYPE_MESSAGE } from "./response-fields.js";
 
 // Constants
 export const API_BULK_BASE_URL = "https://bulkapi.zerobounce.net/v2";
@@ -768,12 +768,13 @@ export async function createRequest({
   // A field of the declared result type that arrives with another JSON type
   // (standard.md: field types are part of the shape).
   if (fields != null) {
+    parsed = joinFileJobMessage(parsed, fields);
     const field = responseFieldMismatch(parsed, fields);
     if (field !== null) {
       throw apiError(field ? `${UNEXPECTED_FIELD_TYPE_MESSAGE} (${field}).` : `${UNEXPECTED_FIELD_TYPE_MESSAGE}.`, status);
     }
   }
-  return nullsAsEmpty(parsed, fields);
+  return parsed;
 }
 
 function saveFile(blob, filename) {
