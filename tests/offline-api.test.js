@@ -1492,6 +1492,25 @@ describe("offline API", () => {
     }
   });
 
+  it('rejects success as a string "false" or "False" (or false) on every public method, with status 200', async () => {
+    const sdk = client("parity-key");
+    const resolved = [];
+    for (const success of [false, "false", "False"]) {
+      for (const [name, run] of callAll(sdk)) {
+        global.fetch = async () =>
+          httpResponse(200, JSON.stringify({ success, message: "rejected" }), "application/json");
+        let outcome = "resolved";
+        try {
+          await run();
+        } catch (error) {
+          outcome = `${error.name}:${error.statusCode}`;
+        }
+        if (outcome !== "ZBApiError:200") resolved.push(`${JSON.stringify(success)} ${name} ${outcome}`);
+      }
+    }
+    expect(resolved).toEqual([]);
+  });
+
   it("sends validateBatch as JSON with the JSON content type", async () => {
     const sdk = client("parity-key");
     const batch = [{ email_address: "a@example.com", ip_address: "1.1.1.1" }];
@@ -1904,7 +1923,7 @@ describe("offline API", () => {
       return { key, sdk: client(key) };
     });
     const results = await Promise.all(
-      clients.map(({ sdk }) => sdk.validateEmail(`person-${sdk._api_key}@example.com`))
+      clients.map(({ key, sdk }) => sdk.validateEmail(`person-${key}@example.com`))
     );
     expect(fake.records).toHaveLength(clients.length);
     results.forEach((result, index) => {

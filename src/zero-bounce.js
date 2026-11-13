@@ -170,11 +170,15 @@ export class ZeroBounceSDK {
     DEFAULT_URL: "https://bulkapi.zerobounce.net/domain-search",
   });
 
+  /**
+   * The API key lives in a private field: no property of a client holds it, so
+   * no property walk, util.inspect({showHidden}), %o, JSON or structured copy
+   * reaches it. Read only by the request code in this class.
+   */
+  #apiKey = null;
+
   constructor() {
     this._initialized = false;
-    // Not enumerable, so util.inspect, console.log and JSON.stringify of a
-    // client do not print the key.
-    Object.defineProperty(this, "_api_key", { value: null, writable: true, enumerable: false });
     this._api_base_url = ZeroBounceSDK.ApiURL.DEFAULT_API_URL;
     this._list_evaluator_base_url = ZeroBounceSDK.ListEvaluatorURL.DEFAULT_URL;
     this._inbox_placement_base_url = ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL;
@@ -186,6 +190,12 @@ export class ZeroBounceSDK {
     this._bulk_urls = { v2: API_BULK_BASE_URL, root: API_BULK_ROOT_URL };
     // One warning per client: see warnOnRegionalBulkHost.
     this._regional_warning = { warned: false };
+  }
+
+  /** Prints the fields with the key masked, so `console.log` never shows it. */
+  [Symbol.for("nodejs.util.inspect.custom")](depth, options, inspect) {
+    const shown = { ...this, api_key: this.#apiKey == null ? null : "***" };
+    return `ZeroBounceSDK ${inspect(shown, options)}`;
   }
 
   /**
@@ -224,7 +234,7 @@ export class ZeroBounceSDK {
       "domainSearchBaseURL"
     );
 
-    this._api_key = apiKey;
+    this.#apiKey = apiKey;
     this._api_base_url = apiBase;
     this._list_evaluator_base_url = listEvaluatorBase;
     this._inbox_placement_base_url = inboxPlacementBase;
@@ -240,7 +250,7 @@ export class ZeroBounceSDK {
       return;
     }
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
     };
     const result = await createRequest({
       requestType: "GET",
@@ -316,7 +326,7 @@ export class ZeroBounceSDK {
     }
 
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       email,
     };
     if (ip_address != null) params.ip_address = ip_address;
@@ -368,7 +378,7 @@ export class ZeroBounceSDK {
     }
 
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       start_date: apiDate(startDate),
       end_date: apiDate(endDate),
     };
@@ -410,7 +420,7 @@ export class ZeroBounceSDK {
     }
 
     const body = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       email_batch: emailBatch,
     };
     // LIVE: the API requires `timeout` as a JSON string ("30"). Sent as a
@@ -442,7 +452,7 @@ export class ZeroBounceSDK {
       return;
     }
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       email,
     };
     return createRequest({
@@ -469,7 +479,7 @@ export class ZeroBounceSDK {
     }
 
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       email,
     };
 
@@ -552,7 +562,7 @@ export class ZeroBounceSDK {
     body.append("file", file);
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
     body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
-    body.append("api_key", this._api_key);
+    body.append("api_key", this.#apiKey);
     if (allowPhase2 != null) {
       body.append("allow_phase_2", jobBooleanText(allowPhase2, "allowPhase2"));
     }
@@ -609,7 +619,7 @@ export class ZeroBounceSDK {
     body.append("file", fileStreamOrBlob, fileName);
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
     body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
-    body.append("api_key", this._api_key);
+    body.append("api_key", this.#apiKey);
     if (allowPhase2 != null) {
       body.append("allow_phase_2", jobBooleanText(allowPhase2, "allowPhase2"));
     }
@@ -659,7 +669,7 @@ export class ZeroBounceSDK {
     body.append("file", file);
     body.append("email_address_column", email_address_column);
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
-    body.append("api_key", this._api_key);
+    body.append("api_key", this.#apiKey);
     body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
 
     return createRequest({
@@ -704,7 +714,7 @@ export class ZeroBounceSDK {
     body.append("file", fileStreamOrBlob, fileName);
     body.append("email_address_column", email_address_column);
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
-    body.append("api_key", this._api_key);
+    body.append("api_key", this.#apiKey);
     body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
 
     return createRequest({
@@ -728,7 +738,7 @@ export class ZeroBounceSDK {
     }
 
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       file_id: fileId,
     };
     return createRequest({
@@ -746,7 +756,7 @@ export class ZeroBounceSDK {
 
   async _sendBulkRootFormPost(path, fields) {
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       ...fields,
     };
     return createRequest({
@@ -785,7 +795,7 @@ export class ZeroBounceSDK {
       return;
     }
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       file_id: fileId,
     };
     if (getFileOptions != null && typeof getFileOptions === "object") {
@@ -835,7 +845,7 @@ export class ZeroBounceSDK {
       return;
     }
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       file_id: fileId,
     };
     return createRequest({
@@ -863,7 +873,7 @@ export class ZeroBounceSDK {
     } else {
       body.append("file", file);
     }
-    body.append("api_key", this._api_key);
+    body.append("api_key", this.#apiKey);
     return createRequest({
       requestType: "POST",
       path,
@@ -1090,7 +1100,7 @@ export class ZeroBounceSDK {
     const body = new FormData();
     body.append("file", file);
     body.append("email_address_column", email_address_column);
-    body.append("api_key", this._api_key);
+    body.append("api_key", this.#apiKey);
     return createRequest({
       requestType: "POST",
       path: "/",
@@ -1117,7 +1127,7 @@ export class ZeroBounceSDK {
     const body = new FormData();
     body.append("file", fileStreamOrBlob, fileName);
     body.append("email_address_column", email_address_column);
-    body.append("api_key", this._api_key);
+    body.append("api_key", this.#apiKey);
     return createRequest({
       requestType: "POST",
       path: "/",
@@ -1135,7 +1145,7 @@ export class ZeroBounceSDK {
       parameterIsMissing("File id");
       return;
     }
-    const params = { api_key: this._api_key };
+    const params = { api_key: this.#apiKey };
     return createRequest({
       requestType: "GET",
       params,
@@ -1167,7 +1177,7 @@ export class ZeroBounceSDK {
       return;
     }
     const body = new FormData();
-    body.append("api_key", this._api_key);
+    body.append("api_key", this.#apiKey);
     body.append("file_id", String(id));
     return createRequest({
       requestType: "POST",
@@ -1176,7 +1186,7 @@ export class ZeroBounceSDK {
       body,
       batch: true,
       bulkURLs: this._bulk_urls,
-      secrets: [this._api_key],
+      secrets: [this.#apiKey],
       apiBaseURL: this._api_base_url,
       regionalWarningState: this._regional_warning,
     });
@@ -1205,7 +1215,7 @@ export class ZeroBounceSDK {
       return;
     }
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       rule,
       target,
       value,
@@ -1225,7 +1235,7 @@ export class ZeroBounceSDK {
       notInitialized();
       return;
     }
-    const params = { api_key: this._api_key };
+    const params = { api_key: this.#apiKey };
     const usePost =
       options && typeof options === "object" && options.method === "POST";
     if (usePost) {
@@ -1270,7 +1280,7 @@ export class ZeroBounceSDK {
       return;
     }
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       rule,
       target,
       value,
@@ -1293,7 +1303,7 @@ export class ZeroBounceSDK {
       notInitialized();
       return;
     }
-    const params = { api_key: this._api_key };
+    const params = { api_key: this.#apiKey };
     if (bucket != null) params.bucket = bucket;
     if (search != null) params.search = search;
     return createRequest({
@@ -1460,8 +1470,8 @@ export class ZeroBounceSDK {
       shape,
       fields,
       // Documented auth for this API is a Bearer header, not an api_key query.
-      bearerToken: this._api_key,
-      secrets: [this._api_key],
+      bearerToken: this.#apiKey,
+      secrets: [this.#apiKey],
       apiBaseURL: this._api_base_url,
       baseURL: this._inbox_placement_base_url,
       regionalWarningState: this._regional_warning,
@@ -1705,7 +1715,7 @@ export class ZeroBounceSDK {
     // first_name is optional: /guessformat answers a domain-only request with
     // the domain's format, so an unset name is left out rather than rejected.
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
     };
     if (!isMissing(first_name)) params.first_name = first_name;
     if (!isMissing(middle_name)) params.middle_name = middle_name;
@@ -1767,7 +1777,7 @@ export class ZeroBounceSDK {
     }
 
     const params = {
-      api_key: this._api_key
+      api_key: this.#apiKey
     };
 
     if (domain != null) {
@@ -1811,7 +1821,7 @@ export class ZeroBounceSDK {
     }
 
     const params = {
-      api_key: this._api_key,
+      api_key: this.#apiKey,
       domain: domain,
     };
     if (!isMissing(first_name)) params.first_name = first_name;

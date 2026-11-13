@@ -30,6 +30,9 @@ describe("ZeroBounceSDK", () => {
     it("returns true for string success False", () => {
       expect(utils.getFileJsonIndicatesFailure({ success: "False", message: "" })).toBe(true);
     });
+    it('returns true for string success "false" (lower case, as the API sends it)', () => {
+      expect(utils.getFileJsonIndicatesFailure({ success: "false", message: "" })).toBe(true);
+    });
     it("returns true for non-empty message", () => {
       expect(utils.getFileJsonIndicatesFailure({ success: true, message: "err" })).toBe(true);
     });

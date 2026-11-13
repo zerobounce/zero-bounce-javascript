@@ -321,7 +321,7 @@ describe("field types (E7)", () => {
       const table = Object.fromEntries(
         Object.entries(RESPONSE_FIELDS[name]).map(([key, types]) => [
           key,
-          [].concat(types).map((type) => (type === "integerString" ? "string" : type)).sort(),
+          [].concat(types).map((type) => (type === "integerString" ? "string" : type === "integer" ? "number" : type)).sort(),
         ])
       );
       expect([name, table]).toEqual([name, declared]);
@@ -366,6 +366,35 @@ describe("field types (E7)", () => {
     for (const credits of [true, 5.5, "abc", "5.0", "", " 5", "+5", "1e3", {}, [], [5]]) {
       expect([credits, await run("getCredits", { Credits: credits })]).toEqual([credits, fieldError("Credits")]);
     }
+  });
+
+  it("rejects a score that is not an integer (5.5, 1e400, a string), with status 200, on scoreEmail and its POST variant", async () => {
+    for (const name of ["scoreEmail", "scoreEmail (POST)"]) {
+      for (const score of ["5.5", "1e400", '"5.9"', '"abc"', "true", "9007199254740993"]) {
+        const answer = `{"email":"a@example.com","score":${score}}`;
+        expect([name, answer, await run(name, answer)]).toEqual([name, answer, fieldError("score")]);
+      }
+      for (const score of [0, 10, 100]) {
+        const answer = `{"email":"a@example.com","score":${score}}`;
+        expect([name, answer, await run(name, answer)]).toEqual([name, answer, { resolved: { email: "a@example.com", score } }]);
+      }
+    }
+  });
+
+  it("reads a null in a field the declarations make non-nullable as its empty value, never an error", async () => {
+    const batch = await run("validateBatch", '{"email_batch":null,"errors":null}');
+    expect(batch).toEqual({ resolved: { email_batch: [], errors: [] } });
+    const status = await run("getFileStatus", '{"success":true,"file_id":null,"upload_date":null,"file_status":"Complete"}');
+    expect(status.resolved).toMatchObject({ file_id: "", upload_date: "" });
+    const scoring = await run("getScoringFileStatus", '{"success":true,"file_id":null,"upload_date":null,"file_status":"Complete"}');
+    expect(scoring.resolved).toMatchObject({ file_id: "", upload_date: "" });
+    const domain = await run("findEmailFormatByDomain", '{"domain":"example.com","format":"first.last","other_domain_formats":null}');
+    expect(domain.resolved).toMatchObject({ other_domain_formats: [] });
+  });
+
+  it("joins a file job's message list with a newline where the declared message is one string", async () => {
+    const sent = await run("sendFile", '{"success":true,"message":["File Accepted","Second line"],"file_name":"a.csv","file_id":"f1"}');
+    expect(sent.resolved.message).toBe("File Accepted\nSecond line");
   });
 
   it("accepts Credits as a JSON integer, as zerobounce.net's example sends it, and returns it as the declared string", async () => {
@@ -503,6 +532,125 @@ describe("field types (E7)", () => {
         "message": "File Deleted",
         "file_name": "test2",
         "file_id": "b222a0fd-90d5-416c-8f1a-9cc3851fc823"
+    }`,
+    ],
+    validateBatch: [
+      `{
+      "email_batch": [
+          {
+              "address": "john.doe@zerobounce.net",
+              "status": "valid",
+              "sub_status": "",
+              "free_email": false,
+              "catchall_domain": true,
+              "did_you_mean": null,
+              "account": "johndoe",
+              "domain": "zerobounce.net",
+              "domain_age_days": "3431",
+              "active_in_days": "30",
+              "active_first_seen": "2026-02-25",
+              "smtp_provider": "g-suite",
+              "mx_found": "true",
+              "mx_record": "aspmx.l.google.com",
+              "firstname": "dan",
+              "lastname": "cotet",
+              "gender": "male",
+              "country": null,
+              "region": null,
+              "city": null,
+              "zipcode": null,
+              "processed_at": "2026-06-18 07:05:00.033"
+          },
+          {
+              "address": "invalid@example.com",
+              "status": "invalid",
+              "sub_status": "mailbox_not_found",
+              "free_email": false,
+              "did_you_mean": null,
+              "account": null,
+              "domain": null,
+              "domain_age_days": "9692",
+              "active_in_days": "365",
+              "active_first_seen": "2026-02-25",
+              "smtp_provider": "example",
+              "mx_found": "true",
+              "mx_record": "mx.example.com",
+              "catchall_domain": false,
+              "firstname": "zero",
+              "lastname": "bounce",
+              "gender": "male",
+              "country": null,
+              "region": null,
+              "city": null,
+              "zipcode": null,
+              "processed_at": "2020-09-17 17:43:11.830"
+          },
+          {
+              "address": "disposable@example.com",
+              "status": "do_not_mail",
+              "sub_status": "disposable",
+              "free_email": false,
+              "did_you_mean": null,
+              "account": null,
+              "domain": null,
+              "domain_age_days": "9692",
+              "active_in_days": "365",
+              "active_first_seen": "2026-02-25",
+              "smtp_provider": "example",
+              "mx_found": "true",
+              "mx_record": "mx.example.com",
+              "catchall_domain": false,
+              "firstname": "zero",
+              "lastname": "bounce",
+              "gender": "male",
+              "country": null,
+              "region": null,
+              "city": null,
+              "zipcode": null,
+              "processed_at": "2020-09-17 17:43:11.830"
+          }
+      ],
+      "errors": []
+  }`,
+    ],
+    getApiUsage: [
+      `{
+      "total": 120,
+      "status_valid": 17,
+      "status_invalid": 69,
+      "status_catch_all": 9,
+      "status_do_not_mail": 16,
+      "status_spamtrap": 0,
+      "status_unknown": 6,
+      "sub_status_toxic": 0,
+      "sub_status_disposable": 1,
+      "sub_status_role_based": 1,
+      "sub_status_possible_trap": 0,
+      "sub_status_global_suppression": 14,
+      "sub_status_timeout_exceeded": 0,
+      "sub_status_mail_server_temporary_error": 0,
+      "sub_status_mail_server_did_not_respond": 0,
+      "sub_status_greylisted": 6,
+      "sub_status_antispam_system": 0,
+      "sub_status_does_not_accept_mail": 27,
+      "sub_status_exception_occurred": 0,
+      "sub_status_failed_syntax_check": 20,
+      "sub_status_mailbox_not_found": 12,
+      "sub_status_unroutable_ip_address": 0,
+      "sub_status_possible_typo": 0,
+      "sub_status_no_dns_entries": 10,
+      "sub_status_role_based_catch_all": 0,
+      "sub_status_mailbox_quota_exceeded": 0,
+      "sub_status_forcible_disconnect": 0,
+      "sub_status_failed_smtp_connection": 0,
+      "sub_status_leading_period_removed": 0,
+      "sub_status_alias_address": 2,
+      "sub_status_mx_forward": 0,
+      "sub_status_alternate": 0,
+      "sub_status_blocked": 0,
+      "sub_status_allowed": 0,
+      "start_date": "1/1/2023",
+      "end_date": "1/30/2024"
     }`,
     ],
   };

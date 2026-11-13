@@ -9,7 +9,9 @@
  * of another entry, or such a name or primitive followed by "[]" (an array of
  * it). "integerString" is an integer sent as a JSON string, such as "-1" or
  * "12345", or as a JSON integer, such as 2375323 (zerobounce.net's own
- * getcredits example); "5.0", 5.5 and true are not. A list is a union. null is accepted for every field except a required one.
+ * getcredits example); "5.0", 5.5 and true are not. "integer" is a JSON
+ * integer within the safe range (no fraction, no exponent that overflows).
+ * A list is a union. null is accepted for every field except a required one.
  */
 export const RESPONSE_FIELDS = {
   GetCreditsResponse: { Credits: "integerString" },
@@ -82,7 +84,7 @@ export const RESPONSE_FIELDS = {
     end_date: "string",
   },
   EmailActivityResponse: { found: "boolean", active_in_days: "string" },
-  EmailScoringResult: { email: "string", score: "number" },
+  EmailScoringResult: { email: "string", score: "integer" },
   EmailScoringError: { error: "string" },
   BulkSendFileSuccessResponse: {
     success: "boolean",
@@ -232,6 +234,7 @@ function mismatch(value, types, path) {
     if (type === "integerString" && typeof value === "string" && /^-?[0-9]+$/.test(value)) return null;
     if (type === "integerString" && Number.isSafeInteger(value)) return null;
     if (type === "number" && typeof value === "number") return null;
+    if (type === "integer" && Number.isSafeInteger(value)) return null;
     if (type === "boolean" && typeof value === "boolean") return null;
     if (type === "object" && isPlainObject(value)) return null;
     if (type === "array" && Array.isArray(value)) return null;
@@ -275,4 +278,39 @@ function mismatch(value, types, path) {
  */
 export function responseFieldMismatch(parsed, types) {
   return mismatch(parsed, [].concat(types), "");
+}
+
+/**
+ * Non-nullable declared fields (zeroBounceSDK.d.ts) that a null answers with
+ * their empty value, not an error (standard.md §3): an empty list, or "".
+ */
+const NULL_AS_EMPTY = {
+  ValidateBatchResponse: { email_batch: () => [], errors: () => [] },
+  DomainFormatResponse: { other_domain_formats: () => [] },
+  ValidationFileStatusResponse: { file_id: () => "", upload_date: () => "" },
+  ScoringFileStatusResponse: { file_id: () => "", upload_date: () => "" },
+};
+
+/**
+ * Applies the null rules above to a parsed body that already has the declared
+ * types, and joins a file job's message list into one string where the success
+ * answer declares one (BulkSendFileSuccessResponse.message is a string).
+ */
+export function nullsAsEmpty(parsed, types) {
+  if (!isPlainObject(parsed)) return parsed;
+  const names = [].concat(types ?? []);
+  for (const name of names) {
+    for (const [key, empty] of Object.entries(NULL_AS_EMPTY[name] || {})) {
+      if (parsed[key] === null) parsed[key] = empty();
+    }
+  }
+  if (
+    names.includes("BulkSendFileSuccessResponse") &&
+    parsed.success === true &&
+    Array.isArray(parsed.message) &&
+    parsed.message.every((line) => typeof line === "string")
+  ) {
+    parsed.message = parsed.message.join("\n");
+  }
+  return parsed;
 }

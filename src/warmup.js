@@ -78,6 +78,9 @@ function fetchTimeoutSignal() {
 export class ZeroBounceWarmup {
   static DEFAULT_BASE_URL = DEFAULT_BASE_URL;
 
+  /** Private, like the core client's key: no property holds it (see ZeroBounceSDK). */
+  #apiKey;
+
   /**
    * @param apiKey - your Warmup API key, sent in the `API-Key` header
    * @param baseURL - the base URL ZeroBounce gave you; defaults to
@@ -86,10 +89,14 @@ export class ZeroBounceWarmup {
   constructor(apiKey, baseURL = DEFAULT_BASE_URL) {
     checkApiKey(apiKey, "Warmup api key");
     const base = requireHttpsUrl(baseURL || DEFAULT_BASE_URL, "baseURL");
-    // Not enumerable, so util.inspect, console.log and JSON.stringify of a
-    // client do not print the key.
-    Object.defineProperty(this, "_api_key", { value: apiKey, writable: true, enumerable: false });
+    this.#apiKey = apiKey;
     this._root = `${trimTrailingSlashes(base)}${BASE_PATH}`;
+  }
+
+  /** Prints the fields with the key masked, so `console.log` never shows it. */
+  [Symbol.for("nodejs.util.inspect.custom")](depth, options, inspect) {
+    const shown = { ...this, api_key: this.#apiKey == null ? null : "***" };
+    return `ZeroBounceWarmup ${inspect(shown, options)}`;
   }
 
   // -- transport --------------------------------------------------------------
@@ -99,10 +106,10 @@ export class ZeroBounceWarmup {
       params && Object.keys(params).length ? `?${new URLSearchParams(params)}` : "";
     const url = `${this._root}${path}${query}`;
     requireHttpsUrl(url, "request URL");
-    const all = [this._api_key, ...secrets];
+    const all = [this.#apiKey, ...secrets];
 
     const headers = {
-      "API-Key": this._api_key,
+      "API-Key": this.#apiKey,
       Accept: "application/json",
     };
     if (jsonBody != null) headers["Content-Type"] = "application/json";
@@ -156,7 +163,7 @@ export class ZeroBounceWarmup {
     // when its body happens to parse as JSON.
     if (contentTypeOf(response).includes("text/html")) {
       throw apiError(
-        redactSecrets(warmupMessage(body, status), [this._api_key, ...(options.secrets || [])]),
+        redactSecrets(warmupMessage(body, status), [this.#apiKey, ...(options.secrets || [])]),
         status
       );
     }
@@ -165,7 +172,7 @@ export class ZeroBounceWarmup {
     } catch (error) {
       if (error instanceof ZBApiError) throw apiError(error.message, status);
       throw apiError(
-        redactSecrets(warmupMessage(body, status), [this._api_key, ...(options.secrets || [])]),
+        redactSecrets(warmupMessage(body, status), [this.#apiKey, ...(options.secrets || [])]),
         status
       );
     }
@@ -184,7 +191,7 @@ export class ZeroBounceWarmup {
       contentType.includes("text/html") ||
       looksLikeHtml(body)
     ) {
-      throw apiError(redactSecrets(warmupMessage(body, status), [this._api_key]), status);
+      throw apiError(redactSecrets(warmupMessage(body, status), [this.#apiKey]), status);
     }
     return body;
   }

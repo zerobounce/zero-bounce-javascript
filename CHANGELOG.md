@@ -54,6 +54,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (a proxy or challenge page) with a `ZBApiError`, even when its body parses
   as JSON. 4.0.1 and earlier returned such a body as the result.
 
+- The API key is held in a private field of `ZeroBounceSDK` and
+  `ZeroBounceWarmup`, not in a property. `console.log("%o", client)`,
+  `util.inspect(client, { showHidden: true })` and every walk of the object's
+  properties now show `api_key: '***'` or nothing, never the key. 4.0.1 kept
+  the key in a non-enumerable `_api_key` property, which `%o` and
+  `showHidden` printed. The default `util.inspect` output shows the key as
+  `api_key: '***'` (or `null` before `init`).
+
 ### Added
 
 - `InboxPlacementProviderGroup`, the type of `emailProviders` and
@@ -139,6 +147,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of `NaN` with "timezone_offset parameter is invalid. Must be -11 to 14.".
   4.0.1 accepted it and sent `null`. Fractional offsets in range (5.5, -9.5)
   are still accepted.
+- `scoreEmail` and its POST variant reject a `score` that is not an integer
+  within the safe range (`5.5`, `1e400`, `9007199254740993`, or a string such
+  as `"5.9"`) with a `ZBApiError` carrying status 200. 4.0.1 returned `5.5`
+  as the score, and `1e400` as `Infinity`.
+- A `null` in a field the declarations make non-nullable reads as its empty
+  value instead of `null`: `validateBatch`'s `email_batch` and `errors`
+  become `[]`, a file status's `file_id` and `upload_date` become `""`, and
+  `other_domain_formats` becomes `[]`. 4.0.1 returned `null`.
+- `sendFile` and the other file-job send calls join a success answer's
+  `message` list with `"\n"` into the one string the declaration gives, as
+  `message: "File Accepted\nSecond line"`. 4.0.1 returned the array. Failure
+  messages are unchanged.
 
 ## [4.0.1] - 2026-11-11
 

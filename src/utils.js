@@ -1,4 +1,4 @@
-import { responseFieldMismatch, UNEXPECTED_FIELD_TYPE_MESSAGE } from "./response-fields.js";
+import { nullsAsEmpty, responseFieldMismatch, UNEXPECTED_FIELD_TYPE_MESSAGE } from "./response-fields.js";
 
 // Constants
 export const API_BULK_BASE_URL = "https://bulkapi.zerobounce.net/v2";
@@ -773,7 +773,7 @@ export async function createRequest({
       throw apiError(field ? `${UNEXPECTED_FIELD_TYPE_MESSAGE} (${field}).` : `${UNEXPECTED_FIELD_TYPE_MESSAGE}.`, status);
     }
   }
-  return parsed;
+  return nullsAsEmpty(parsed, fields);
 }
 
 function saveFile(blob, filename) {

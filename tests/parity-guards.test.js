@@ -383,7 +383,47 @@ describe("guessFormat (deprecated)", () => {
   });
 });
 
+/**
+ * The first path, from the value itself, at which the key is readable: every own
+ * property (descriptor values only, so no getter runs), string keys included,
+ * walked through the object graph.
+ */
+function keyReachable(root) {
+  const seen = new Set();
+  const stack = [[root, "client"]];
+  while (stack.length) {
+    const [value, where] = stack.pop();
+    if (typeof value === "string") {
+      if (value.includes(KEY)) return where;
+      continue;
+    }
+    if (value === null || (typeof value !== "object" && typeof value !== "function")) continue;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    for (const name of Reflect.ownKeys(value)) {
+      if (typeof name === "string" && name.includes(KEY)) return `${where}[${name}]`;
+      const descriptor = Object.getOwnPropertyDescriptor(value, name);
+      if (descriptor && "value" in descriptor) stack.push([descriptor.value, `${where}.${String(name)}`]);
+    }
+  }
+  return null;
+}
+
 describe("the API key", () => {
+  it("is not reachable through any property, util.format %o, showHidden inspect or JSON", () => {
+    const sdk = client();
+    const warmup = new ZeroBounceWarmup(KEY);
+    for (const value of [sdk, warmup]) {
+      expect(keyReachable(value)).toBeNull();
+      expect(util.format("%o", value)).not.toContain(KEY);
+      expect(util.format("%O", value)).not.toContain(KEY);
+      expect(util.inspect(value, { showHidden: true, depth: 9 })).not.toContain(KEY);
+      expect(JSON.stringify(value)).not.toContain(KEY);
+      // The custom inspector shows that a key is set, never the key itself.
+      expect(util.inspect(value)).toContain("api_key: '***'");
+    }
+  });
+
   it("is not shown by util.inspect or JSON.stringify of either client", async () => {
     const sdk = client();
     const warmup = new ZeroBounceWarmup(KEY);
@@ -402,10 +442,33 @@ describe("the API key", () => {
   });
 });
 
+describe("return_url", () => {
+  const file = new Blob(["a@example.com\n"], { type: "text/csv" });
+  const sends = {
+    sendFile: (sdk, extra) => sdk.sendFile({ file, email_address_column: 1, ...extra }),
+    sendFileStream: (sdk, extra) => sdk.sendFileStream(file, "emails.csv", { email_address_column: 1, ...extra }),
+    sendScoringFile: (sdk, extra) => sdk.sendScoringFile({ file, email_address_column: 1, ...extra }),
+    sendScoringFileStream: (sdk, extra) =>
+      sdk.sendScoringFileStream(file, "emails.csv", { email_address_column: 1, ...extra }),
+  };
+
+  for (const [name, send] of Object.entries(sends)) {
+    it(`${name} sends no return_url unless the caller sets one`, async () => {
+      respond('{"success":true,"message":"ok"}');
+      await send(client());
+      expect("return_url" in sent()).toBe(false);
+
+      respond('{"success":true,"message":"ok"}');
+      await send(client(), { return_url: "https://example.com/done" });
+      expect(sent().return_url).toBe("https://example.com/done");
+    });
+  }
+});
+
 describe("init", () => {
-  /** Everything init can set, including the non-enumerable key. */
+  /** Everything init can set. */
   function state(sdk) {
-    return { _api_key: sdk._api_key, ...sdk };
+    return { ...sdk };
   }
 
   it("leaves an initialised client exactly as it was when it throws", async () => {
@@ -435,7 +498,6 @@ describe("init", () => {
     const before = state(fresh);
     expect(() => fresh.init("key-C", "http://evil.example/v2")).toThrow(/https/);
     expect(state(fresh)).toEqual(before);
-    expect(fresh._api_key).toBeNull();
     respond('{"Credits":"5"}');
     await expect(fresh.getCredits()).rejects.toThrow(/Call init/);
     expect(calls).toEqual([]);
@@ -449,7 +511,6 @@ describe("init", () => {
         "ZeroBounce: Api key has surrounding whitespace or control characters.",
       ]);
       expect(sdk._initialized).toBe(false);
-      expect(sdk._api_key).toBeNull();
     }
   });
 });
