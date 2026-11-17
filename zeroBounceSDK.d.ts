@@ -330,7 +330,7 @@ export interface GetFileOptions {
 /** Options for sendFile. */
 export interface SendFileOptions {
   /** The CSV or TXT file to submit. */
-  file: File;
+  file: File | Blob | Uint8Array;
   /** Column index of the email address (1-based). */
   email_address_column: number;
   /** Callback URL when validation is completed. */
@@ -369,7 +369,7 @@ export interface SendFileStreamOptions {
 
 /** Options for sendScoringFile. */
 export interface SendScoringFileOptions {
-  file: File;
+  file: File | Blob | Uint8Array;
   email_address_column: number;
   return_url?: string | false;
   has_header_row?: boolean;
@@ -391,7 +391,7 @@ export interface SendScoringFileStreamOptions {
  * "leave this column out" and so do not count as given.
  */
 export interface SendEmailFinderFileOptions {
-  file: File;
+  file: File | Blob | Uint8Array;
   domain_column: number;
   first_name_column?: number | false;
   last_name_column?: number | false;
@@ -412,7 +412,7 @@ export interface SendEmailFinderFileStreamOptions {
 
 /** Options for bulk domain search sendfile. */
 export interface SendDomainSearchFileOptions {
-  file: File;
+  file: File | Blob | Uint8Array;
   domain_column: number;
   has_header_row?: boolean;
 }
@@ -438,7 +438,7 @@ export interface ListEvaluatorResultResponse {
 }
 
 export interface SendListEvaluatorFileOptions {
-  file: File;
+  file: File | Blob | Uint8Array;
   email_address_column: number;
 }
 
@@ -679,6 +679,20 @@ export class ZeroBounceSDK {
   /** Validation sub-status values returned by the API (validate, validateBatch). */
   static ZBValidateSubStatus: ZBValidateSubStatusType;
 
+  /** Default base URLs of the list evaluator, Inbox Placement Tester, Email Finder and Domain Search APIs. */
+  static ListEvaluatorURL: Readonly<{
+    DEFAULT_URL: "https://bulkapi.zerobounce.net/v2/listevaluator";
+  }>;
+  static InboxPlacementURL: Readonly<{
+    DEFAULT_URL: "https://bulkapi.zerobounce.net/api/ipt";
+  }>;
+  static EmailFinderURL: Readonly<{
+    DEFAULT_URL: "https://bulkapi.zerobounce.net/email-finder";
+  }>;
+  static DomainSearchURL: Readonly<{
+    DEFAULT_URL: "https://bulkapi.zerobounce.net/domain-search";
+  }>;
+
   /** Bulk `getfile` `download_type` query values (`phase_1`, `phase_2`, `combined`). */
   static ZBDownloadType: ZBDownloadTypeValues;
 
@@ -705,6 +719,10 @@ export class ZeroBounceSDK {
       emailFinderBaseURL?: string;
       /** Defaults to https://bulkapi.zerobounce.net/domain-search */
       domainSearchBaseURL?: string;
+      /** Defaults to https://bulkapi.zerobounce.net/v2 (validation and scoring bulk). */
+      bulkBaseURL?: string;
+      /** Defaults to https://bulkapi.zerobounce.net (bulk root: status, results, S3/SFTP jobs). */
+      bulkRootBaseURL?: string;
     } | null
   ): void;
 
@@ -765,13 +783,13 @@ export class ZeroBounceSDK {
   sendFile(options: SendFileOptions): Promise<SendFileResponse>;
 
   /**
-   * Submit file data (File, Blob, or stream) for bulk validation.
-   * @param fileStreamOrBlob - File, Blob, or buffer
+   * Submit file data for bulk validation.
+   * @param fileStreamOrBlob - File, Blob, Buffer or Uint8Array (a path string or a stream is refused with ZBApiError before sending)
    * @param fileName - Name for the upload (e.g. "emails.csv")
    * @param options - Same options as sendFile (email_address_column, etc.); optional (defaults applied when omitted).
    */
   sendFileStream(
-    fileStreamOrBlob: File | Blob,
+    fileStreamOrBlob: File | Blob | Uint8Array,
     fileName: string,
     options?: SendFileStreamOptions
   ): Promise<SendFileResponse>;
@@ -788,7 +806,7 @@ export class ZeroBounceSDK {
    * @param options - Optional; defaults applied when omitted.
    */
   sendScoringFileStream(
-    fileStreamOrBlob: File | Blob,
+    fileStreamOrBlob: File | Blob | Uint8Array,
     fileName: string,
     options?: SendScoringFileStreamOptions
   ): Promise<SendScoringFileResponse>;
@@ -853,7 +871,7 @@ export class ZeroBounceSDK {
   ): Promise<SendFileResponse>;
 
   sendEmailFinderFileStream(
-    fileStreamOrBlob: File | Blob,
+    fileStreamOrBlob: File | Blob | Uint8Array,
     fileName: string,
     options?: SendEmailFinderFileStreamOptions
   ): Promise<SendFileResponse>;
@@ -875,7 +893,7 @@ export class ZeroBounceSDK {
   ): Promise<SendFileResponse>;
 
   sendDomainSearchFileStream(
-    fileStreamOrBlob: File | Blob,
+    fileStreamOrBlob: File | Blob | Uint8Array,
     fileName: string,
     options?: SendDomainSearchFileStreamOptions
   ): Promise<SendFileResponse>;
@@ -897,7 +915,7 @@ export class ZeroBounceSDK {
   ): Promise<ListEvaluatorSubmitResponse>;
 
   sendListEvaluatorFileStream(
-    fileStreamOrBlob: File | Blob,
+    fileStreamOrBlob: File | Blob | Uint8Array,
     fileName: string,
     options?: SendListEvaluatorFileStreamOptions
   ): Promise<ListEvaluatorSubmitResponse>;

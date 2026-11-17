@@ -25,7 +25,7 @@ Bulk `getFile` / `getScoringFile` return the downloaded CSV as a **string** in N
 
 ## Testing
 
-- **`npm test`** — Runs unit tests (Jest) and TypeScript type checks.
+- **`npm test`** — Runs unit tests (Jest) and TypeScript type checks. Offline: a guard in `tests/jest.setup.js` fails any test that tries to reach a non-loopback host.
 - **`npm run test:unit`** — Unit tests only.
 - **`npm run test:types`** — Type-checks the declaration file and a TypeScript consumer.
 - **`npm run dts-check`** — Type-checks the shipped declaration files, `zeroBounceSDK.d.ts` and `zeroBounceSDK.d.mts`.
@@ -242,15 +242,17 @@ try {
 - ##### Point an API at a different base URL
 
 ```javascript
-// The list evaluator, the Inbox Placement Tester, the bulk email finder and
-// bulk domain search each have their own base URL, separate from the main and
-// bulk hosts. Every one of them must be https://. If the key or any URL is
-// rejected, init throws and leaves the client exactly as it was.
+// The bulk file API, the list evaluator, the Inbox Placement Tester, the bulk
+// email finder and bulk domain search each have their own base URL, separate
+// from the main host. Every one of them must be https://. If the key or any URL
+// is rejected, init throws and leaves the client exactly as it was.
 zeroBounce.init("<YOUR_API_KEY>", ZeroBounceSDK.ApiURL.DEFAULT_API_URL, {
   listEvaluatorBaseURL: "https://bulkapi.zerobounce.net/v2/listevaluator",
   inboxPlacementBaseURL: "https://bulkapi.zerobounce.net/api/ipt",
   emailFinderBaseURL: "https://bulkapi.zerobounce.net/email-finder",
   domainSearchBaseURL: "https://bulkapi.zerobounce.net/domain-search",
+  bulkBaseURL: "https://bulkapi.zerobounce.net/v2",
+  bulkRootBaseURL: "https://bulkapi.zerobounce.net",
 });
 ```
 
@@ -629,7 +631,14 @@ docker compose run --rm javascript
 
 The repo includes a `.dockerignore` so the image build context stays small (no `node_modules` / `coverage` from the host).
 
-You can also run `docker build -t zerobounce-javascript-sdk:test .` from this directory.
+You can also build and run it from this directory (the tests are offline, so `--network=none` works; CI does the same in its `docker` job):
+
+```bash
+docker build -t zerobounce-javascript-sdk:test .
+docker run --rm --network=none zerobounce-javascript-sdk:test
+```
+
+The base image is pinned by digest in the `Dockerfile`; update the tag and the digest together.
 
 ### Run tests (local)
 After checking out the repo run tests

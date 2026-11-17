@@ -82,7 +82,47 @@ describe("redaction decode steps", () => {
   it("keeps the bytes of an invalid run it cannot decode, so text without a secret is unchanged", () => {
     const text = "Bad Request: [%FF%41%C3 %e4]";
     expect(redactSecrets(text, [KEY])).toBe(text);
-    expect(holdsSecret(text, ["ÿ"])).toBe(false);
+    // The run is also read as Latin-1 (below), so "ÿ" shows; a secret that is not in it does not.
+    expect(holdsSecret(text, ["ÿ"])).toBe(true);
+    expect(holdsSecret(text, ["zzz"])).toBe(false);
+  });
+
+  it("decodes every \\u and \\U spelling of a key, as a body might echo it", () => {
+    const key = "zb-key-\u00e9-\u{1F600}";
+    const hex4 = (c) => c.toString(16).padStart(4, "0");
+    const spellings = {
+      "\\uXXXX": [...key].map((ch) => { const c = ch.codePointAt(0); return c > 0xffff ? Array.from({ length: ch.length }, (_, i) => "\\u" + hex4(ch.charCodeAt(i))).join("") : "\\u" + hex4(c); }).join(""),
+      "\\UXXXX": [...key].map((ch) => { const c = ch.codePointAt(0); return c > 0xffff ? Array.from({ length: ch.length }, (_, i) => "\\U" + hex4(ch.charCodeAt(i))).join("") : "\\U" + hex4(c); }).join(""),
+      "\\UXXXXXXXX": [...key].map((ch) => "\\U" + ch.codePointAt(0).toString(16).padStart(8, "0")).join(""),
+      "\\U{...}": [...key].map((ch) => "\\U{" + ch.codePointAt(0).toString(16) + "}").join(""),
+      "\\u{...}": [...key].map((ch) => "\\u{" + ch.codePointAt(0).toString(16) + "}").join(""),
+    };
+    for (const [name, echo] of Object.entries(spellings)) {
+      expect([name, holdsSecret(`bad ${echo} end`, [key])]).toEqual([name, true]);
+      expect([name, redactSecrets(`bad ${echo} end`, [key])]).toEqual([name, CREDENTIAL_OMITTED_MESSAGE]);
+    }
+    // A lower-case \\u pair written with \\U for one half, and a \\UXXXX run, as in the finding.
+    const ascii = "zbkey";
+    const echoed = [...ascii].map((ch) => "\\U" + ch.charCodeAt(0).toString(16).padStart(4, "0")).join("");
+    expect(redactSecrets(`Invalid key ${echoed}`, [ascii])).toBe(CREDENTIAL_OMITTED_MESSAGE);
+    expect(holdsSecret("\\U12345678 \\UZZZZ", [ascii])).toBe(false);
+  });
+
+  it("reads a run of byte escapes or %XX as UTF-8, and as Latin-1 too", () => {
+    const key = "k\u00e9y-\u00e4-\u20ac";
+    const bytes = [...Buffer.from(key, "utf8")];
+    const xs = bytes.map((b) => "\\x" + b.toString(16).padStart(2, "0")).join("");
+    const octal = bytes.map((b) => "\\" + b.toString(8).padStart(3, "0")).join("");
+    const percent = bytes.map((b) => "%" + b.toString(16).toUpperCase().padStart(2, "0")).join("");
+    for (const [name, echo] of [["hex", xs], ["octal", octal], ["percent", percent]]) {
+      expect([name, holdsSecret(`bad ${echo} end`, [key])]).toEqual([name, true]);
+    }
+    // A Latin-1 key echoed by byte: %E9, \xe9, \351.
+    const latin = "caf\u00e9-key";
+    for (const echo of ["caf%E9-key", "caf\\xe9-key", "caf\\351-key"]) {
+      expect([echo, holdsSecret(`bad ${echo} end`, [latin])]).toEqual([echo, true]);
+    }
+    expect(holdsSecret("caf%E8-key \\xe8 \\350", [latin])).toBe(false);
   });
 
   it("decodes '+' as a space (form encoding)", () => {

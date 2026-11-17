@@ -32,46 +32,103 @@ export function apiError(message, statusCode = 0) {
   return new ZBApiError(message, statusCode);
 }
 
-/** Whether the authority, as written, contains `@` (catches `https://@host`). */
-function hasUserinfoMarker(url) {
-  const cleaned = url.replace(/[\t\n\r]/g, "");
-  const afterScheme = cleaned.trim().split(":").slice(1).join(":") || "";
-  const authority = afterScheme.replace(/^[/\\]+/, "").split(/[/\\?#]/)[0] || "";
-  return authority.includes("@");
+/**
+ * The detail of the failure for a URL that is not a clean https base URL. The
+ * message never quotes the URL, which may carry a credential.
+ */
+const REFUSED_URL_DETAIL =
+  ' (plain http:// only to 127.0.0.1, localhost or [::1]) with a host, without user information, a query string or a fragment ("@", "?" or "#"), a backslash, whitespace, control or invisible characters, a lone surrogate, a non-ASCII character or a "%" in the host, or an encoded slash or a dot segment in the path';
+
+/** A character no URL may carry: control, whitespace, invisible, bidi, format, surrogate, backslash. */
+function isForbiddenUrlCharacter(char) {
+  if (char === "\\") return true;
+  const code = char.codePointAt(0);
+  if (code <= 0x20 || (code >= 0x7f && code <= 0x9f)) return true;
+  if (code >= 0xd800 && code <= 0xdfff) return true; // a lone surrogate (a pair is one code point)
+  if (code === 0xfffd) return true;
+  if (isInvisibleChar(code)) return true;
+  return /[\p{White_Space}\p{Default_Ignorable_Code_Point}\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}\p{Co}\p{Cn}]/u.test(char);
 }
 
-/** Loopback http is allowed only for offline tests. */
-function isLoopbackHttp(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:") return false;
-    const host = parsed.hostname;
-    return host === "127.0.0.1" || host === "localhost" || host === "[::1]";
-  } catch {
-    return false;
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/** The raw authority's host (lower case), or null when it is not a plain ASCII host with an optional numeric port. */
+function rawHost(authority) {
+  let host = authority;
+  if (host.startsWith("[")) {
+    const close = host.indexOf("]");
+    if (close < 0) return null;
+    const port = host.slice(close + 1);
+    host = host.slice(0, close + 1);
+    if (!/^\[[0-9A-Fa-f:.]+\]$/.test(host)) return null;
+    if (port && !/^:[0-9]+$/.test(port)) return null;
+    return host.toLowerCase();
   }
+  const colon = host.lastIndexOf(":");
+  if (colon >= 0) {
+    if (!/^[0-9]*$/.test(host.slice(colon + 1))) return null;
+    host = host.slice(0, colon);
+  }
+  if (!host || host.includes(":") || host.includes("%") || !/^[\x21-\x7e]+$/.test(host)) return null;
+  return host.toLowerCase();
 }
 
-function refuseBadTransportUrl(url, name, refuseQueryAndFragment) {
-  if (typeof url !== "string") {
-    throw new Error(`ZeroBounce: ${name} must be an https:// URL`);
+/**
+ * Checks the raw string before `new URL()` sees it: the parser strips tabs and
+ * newlines, trims, turns backslashes into slashes and folds fullwidth or
+ * percent-encoded hosts, so a URL it accepts can send the key somewhere other
+ * than the text says.
+ */
+function refuseBadTransportUrl(url, name, isBase) {
+  const shortRefusal = () => new Error(`ZeroBounce: ${name} must be an https:// URL`);
+  const refused = () => new Error(`ZeroBounce: ${name} must be an https:// URL${REFUSED_URL_DETAIL}`);
+  if (typeof url !== "string") throw shortRefusal();
+  const lowered = url.toLowerCase();
+  const isHttps = lowered.startsWith("https://");
+  const isHttp = lowered.startsWith("http://");
+  if (!isHttps && !isHttp) throw shortRefusal();
+  const rest = url.slice(isHttps ? 8 : 7);
+  const authorityEnd = rest.search(/[/?#\\]/);
+  const authority = authorityEnd < 0 ? rest : rest.slice(0, authorityEnd);
+  if (authority.includes("@")) {
+    throw new Error(`ZeroBounce: ${name} must not contain a username or password.`);
   }
-  if (refuseQueryAndFragment && (url.includes("?") || url.includes("#"))) {
+  if (isBase && (url.includes("?") || url.includes("#"))) {
     throw new Error(`ZeroBounce: ${name} must not contain a query string or a fragment ("?" or "#").`);
+  }
+  for (const char of url) {
+    if (isForbiddenUrlCharacter(char)) throw refused();
+  }
+  const host = rawHost(authority);
+  if (host == null) throw refused();
+  if (isHttp && !LOOPBACK_HOSTS.has(host)) throw shortRefusal();
+  if (isBase) {
+    for (const segment of rest.slice(authority.length).split("/")) {
+      let decoded = segment;
+      try {
+        decoded = decodeURIComponent(segment);
+      } catch {
+        // Keep the raw segment.
+      }
+      const lower = segment.toLowerCase();
+      if (decoded === "." || decoded === ".." || decoded.includes("/") || decoded.includes("\\")) throw refused();
+      if (lower.includes("%2f") || lower.includes("%5c") || lower.includes("%00")) throw refused();
+    }
   }
   let parsed;
   try {
     parsed = new URL(url);
   } catch {
-    throw new Error(`ZeroBounce: ${name} must be an https:// URL`);
+    throw shortRefusal();
   }
-  if (parsed.username || parsed.password || hasUserinfoMarker(url)) {
+  if (parsed.username || parsed.password) {
     throw new Error(`ZeroBounce: ${name} must not contain a username or password.`);
   }
-  if (parsed.protocol === "https:" || isLoopbackHttp(url)) {
-    return url;
+  const parsedHost = parsed.hostname.toLowerCase();
+  if (parsedHost !== host && `[${parsedHost}]` !== host && parsedHost !== host.replace(/^\[|\]$/g, "")) {
+    throw refused();
   }
-  throw new Error(`ZeroBounce: ${name} must be an https:// URL`);
+  return url;
 }
 
 /**
@@ -170,7 +227,8 @@ export function checkApiKey(apiKey, name = "api key") {
     apiKey !== apiKey.trim() ||
     [...apiKey].some((char) => {
       const code = char.codePointAt(0);
-      if (code <= 0x1f || code === 0x7f) return true;
+      if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return true;
+      if (code >= 0xd800 && code <= 0xdfff) return true; // a lone surrogate would be sent as U+FFFD
       if (char !== " " && /\s/u.test(char)) return true;
       if (isInvisibleChar(code)) return true;
       return false;
@@ -291,6 +349,41 @@ function percentDecoded(text) {
   });
 }
 
+/** Every %XX as the Latin-1 character of its byte: the reading of a body that echoed a Latin-1 key ("%E9" for "é"). */
+function percentLatin1(text) {
+  return text.replace(/%([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+/**
+ * Runs of characters U+0080 to U+00FF read as bytes: each valid UTF-8 sequence
+ * becomes its character. `\xC3\xA9` and `\303\251` are the two bytes of "é",
+ * which jsonUnescaped alone leaves as "Ã©"; a byte that starts no valid
+ * sequence stays as it is, so this is a second view next to that one.
+ */
+function latin1RunsAsUtf8(text) {
+  return text.replace(/[\u0080-\u00ff]+/g, (run) => {
+    let out = "";
+    let i = 0;
+    while (i < run.length) {
+      const length = utf8SequenceLength(run.charCodeAt(i));
+      if (length > 1 && i + length <= run.length) {
+        let escaped = "";
+        for (let k = 0; k < length; k += 1) escaped += `%${run.charCodeAt(i + k).toString(16).padStart(2, "0")}`;
+        try {
+          out += decodeURIComponent(escaped);
+          i += length;
+          continue;
+        } catch {
+          // Not a valid sequence: keep this byte as it is.
+        }
+      }
+      out += run[i];
+      i += 1;
+    }
+    return out;
+  });
+}
+
 const JSON_UNESCAPES = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", "'": "'" };
 
 function hexDigit(char) {
@@ -332,21 +425,16 @@ function jsonUnescaped(text) {
         continue;
       }
     }
+    if (next === "U" && /^[0-9A-Fa-f]{8}$/.test(text.slice(i + 2, i + 10)) && parseInt(text.slice(i + 2, i + 10), 16) <= 0x10ffff) {
+      out += codePointText(parseInt(text.slice(i + 2, i + 10), 16));
+      i += 10;
+      continue;
+    }
     if (next === "u" || next === "U") {
-      const isCap = next === "U";
-      let hex = text.slice(i + 2, i + 2 + (isCap ? 8 : 4));
-      if (isCap && hex.length === 8 && /^[0-9A-Fa-f]{8}$/.test(hex)) {
-        const code = parseInt(hex, 16);
-        if (code <= 0x10ffff) {
-          out += codePointText(code);
-          i += 10;
-          continue;
-        }
-        hex = text.slice(i + 2, i + 6);
-      }
+      const hex = text.slice(i + 2, i + 6);
       if (/^[0-9A-Fa-f]{4}$/.test(hex)) {
         let code = parseInt(hex, 16);
-        if (code >= 0xd800 && code <= 0xdbff && text[i + 6] === "\\" && text[i + 7] === "u") {
+        if (code >= 0xd800 && code <= 0xdbff && text[i + 6] === "\\" && (text[i + 7] === "u" || text[i + 7] === "U")) {
           const low = text.slice(i + 8, i + 12);
           if (/^[0-9A-Fa-f]{4}$/.test(low)) {
             const lowCode = parseInt(low, 16);
@@ -693,7 +781,10 @@ function maskFolded(text, secrets) {
 const DECODERS = [
   percentDecoded,
   (text) => percentDecoded(text.split("+").join(" ")),
+  percentLatin1,
+  (text) => percentLatin1(text.split("+").join(" ")),
   jsonUnescaped,
+  (text) => latin1RunsAsUtf8(jsonUnescaped(text)),
   quoteDecoded,
 ];
 /** The SDK's own request encoding plus three echo layers (standard.md §3). */
@@ -731,6 +822,29 @@ export function holdsSecret(text, secrets = []) {
 }
 
 /**
+ * The most text redaction works on. Masking decodes and folds the text
+ * (seconds per megabyte of non-ASCII text), and no message the SDK builds is
+ * near this long, so longer text is replaced, whole, by a fixed message.
+ */
+export const MAX_REDACTED_LENGTH = 65536;
+export const TEXT_TOO_LONG_MESSAGE = "ZeroBounce: the text was omitted because it is too long to show.";
+
+/** The UTF-8 length of the text, counting a lone surrogate as 3 (U+FFFD). */
+function utf8Length(text) {
+  let total = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    if (code < 0x80) total += 1;
+    else if (code < 0x800) total += 2;
+    else if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length && (text.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+      total += 4;
+      i += 1;
+    } else total += 3;
+  }
+  return total;
+}
+
+/**
  * Replace every form a secret could take in a message with ***. Then decode
  * what is left (URL, "+", JSON, up to four layers in any order): a spelling
  * the list above misses still decodes to the secret, and the whole text is
@@ -738,6 +852,9 @@ export function holdsSecret(text, secrets = []) {
  */
 export function redactSecrets(text, secrets = []) {
   let value = String(text);
+  if (value.length > MAX_REDACTED_LENGTH / 3 && utf8Length(value) > MAX_REDACTED_LENGTH) {
+    return TEXT_TOO_LONG_MESSAGE;
+  }
   for (const secret of secrets) {
     if (!secret) continue;
     for (const form of secretForms(secret)) {
@@ -878,7 +995,7 @@ const FILE_STATUS_KNOWN_FIELDS = new Set([
 ]);
 
 /** Spaces, tabs, CR, LF, VT, FF, a UTF-8 BOM and NBSP before HTML sniffing. */
-function skipLeadingHtmlWhitespace(body) {
+function skipLeadingHtmlWhitespace(body, whole = false) {
   const text = String(body);
   let i = 0;
   if (text.charCodeAt(0) === 0xfeff) i = 1;
@@ -894,17 +1011,57 @@ function skipLeadingHtmlWhitespace(body) {
     }
     break;
   }
-  return text.slice(i, i + 2000);
+  return whole ? text.slice(i) : text.slice(i, i + 2000);
 }
 
+const HTML_PROBE_CHARS = 2000;
+const HTML_TAGS = ["<!doctype html", "<html", "<head", "<body"];
+
+/** A tag found whole: the next character is whitespace, `>` or `/`. */
+function hasWholeTag(text, tag, following) {
+  let from = 0;
+  for (;;) {
+    const at = text.indexOf(tag, from);
+    if (at < 0) return false;
+    const end = at + tag.length;
+    const next = end < text.length ? text[end] : following;
+    if (next === undefined) return true;
+    if (next === ">" || next === "/" || next === " " || next === "\t" || next === "\n" || next === "\r" || next === "\u000b" || next === "\f") {
+      return true;
+    }
+    from = at + 1;
+  }
+}
+
+/**
+ * Whether a body is an HTML page. A body that starts with `{` or `[` after its
+ * padding is never HTML (it is JSON, whatever a string in it says). Any other
+ * body is HTML when a whole `<!doctype html`, `<html`, `<head` or `<body` tag
+ * (followed by whitespace, `>` or `/`, so `<header>` and `<htmlfoo>` do not
+ * match) is in its first 2000 characters, in any case.
+ */
 export function looksLikeHtml(body) {
-  const head = skipLeadingHtmlWhitespace(body).toLowerCase();
-  return (
-    head.includes("<!doctype html") ||
-    head.includes("<html") ||
-    head.includes("<head") ||
-    head.includes("<body")
-  );
+  const text = String(body);
+  const start = text.length - skipLeadingHtmlWhitespace(text, true).length;
+  const first = text[start];
+  if (first === "{" || first === "[") return false;
+  const window = text.slice(start, start + HTML_PROBE_CHARS + 1).toLowerCase();
+  const head = window.slice(0, HTML_PROBE_CHARS);
+  const following = window.length > HTML_PROBE_CHARS ? window[HTML_PROBE_CHARS] : undefined;
+  return HTML_TAGS.some((tag) => hasWholeTag(head, tag, following));
+}
+
+/**
+ * Whether a file download is an HTML page. Unlike an API answer, a CSV can
+ * hold `<body>` in a cell, so by body alone a download is HTML only when it
+ * starts with `<` after its padding and then passes looksLikeHtml; an HTML
+ * content type is checked by the caller. A CSV whose very first characters are
+ * a whole `<body>` or `<html>` tag is still taken for a page.
+ */
+export function looksLikeHtmlDownload(body) {
+  const text = String(body);
+  const start = text.length - skipLeadingHtmlWhitespace(text, true).length;
+  return text[start] === "<" && looksLikeHtml(text);
 }
 
 /** Whether `success` is a documented boolean flag (not coerced with parseInt). */
@@ -926,6 +1083,89 @@ export function isSuccessFailure(value) {
     if (text === "false" || text === "0") return true;
   }
   return false;
+}
+
+/**
+ * What a body's own top-level "success" field says, read from the raw text
+ * (JSON.parse keeps only the last of duplicate keys, so a first `false` would
+ * be lost): "absent", "notflag", "true" or "false". A flag is a JSON boolean,
+ * the number 0 or 1, or the text true/false/0/1 (any case, trimmed). Anything
+ * else (null, 2, 0.4, "maybe", an object) is no flag: "notflag", read as if
+ * the field were absent. Any real false among duplicates is "false". Only the
+ * object's own keys count, never a nested "success" or one inside a string.
+ */
+export function successFlagOfBody(body) {
+  const text = String(body);
+  let i = 0;
+  const n = text.length;
+  const isWs = (c) => c === " " || c === "\t" || c === "\n" || c === "\r";
+  while (i < n && (isWs(text[i]) || text.charCodeAt(i) === 0xfeff)) i += 1;
+  if (text[i] !== "{") return "absent";
+  let result = "absent";
+  let depth = 0;
+  const stringEnd = (from) => {
+    let j = from + 1;
+    while (j < n) {
+      if (text[j] === "\\") j += 2;
+      else if (text[j] === '"') return j;
+      else j += 1;
+    }
+    return n;
+  };
+  const classify = (token, isString) => {
+    const t = token.trim().toLowerCase();
+    if (t === "true" || (isString && t === "1")) return "true";
+    if (t === "false" || (isString && t === "0")) return "false";
+    if (!isString && /^-?(0|1)(\.0+)?(e[+-]?0+)?$/.test(t)) {
+      const number = Number(t);
+      if (number === 1) return "true";
+      if (number === 0) return "false";
+    }
+    return "notflag";
+  };
+  while (i < n) {
+    const c = text[i];
+    if (c === "{" || c === "[") depth += 1;
+    else if (c === "}" || c === "]") depth -= 1;
+    else if (c === '"') {
+      const close = stringEnd(i);
+      let after = close + 1;
+      while (after < n && isWs(text[after])) after += 1;
+      if (depth === 1 && text[after] === ":") {
+        let key;
+        try {
+          key = JSON.parse(text.slice(i, close + 1));
+        } catch {
+          key = "";
+        }
+        if (key === "success") {
+          after += 1;
+          while (after < n && isWs(text[after])) after += 1;
+          let one;
+          if (text[after] === '"') {
+            const end = stringEnd(after);
+            let token;
+            try {
+              token = JSON.parse(text.slice(after, end + 1));
+            } catch {
+              token = "\u0000";
+            }
+            one = classify(token, true);
+          } else {
+            let end = after;
+            while (end < n && !isWs(text[end]) && text[end] !== "," && text[end] !== "}" && text[end] !== "]") end += 1;
+            const token = text.slice(after, end);
+            one = /^[{\[]/.test(token) ? "notflag" : classify(token, false);
+          }
+          if (one === "false") return "false";
+          if (one === "true" || result === "absent") result = one;
+        }
+      }
+      i = close;
+    }
+    i += 1;
+  }
+  return result;
 }
 
 /**
@@ -966,10 +1206,34 @@ function hasKnownFileStatusField(parsed) {
   return false;
 }
 
+const HTML_TITLE_WINDOW = 65536;
+const HTML_TITLE_MAX = 1000;
+
+/**
+ * The text of the page's <title>, or "" when there is none or it is longer than
+ * 1000 characters. A linear scan of the first 64 KiB (no backtracking pattern).
+ */
 function htmlTitle(body) {
-  const match = String(body).match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  if (!match) return "";
-  return match[1].replace(/\s+/g, " ").trim();
+  const text = String(body).slice(0, HTML_TITLE_WINDOW).toLowerCase();
+  let from = 0;
+  for (;;) {
+    const open = text.indexOf("<title", from);
+    if (open < 0) return "";
+    const next = text[open + 6];
+    if (next === ">" || next === "/" || next === " " || next === "\t" || next === "\n" || next === "\r" || next === "\f" || next === "\u000b") {
+      const tagEnd = text.indexOf(">", open);
+      if (tagEnd < 0) return "";
+      const close = text.indexOf("</title", tagEnd);
+      if (close < 0) return "";
+      if (close - tagEnd - 1 > HTML_TITLE_MAX) return "";
+      // toLowerCase can change a length (U+0130), so read the original by the same offsets only when equal.
+      const original = String(body).slice(0, HTML_TITLE_WINDOW);
+      const source = original.length === text.length ? original : text;
+      const title = source.slice(tagEnd + 1, close).replace(/\s+/g, " ").trim();
+      return title.length > HTML_TITLE_MAX ? "" : title;
+    }
+    from = open + 1;
+  }
 }
 
 function stripErrorPrefix(message) {
@@ -1006,7 +1270,7 @@ function readableJsonMessage(parsed) {
     if (typeof value === "string" && value.trim()) return value.trim();
     if (Array.isArray(value) && value.length) {
       const strings = value.filter((item) => typeof item === "string" && item.trim());
-      if (strings.length) return strings.join("; ");
+      if (strings.length) return strings.join("\n");
       // A validation error list: [{loc: ["body", "field"], msg: "..."}].
       const first = value[0];
       if (first && typeof first === "object" && first.msg) {
@@ -1018,7 +1282,7 @@ function readableJsonMessage(parsed) {
   return null;
 }
 
-function accountLevelMessage(parsed) {
+function accountLevelMessage(parsed, successState = "absent") {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   if (Array.isArray(parsed.errors)) {
     for (const item of parsed.errors) {
@@ -1033,7 +1297,7 @@ function accountLevelMessage(parsed) {
   // all on an HTTP 200 with no "success" field. Without a "success" field any
   // non-empty error string is a failure, whatever it says, as in the other
   // SDKs. With one, only the key / credits wording is.
-  const noSuccess = !Object.prototype.hasOwnProperty.call(parsed, "success");
+  const noSuccess = successState === "absent" || successState === "notflag";
   for (const key of ["error", "error_message", "Error"]) {
     const value = parsed[key];
     if (typeof value !== "string" || !value.trim()) continue;
@@ -1044,9 +1308,16 @@ function accountLevelMessage(parsed) {
   return null;
 }
 
-function objectWithoutSuccess(parsed) {
+/**
+ * The object without a "success" that is no flag (read as absent), or null for
+ * a real flag or a non-object.
+ */
+function objectWithoutSuccess(parsed, successState) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  return Object.prototype.hasOwnProperty.call(parsed, "success") ? null : parsed;
+  if (!Object.prototype.hasOwnProperty.call(parsed, "success")) return parsed;
+  if (successState !== "notflag") return null;
+  const { success: _ignored, ...rest } = parsed;
+  return rest;
 }
 
 const MESSAGE_KEYS = new Set(["error", "message", "error_message", "Message", "Error", "detail"]);
@@ -1069,8 +1340,8 @@ function messageBesideNullDocumentedFields(object, fieldTypes) {
  * documented fields that are all null. The keys decide, whatever the values.
  * Not for validate's greylist answer or the other message-only exemptions.
  */
-function messageOnlyBody(parsed, fieldTypes = null) {
-  const object = objectWithoutSuccess(parsed);
+function messageOnlyBody(parsed, fieldTypes = null, successState = "absent") {
+  const object = objectWithoutSuccess(parsed, successState);
   if (!object) return false;
   const keys = Object.keys(object);
   if (keys.length === 0) return true;
@@ -1100,7 +1371,7 @@ function messageFromBody(body, statusCode) {
       const parsed = JSON.parse(trimmed);
       const title = cloudflareTitle(parsed);
       if (title) return title;
-      const account = accountLevelMessage(parsed);
+      const account = accountLevelMessage(parsed, successFlagOfBody(trimmed));
       if (account) return account;
       const readable = readableJsonMessage(parsed);
       if (readable) return stripErrorPrefix(readable);
@@ -1115,6 +1386,50 @@ function messageFromBody(body, statusCode) {
 }
 
 /**
+ * The upload file as FormData takes it: a Blob/File, or a Buffer/Uint8Array
+ * wrapped into a Blob under the given name. Anything else (a path string, a
+ * stream, a plain object) is refused before any request is sent, because
+ * FormData would turn it into a text field such as "[object Object]".
+ */
+export function uploadFilePart(file, fileName = null, argument = "file") {
+  const isBlob = typeof Blob !== "undefined" && file instanceof Blob;
+  // Not instanceof: a Buffer made in another realm (jsdom, a vm) is still bytes.
+  const isBytes = file instanceof Uint8Array || Object.prototype.toString.call(file) === "[object Uint8Array]";
+  if (!isBlob && !isBytes) {
+    throw apiError(
+      `ZeroBounce: ${argument} must be a Blob, a File, a Buffer or a Uint8Array ` +
+        "(a file path, a stream or any other value is not accepted).",
+      0
+    );
+  }
+  let name = fileName;
+  if (name == null && isBlob && typeof file.name === "string") name = file.name;
+  if (name == null && isBytes) name = "file.csv";
+  const part = isBytes ? new Blob([file]) : file;
+  return name == null ? [part] : [part, String(name)];
+}
+
+const LINE_BREAK_OR_NUL = /[\r\n\0]/;
+
+/**
+ * Refuses CR, LF and NUL in every text field and file name of a multipart
+ * body, before the request is sent (lesson 121). The text is never quoted.
+ */
+function refuseControlsInForm(body) {
+  if (!body || typeof body !== "object" || typeof body.entries !== "function") return;
+  if (typeof FormData === "undefined" || !(body instanceof FormData)) return;
+  for (const [key, value] of body.entries()) {
+    if (typeof value === "string") {
+      if (LINE_BREAK_OR_NUL.test(value)) {
+        throw apiError(`ZeroBounce: the form field "${String(key).slice(0, 40)}" must not contain a line break or a NUL character.`, 0);
+      }
+    } else if (value && typeof value.name === "string" && LINE_BREAK_OR_NUL.test(value.name)) {
+      throw apiError("ZeroBounce: the file name must not contain a line break or a NUL character.", 0);
+    }
+  }
+}
+
+/**
  * A network failure, with every form of the secret removed.
  *
  * The redacted copy is returned on its own: the original is never attached as
@@ -1123,7 +1438,17 @@ function messageFromBody(body, statusCode) {
 function transportError(error, secrets = []) {
   const name = error && error.name ? error.name : "Error";
   const message = error && error.message ? error.message : String(error);
-  return apiError(redactSecrets(`${name}: ${message}`, secrets), 0);
+  // Node's fetch reports every network failure as "TypeError: fetch failed" and
+  // keeps the reason (ECONNREFUSED, ENOTFOUND, a TLS error) in `cause`.
+  let text = `${name}: ${message}`;
+  const cause = error && typeof error === "object" ? error.cause : null;
+  if (cause && typeof cause === "object") {
+    const code = typeof cause.code === "string" ? cause.code : "";
+    const detail = typeof cause.message === "string" ? cause.message : "";
+    const reason = [code, detail && detail !== code ? detail : ""].filter(Boolean).join(": ");
+    if (reason) text += ` (${reason.slice(0, 300)})`;
+  }
+  return apiError(redactSecrets(text, secrets), 0);
 }
 
 /**
@@ -1187,7 +1512,7 @@ async function readBodyText(response) {
 function processGetFileResponseBody(finalResult, response, scoring, fileId = "download") {
   const status = responseStatus(response);
   const ct = responseContentType(response);
-  if (looksLikeHtml(finalResult) || ct.includes("text/html") || status >= 400) {
+  if (looksLikeHtmlDownload(finalResult) || ct.includes("text/html") || status >= 400) {
     throw apiError(messageFromBody(finalResult, status), status);
   }
   if (!String(finalResult).trim()) {
@@ -1265,6 +1590,7 @@ export async function createRequest({
   secrets = [],
   regionalWarningState = null,
   messageOnlyExempt = false,
+  messageFirst = false,
   requireFileStatusKnownField = false,
   emptyIsSuccess = false,
   shape = "object",
@@ -1272,6 +1598,7 @@ export async function createRequest({
 }) {
   const url = buildRequestUrl({ batch, bulkBase, bulkURLs, apiBaseURL, baseURL, path, params });
   requireHttpsUrl(url, "request URL");
+  refuseControlsInForm(body);
   secrets = [...secrets, ...requestSecrets({ params, body, jsonBody, bearerToken })];
   warnOnRegionalBulkHost(url, apiBaseURL, regionalWarningState);
 
@@ -1290,14 +1617,19 @@ export async function createRequest({
       headers,
       body: jsonBody != null ? JSON.stringify(jsonBody) : body,
       signal: fetchTimeoutSignal(),
-      redirect: "error",
+      redirect: "manual",
     });
   } catch (error) {
     // Some fetch polyfills embed the request URL, including the key, in errors.
     throw transportError(error, secrets);
   }
 
+  // redirect: "manual" hands back the 3xx itself (a browser's opaque redirect
+  // has status 0), so the caller sees the status instead of "fetch failed".
   const redirectStatus = responseStatus(response);
+  if (response && response.type === "opaqueredirect") {
+    throw apiError("ZeroBounce returned a redirect, which this client does not follow.", 0);
+  }
   if (redirectStatus >= 300 && redirectStatus < 400) {
     throw apiError(
       "ZeroBounce returned a redirect, which this client does not follow.",
@@ -1346,7 +1678,8 @@ export async function createRequest({
     if (error instanceof ZBApiError) throw apiError(error.message, status);
     throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
   }
-  const account = accountLevelMessage(parsed);
+  const successState = successFlagOfBody(finalResult);
+  const account = accountLevelMessage(parsed, successState);
   if (account) throw apiError(redactSecrets(account, secrets), status);
   const greylistExempt =
     fields != null &&
@@ -1355,18 +1688,25 @@ export async function createRequest({
     typeof parsed === "object" &&
     !Array.isArray(parsed) &&
     isGreylistMessage(parsed);
-  // {"success": false, ...} on an HTTP 200 is still a failure.
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    if (Object.prototype.hasOwnProperty.call(parsed, "success")) {
-      const flag = parsed.success;
-      if (isSuccessFlag(flag) && isSuccessFailure(flag)) {
-        throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
-      }
-    }
+  // {"success": false, ...} on an HTTP 200 is still a failure, whichever of
+  // duplicate "success" keys says so. A "success" that is no flag is read as absent.
+  if (successState === "false") {
+    throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
   }
   if (!hasShape(parsed, shape)) throw apiError(UNEXPECTED_SHAPE_MESSAGE, status);
   // A field of the declared result type that arrives with another JSON type
   // (standard.md: field types are part of the shape).
+  const hasMessageKey = parsed !== null && typeof parsed === "object" && Object.keys(parsed).some((key) => MESSAGE_KEYS.has(key));
+  const messageOnlyNow = () =>
+    fields != null && !greylistExempt && messageOnlyBody(parsed, fields, successState);
+  // A message beside a "success" that is no flag is that message, not a wrong type.
+  if (successState === "notflag" && hasMessageKey && !messageOnlyExempt && messageOnlyNow()) {
+    throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
+  }
+  // getCredits (messageFirst): a message-only body is the API's text, not a missing field.
+  if (messageFirst && hasMessageKey && messageOnlyNow()) {
+    throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
+  }
   if (fields != null) {
     parsed = normalizeSuccessFlag(parsed);
     parsed = joinFileJobMessage(parsed, fields);
@@ -1377,7 +1717,7 @@ export async function createRequest({
   }
   // A wrong type is reported first. A body whose fields fit, but that is only a
   // message or a file status with no known field, is still not a result.
-  if (fields != null && !messageOnlyExempt && !greylistExempt && messageOnlyBody(parsed, fields)) {
+  if (!messageOnlyExempt && messageOnlyNow()) {
     throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
   }
   if (
@@ -1399,6 +1739,7 @@ function saveFile(blob, filename) {
   if (window.navigator.msSaveOrOpenBlob) {
     // IE support
     window.navigator.msSaveOrOpenBlob(blob, filename);
+    return filename;
   } else {
     const a = document.createElement("a");
     document.body.appendChild(a);

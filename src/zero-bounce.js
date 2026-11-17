@@ -1,4 +1,4 @@
-import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid, normalizeBaseUrl, checkApiKey, pathSegment, strictBoolean, API_BULK_BASE_URL, API_BULK_ROOT_URL } from "./utils.js";
+import { createRequest, notInitialized, parameterIsMissing, parameterIsInvalid, normalizeBaseUrl, checkApiKey, pathSegment, strictBoolean, API_BULK_BASE_URL, API_BULK_ROOT_URL, uploadFilePart } from "./utils.js";
 
 /**
  * Validation status values returned by the API (validate, validateBatch).
@@ -184,9 +184,10 @@ export class ZeroBounceSDK {
     this._inbox_placement_base_url = ZeroBounceSDK.InboxPlacementURL.DEFAULT_URL;
     this._email_finder_base_url = ZeroBounceSDK.EmailFinderURL.DEFAULT_URL;
     this._domain_search_base_url = ZeroBounceSDK.DomainSearchURL.DEFAULT_URL;
-    // The bulk hosts are fixed (ZeroBounce documents no regional bulk host);
-    // they are kept per client so every request path goes through the same
-    // per-request https check as the overridable base URLs.
+    // The bulk hosts default to bulkapi.zerobounce.net (ZeroBounce documents no
+    // regional bulk host) and can be set through init's options bulkBaseURL
+    // and bulkRootBaseURL; every request path goes through the same
+    // per-request https check as the other base URLs.
     this._bulk_urls = { v2: API_BULK_BASE_URL, root: API_BULK_ROOT_URL };
     // One warning per client: see warnOnRegionalBulkHost.
     this._regional_warning = { warned: false };
@@ -201,6 +202,7 @@ export class ZeroBounceSDK {
   /**
    * @param apiKey - your private API key
    * @param apiBaseURL - your preferred API, possible values being ApiURL.DEFAULT_API_URL, ApiURL.USAAPIURL, ApiURL.EUAPIURL
+   * @param options - optional base URLs: listEvaluatorBaseURL, inboxPlacementBaseURL, emailFinderBaseURL, domainSearchBaseURL, bulkBaseURL (default https://bulkapi.zerobounce.net/v2), bulkRootBaseURL (default https://bulkapi.zerobounce.net); all checked like apiBaseURL
    * */
   init(apiKey, apiBaseURL = ZeroBounceSDK.ApiURL.DEFAULT_API_URL, options = null) {
     // All or nothing: every argument is checked before any of them is stored,
@@ -216,6 +218,8 @@ export class ZeroBounceSDK {
       inboxPlacementBaseURL,
       emailFinderBaseURL,
       domainSearchBaseURL,
+      bulkBaseURL,
+      bulkRootBaseURL,
     } = options || {};
     const listEvaluatorBase = normalizeBaseUrl(
       listEvaluatorBaseURL ?? ZeroBounceSDK.ListEvaluatorURL.DEFAULT_URL,
@@ -234,7 +238,11 @@ export class ZeroBounceSDK {
       "domainSearchBaseURL"
     );
 
+    const bulkV2 = normalizeBaseUrl(bulkBaseURL ?? API_BULK_BASE_URL, "bulkBaseURL");
+    const bulkRoot = normalizeBaseUrl(bulkRootBaseURL ?? API_BULK_ROOT_URL, "bulkRootBaseURL");
+
     this.#apiKey = apiKey;
+    this._bulk_urls = { v2: bulkV2, root: bulkRoot };
     this._api_base_url = apiBase;
     this._list_evaluator_base_url = listEvaluatorBase;
     this._inbox_placement_base_url = inboxPlacementBase;
@@ -258,7 +266,7 @@ export class ZeroBounceSDK {
       path: "/getcredits",
       apiBaseURL: this._api_base_url,
       fields: "GetCreditsResponse",
-      messageOnlyExempt: true,
+      messageFirst: true,
     });
     // The API sends Credits as a string ("12345"); zerobounce.net's example
     // sends an integer (2375323). Either way the caller gets the declared string.
@@ -508,7 +516,7 @@ export class ZeroBounceSDK {
   }
 
   /**
-   * @param file: File - The csv or txt file to be submitted.
+   * @param file: File|Blob|Buffer|Uint8Array - The csv or txt file to be submitted (a Buffer or Uint8Array is wrapped into a Blob; a path string or a stream is refused with ZBApiError).
    * @param email_address_column: number - The column index of the email address in the file. Index starts from 1.
    * @param return_url: str or null - The URL will be used to call back when the validation is completed.
    * @param first_name_column: number or null - The column index of the first name column.
@@ -560,7 +568,7 @@ export class ZeroBounceSDK {
     }
 
     body.append("email_address_column", email_address_column);
-    body.append("file", file);
+    body.append("file", ...uploadFilePart(file));
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
     body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
     body.append("api_key", this.#apiKey);
@@ -581,7 +589,7 @@ export class ZeroBounceSDK {
 
   /**
    * Send a file for bulk email validation from a stream or Blob (e.g. in-memory CSV).
-   * @param fileStreamOrBlob: File|Blob - The file data (File, Blob, or in Node a stream/buffer).
+   * @param fileStreamOrBlob: File|Blob|Buffer|Uint8Array - The file data (a stream or a path string is refused with ZBApiError before sending).
    * @param fileName: string - The file name to use for the upload (e.g. "emails.csv").
    * @param options: object - Same options as sendFile (email_address_column, return_url, etc.).
    * */
@@ -617,7 +625,7 @@ export class ZeroBounceSDK {
     if (gender_column) body.append("gender_column", gender_column);
     if (ip_address_column) body.append("ip_address_column", ip_address_column);
     body.append("email_address_column", email_address_column);
-    body.append("file", fileStreamOrBlob, fileName);
+    body.append("file", ...uploadFilePart(fileStreamOrBlob, fileName, "fileStreamOrBlob"));
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
     body.append("remove_duplicate", jobBooleanText(remove_duplicate, "remove_duplicate", false));
     body.append("api_key", this.#apiKey);
@@ -637,7 +645,7 @@ export class ZeroBounceSDK {
   }
 
   /**
-   * @param file: File - The csv or txt file to be submitted.
+   * @param file: File|Blob|Buffer|Uint8Array - The csv or txt file to be submitted (a Buffer or Uint8Array is wrapped into a Blob; a path string or a stream is refused with ZBApiError).
    * @param email_address_column: number - The column index of the email address in the file. Index starts from 1.
    * @param return_url: str or null - The URL will be used to call back when the validation is completed.
    * @param has_header_row: Boolean - If the first row from the submitted file is a header row.
@@ -667,7 +675,7 @@ export class ZeroBounceSDK {
       body.append("return_url", return_url);
     }
 
-    body.append("file", file);
+    body.append("file", ...uploadFilePart(file));
     body.append("email_address_column", email_address_column);
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
     body.append("api_key", this.#apiKey);
@@ -686,7 +694,7 @@ export class ZeroBounceSDK {
 
   /**
    * Send a file for bulk email scoring from a stream or Blob.
-   * @param fileStreamOrBlob: File|Blob
+   * @param fileStreamOrBlob: File|Blob|Buffer|Uint8Array
    * @param fileName: string - e.g. "emails.csv"
    * @param options: object - email_address_column, return_url, has_header_row, remove_duplicate
    * */
@@ -712,7 +720,7 @@ export class ZeroBounceSDK {
 
     const body = new FormData();
     if (return_url) body.append("return_url", return_url);
-    body.append("file", fileStreamOrBlob, fileName);
+    body.append("file", ...uploadFilePart(fileStreamOrBlob, fileName, "fileStreamOrBlob"));
     body.append("email_address_column", email_address_column);
     body.append("has_header_row", jobBooleanText(has_header_row, "has_header_row", false));
     body.append("api_key", this.#apiKey);
@@ -870,11 +878,7 @@ export class ZeroBounceSDK {
       if (value == null) continue;
       body.append(key, typeof value === "boolean" ? booleanText(value) : value);
     }
-    if (fileName != null) {
-      body.append("file", file, fileName);
-    } else {
-      body.append("file", file);
-    }
+    body.append("file", ...uploadFilePart(file, fileName));
     body.append("api_key", this.#apiKey);
     return createRequest({
       requestType: "POST",
@@ -1100,7 +1104,7 @@ export class ZeroBounceSDK {
       return;
     }
     const body = new FormData();
-    body.append("file", file);
+    body.append("file", ...uploadFilePart(file));
     body.append("email_address_column", email_address_column);
     body.append("api_key", this.#apiKey);
     return createRequest({
@@ -1127,7 +1131,7 @@ export class ZeroBounceSDK {
       return;
     }
     const body = new FormData();
-    body.append("file", fileStreamOrBlob, fileName);
+    body.append("file", ...uploadFilePart(fileStreamOrBlob, fileName, "fileStreamOrBlob"));
     body.append("email_address_column", email_address_column);
     body.append("api_key", this.#apiKey);
     return createRequest({

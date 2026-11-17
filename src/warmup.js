@@ -15,6 +15,7 @@ import {
   checkApiKey,
   isJsonContentType,
   looksLikeHtml,
+  looksLikeHtmlDownload,
   looksLikeJson,
   parseJsonBody,
   pathSegment,
@@ -189,7 +190,7 @@ export class ZeroBounceWarmup {
       isJsonContentType(contentType) ||
       looksLikeJson(body) ||
       contentType.includes("text/html") ||
-      looksLikeHtml(body)
+      looksLikeHtmlDownload(body)
     ) {
       throw apiError(redactSecrets(warmupMessage(body, status), [this.#apiKey]), status);
     }
@@ -529,8 +530,7 @@ function contentTypeOf(response) {
 function warmupMessage(body, status) {
   const trimmed = String(body || "").trim();
   if (!trimmed) return `Empty response from ZeroBounce (HTTP ${status})`;
-  const head = trimmed.slice(0, 2000).toLowerCase();
-  if (head.includes("<!doctype html") || head.includes("<html")) {
+  if (looksLikeHtml(body)) {
     return "ZeroBounce returned an HTML error page instead of an API response.";
   }
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
@@ -549,7 +549,7 @@ function warmupMessage(body, status) {
         if (typeof value === "string" && value.trim()) return value.trim();
         if (Array.isArray(value) && value.length) {
           const strings = value.filter((item) => typeof item === "string" && item.trim());
-          if (strings.length) return strings.join("; ");
+          if (strings.length) return strings.join("\n");
           const firstItem = value[0];
           if (firstItem && typeof firstItem === "object" && firstItem.msg) {
             const loc = Array.isArray(firstItem.loc) ? firstItem.loc.slice(1).join(".") : "";

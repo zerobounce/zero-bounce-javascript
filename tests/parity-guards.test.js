@@ -195,6 +195,8 @@ describe("base URLs", () => {
       "inboxPlacementBaseURL",
       "emailFinderBaseURL",
       "domainSearchBaseURL",
+      "bulkBaseURL", // offline-api.test.js: bulk URL options
+      "bulkRootBaseURL",
       "baseURL", // ZeroBounceWarmup constructor
     ].sort();
     const types = fs.readFileSync(path.join(__dirname, "..", "zeroBounceSDK.d.ts"), "utf8");

@@ -7,40 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+Compared with 4.0.0, the version on npm (4.0.1 was tagged but never published
+there, see below). Callers should expect a rejection, or a refused `init`, where
+4.0.0 resolved or accepted:
+
+- `init` refuses more API keys: a key with a Unicode space (U+00A0 included),
+  a control character, a C1 control character (U+0080 to U+009F), a lone
+  surrogate, an invisible or default-ignorable character (U+200B, U+202E,
+  U+180B, U+2800 and others), or made only of combining marks. An ordinary
+  space in the middle of the key is still allowed.
+- `init` refuses more base URLs (`apiBaseURL`, `listEvaluatorBaseURL`,
+  `inboxPlacementBaseURL`, `emailFinderBaseURL`, `domainSearchBaseURL`, and
+  `ZeroBounceWarmup`'s): one that carries a username, a password, a query or a
+  fragment; one with a control, whitespace, invisible, bidirectional or
+  backslash character, a lone surrogate, or a non-ASCII or `%` host; and one
+  that is not `https://` followed by a host (`http://` stays allowed for
+  `127.0.0.1`, `localhost` and `[::1]` only). The error does not include the
+  URL.
+- A `success` flag decides failure on every JSON call: a body whose `success`
+  is `false`, `"false"` or `0` in any of its duplicate top-level keys rejects
+  with status 200. A `success` that is not a flag (`null`, `2`, `"yes"`, `0.4`,
+  an object) no longer hides a message-only or error body; it is read as if
+  absent.
+- A 2xx body that is a message only, `{}`, or a message beside documented
+  fields that are all null rejects on every typed call except validate's
+  greylist answer, the filter calls, Inbox Placement and the list-evaluator
+  result; `getCredits` is no longer an exception (`{"message":"x"}` rejects
+  with the text `x`). The email finder and domain search calls reject a
+  message-only body whatever its values.
+- A field of a typed result with another JSON type than `zeroBounceSDK.d.ts`
+  declares, a body that is not the declared shape (a number, string, array,
+  `null` where an object is declared), a body nested deeper than 512 levels, a
+  body that starts with a byte order mark or is not strict JSON, a `score`
+  that is not a safe integer, and a list of `message` values holding anything
+  but strings all reject with a `ZBApiError` with status 200 (a list of
+  strings is joined with `"\n"` into one string).
+- `getCredits` returns `Credits` as a string: `{"Credits":2375323}` resolves
+  to `{ Credits: "2375323" }`; `{"Credits":null}` and `{}` reject.
+- The four bulk downloads and `ZeroBounceWarmup.downloadSeeds` and
+  `downloadStatistics` reject any JSON body or JSON media type and an HTML
+  page (also one that starts with spaces, tabs, a byte order mark or U+00A0)
+  with a `ZBApiError` carrying the HTTP status.
+- A connection failure rejects with `ZBApiError` and `statusCode` 0 (Warmup
+  included).
+- `ZeroBounceWarmup.addSendingAccount` rejects a non-boolean `weekdays_only`
+  and a `timezone_offset` of `NaN`; `validateBatch` rejects a non-boolean
+  `activityData` or `verifyPlus` (the 4.0.1 change, for 4.0.0 callers).
+- The API key is no longer a property of the client (`_api_key`); code that
+  read it that way gets `undefined`.
+- **Behaviour change:** `sendFile`, `sendScoringFile`, `sendListEvaluatorFile`, `sendEmailFinderFile`, `sendDomainSearchFile` and every `…FileStream` sender accept only a `Blob`/`File`, or a `Buffer`/`Uint8Array` (wrapped into a Blob under the given file name, `file.csv` when none is given). A file path string, a stream or any other object is refused with `ZBApiError` before anything is sent; before, such a value was sent as a text field ("[object Object]") or failed inside fetch with a raw `TypeError`.
+- **Behaviour change:** a form value (`return_url`, column fields, ...) or a file name containing CR, LF or NUL is refused with `ZBApiError` ("the form field "return_url" must not contain a line break or a NUL character.") before the request is sent.
+- **Behaviour change:** a 3xx answer is reported with its own status ("ZeroBounce returned a redirect, which this client does not follow."); requests use `redirect: "manual"` and still never follow it. Before, it surfaced as `TypeError: fetch failed` with status 0.
+
 ### Security
 
 - A base URL with a username, a password, a query or a fragment is refused before any request. The error does not include the URL: `ZeroBounce: apiBaseURL must not contain a username or password.` or `ZeroBounce: apiBaseURL must not contain a query string or a fragment ("?" or "#").`
 - An API key with a Unicode space, a control character, an invisible character (including U+00A0, U+202E, U+200B and U+180B) or made only of combining marks is refused. An ordinary space in the middle of the key is still allowed.
 - Redaction also decodes `\u{27}`, `\047`, `\x27`, `\U{27}`, `\'`, `&apos;` and `&#39`, and folds case with Unicode full case folding after canonical decomposition. `%u0027` is not decoded. When a decoded view still contains a secret, the message is `ZeroBounce: the response text was omitted because it contained a credential.`
-
 - Redaction is closed under encoding. After the known spellings of every
   secret (the API key, the Warmup key, the SMTP username and password) are
   replaced with `***`, the rest of the message is decoded up to four layers
   deep in any order (the SDK's own request encoding plus three echo layers:
   URL `%XX` in upper or lower case, form `+` and `%XX`, JSON escapes including
-  `\/` and `\uXXXX`); a `%XX` run that is not valid UTF-8 as a whole (a stray
+  `\/` and `\uXXXX`, and the spellings listed in the previous item); a `%XX` run that is not valid UTF-8 as a whole (a stray
   `%FF` in front of a percent-encoded secret) is decoded one UTF-8 sequence at
   a time, so a non-ASCII secret such as an SMTP password is still recognised
   in it; if any decoded view still contains a secret, the whole
   message is replaced with "ZeroBounce: the response text was omitted because
-  it contained a credential." 4.0.1 and earlier matched a fixed list of
+  it contained a credential." 4.0.0 and earlier matched a fixed list of
   spellings (raw, URL-encoded, `escape()`), so a body echoing the key
   URL-encoded twice passed it to the caller.
 - `init` is all or nothing: the key and every base URL are checked before any
   of them is stored, so an `init` that throws leaves the client exactly as it
-  was. In 4.0.1 and earlier, `init` stored the new key and main base URL
+  was. In 4.0.0 and earlier, `init` stored the new key and main base URL
   before checking the optional base URLs: after
   `init("key-B", ApiURL.EU_API_URL, { domainSearchBaseURL: "http://..." })`
   threw, a caller that caught the error sent its next requests to the EU host
   with `key-B`, and a fresh client whose `init` threw on an `http://` base URL
   still held the key.
 - `ZeroBounceWarmup` redacts a failure to read the response body (for example
-  a connection closed mid-body) like every other error. In 4.0.1 and earlier
+  a connection closed mid-body) like every other error. In 4.0.0 and earlier
   that error was rethrown as it came from `fetch`, so a `fetch` implementation
   that quotes the request or the key in it passed the key to the caller.
 - Error messages are also redacted for the JSON-escaped form of every secret
   (the API key, the Warmup key, and the SMTP username and password), with and
-  without `/` escaped as `\/`. 4.0.1 and earlier removed the raw,
+  without `/` escaped as `\/`. 4.0.0 and earlier removed the raw,
   URL-encoded and `escape()` forms only, so a secret containing `"` or `\`
   (or `/`, where the body escapes it as `\/`) stayed readable in a message
   built from a body that quotes a JSON request (for example a 400 echoing
@@ -56,15 +109,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   string).
 - `ZeroBounceWarmup` JSON methods reject a 2xx answer served as `text/html`
   (a proxy or challenge page) with a `ZBApiError`, even when its body parses
-  as JSON. 4.0.1 and earlier returned such a body as the result.
+  as JSON. 4.0.0 and earlier returned such a body as the result.
 
 - The API key is held in a private field of `ZeroBounceSDK` and
   `ZeroBounceWarmup`, not in a property. `console.log("%o", client)`,
   `util.inspect(client, { showHidden: true })` and every walk of the object's
-  properties now show `api_key: '***'` or nothing, never the key. 4.0.1 kept
+  properties now show `api_key: '***'` or nothing, never the key. 4.0.0 kept
   the key in a non-enumerable `_api_key` property, which `%o` and
   `showHidden` printed. The default `util.inspect` output shows the key as
   `api_key: '***'` (or `null` before `init`).
+- Redaction decodes `\UXXXX` (capital U, four hex digits) and `\UXXXXXXXX`, as well as `\u{...}`/`\U{...}`; 4.0.0 returned a key echoed as `\U007a\U0062...` verbatim. A surrogate pair may be written with `\u` or `\U` for either half.
+- Redaction reads runs of `\xHH` and octal byte escapes as UTF-8 (`\xc3\xa9` is "é"), and `%XX` runs as Latin-1 as well (`%E9` is "é"): a non-ASCII key echoed by byte is no longer returned.
+- Redaction works on at most 64 KiB (UTF-8) of text; longer text is replaced by `ZeroBounce: the text was omitted because it is too long to show.` (adversarial 1 MB text took seconds, synchronously).
 
 ### Added
 
@@ -72,14 +128,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gatewayProviders` in `InboxPlacementProvidersResponse` (the same shape as
   before, now named).
 - `ValidationFileStatusResponse` and `ScoringFileStatusResponse` declare the
-  optional `message` (a string) that a file-status answer can carry. 4.0.1 did not
-  declare it; the value is joined as above.
+  optional `message` (a string) that a file-status answer can carry. 4.0.0 did not
+  declare it; a list of strings is joined with `"\n"` (see the file job bullet under Fixed).
+- `init` options `bulkBaseURL` (default `https://bulkapi.zerobounce.net/v2`) and `bulkRootBaseURL` (default `https://bulkapi.zerobounce.net`), checked like the other base URLs, so tests and callers can point the bulk calls at a stub.
+- Types: the statics `ZeroBounceSDK.ListEvaluatorURL`, `InboxPlacementURL`, `EmailFinderURL` and `DomainSearchURL` are declared in `zeroBounceSDK.d.ts` (the `.d.mts` re-exports it); the file options accept `File | Blob | Uint8Array`.
 
 ### Changed
 
 - `getCredits` returns `Credits` as the string its type declares when the API
   sends a JSON integer: `{"Credits":2375323}` resolves to
-  `{ Credits: "2375323" }`. 4.0.1 returned the number as it came, although
+  `{ Credits: "2375323" }`. 4.0.0 returned the number as it came, although
   `GetCreditsResponse.Credits` is typed `string`. The string form the API
   sends (`"12345"`, `"-1"`) is returned unchanged.
 
@@ -100,13 +158,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{"error": ""}` and `{"Error": ["x"]}` resolved as results. They now reject
   with a `ZBApiError` and status 200, with the text of the message when it is a
   string or a list of strings, and "ZeroBounce returned an unexpected response."
-  otherwise. Up to 4.0.1, the same five calls resolved these bodies. Validate's
+  otherwise. Up to 4.0.0, the same five calls resolved these bodies. Validate's
   greylist `{"Message": "..."}` is still a result.
 - A field of a typed result that arrives with another JSON type than
   `zeroBounceSDK.d.ts` declares rejects with a `ZBApiError` with status 200
   ("ZeroBounce returned a response field of an unexpected type for this call
   (<field>)."), at any depth (for example `email_batch[0].status`), on every
-  call whose result is an interface. `null` is still accepted for every field,
+  call whose result is an interface. `null` is still accepted for every field
+  except `getCredits`' `Credits`, which rejects `{"Credits":null}` and `{}`,
   and fields the declarations do not name are kept as they are. `getCredits`
   needs `Credits` as an integer, sent as a string (`"12345"`, `"-1"`, as the
   API sends it) or as a JSON integer (`{"Credits":2375323}`, zerobounce.net's
@@ -114,7 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every `validateBatch` row need `address` and `status` as strings, and a
   batch row that is not an object (`5`, `null`) rejects; validate's greylist
   answer, whose only field is `Message`, is still a result of `validateEmail`
-  (a batch row with only `Message` rejects). 4.0.1 resolved such bodies as they came, for example
+  (a batch row with only `Message` rejects). 4.0.0 resolved such bodies as they came, for example
   `getCredits` with `{"Credits": true}` or `{}` and `validateEmail` with
   `{"status": 5}`. The calls typed `unknown` and the `ZeroBounceWarmup`
   methods are unchanged.
@@ -122,27 +181,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with a `ZBApiError` with status 200 ("ZeroBounce returned JSON of an
   unexpected shape for this call."): a number, string, boolean, `null` or array
   where an object is declared, and an object where `listS3files` declares an
-  array. 4.0.1 resolved such a body as the result (for example `validateEmail`
+  array. 4.0.0 resolved such a body as the result (for example `validateEmail`
   resolved to `0`). The calls typed `unknown` (`getInboxPlacementTestTypes`,
   `listInboxPlacementTests`, `setInboxPlacementWebhook` and the
   `ZeroBounceWarmup` JSON methods) still return any JSON; `listFilters`
   accepts an object or an array.
 - A JSON body nested deeper than 512 arrays or objects rejects with a
   `ZBApiError` with status 200 ("ZeroBounce returned a response nested too
-  deeply to read."), on every JSON call, Warmup included. 4.0.1 returned it,
+  deeply to read."), on every JSON call, Warmup included. 4.0.0 returned it,
   so printing or walking the result (`JSON.stringify`) overflowed the stack.
 - JSON responses are strict RFC 8259 JSON on every JSON call, Warmup
   included (checked against the shared strict JSON corpus). A body starting
-  with a UTF-8 byte order mark is rejected with status 200: 4.0.1 read
+  with a UTF-8 byte order mark is rejected with status 200: 4.0.0 read
   bodies with `Response.text()`, which drops the mark, so such a body was
   accepted. `ZeroBounceWarmup` JSON methods return `null` only for a 204 or a
-  200 with no body at all; 4.0.1 also returned `null` for a whitespace-only
+  200 with no body at all; 4.0.0 also returned `null` for a whitespace-only
   body (and, through `String.prototype.trim`, for one of U+00A0, U+2003 and
   similar), which now rejects with status 200.
 - `deleteInboxPlacementTest` resolves to an empty object `{}` (no `id` or
   `status`) when the API answers with an empty 2xx (204 No Content or a 200
   with no body at all; a whitespace-only body is not JSON and rejects), as the
-  C and C++ SDKs return `{}`. 4.0.1 rejected that success with
+  C and C++ SDKs return `{}`. 4.0.0 rejected that success with
   "Empty response from ZeroBounce (HTTP 204)". Every other call still rejects
   an empty 2xx, and an empty error answer still rejects with its status. The
   declared return type is unchanged (`Promise<InboxPlacementTestDeleted>`).
@@ -150,39 +209,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answer whatever its content type: a JSON object or array body (also under
   `text/csv` or with no content type) and any JSON media type, such as
   `application/problem+json`, reject with a `ZBApiError` carrying the HTTP
-  status. 4.0.1 rejected only an `application/json` content type and resolved
+  status. 4.0.0 rejected only an `application/json` content type and resolved
   the others as if they were the CSV text.
 - `getFile`, `getScoringFile`, `getEmailFinderFile` and `getDomainSearchFile`
   reject any JSON body (a JSON array, or an object that is not shaped as an
   error) and any JSON media type such as `application/problem+json` with a
-  `ZBApiError` carrying the HTTP status. 4.0.1 resolved a JSON array, or an
+  `ZBApiError` carrying the HTTP status. 4.0.0 resolved a JSON array, or an
   `application/problem+json` body with a non-error shape, as the file text.
 - `ZeroBounceWarmup.downloadSeeds` and `downloadStatistics` reject an HTML page
   (served as `text/html`, or an HTML body under any content type, such as a
-  proxy or challenge page) with a `ZBApiError` carrying the HTTP status. 4.0.1
+  proxy or challenge page) with a `ZBApiError` carrying the HTTP status. 4.0.0
   resolved it as if it were the CSV text.
 - `ZeroBounceWarmup.addSendingAccount` parses `managedSending.weekdays_only`
   strictly, like every other boolean: `true` / `false`, `"true"` / `"false"`
-  (any case) or `1` / `0`, sent as a JSON boolean. 4.0.1 sent the value as
+  (any case) or `1` / `0`, sent as a JSON boolean. 4.0.0 sent the value as
   given, so `"false"` reached the API as a string; anything else now rejects
   with "ZeroBounce: weekdays_only parameter is invalid. Must be true or false."
   before a request is sent.
 - `ZeroBounceWarmup.addSendingAccount` rejects a `managedSending.timezone_offset`
   of `NaN` with "ZeroBounce: timezone_offset parameter is invalid. Must be -11 to 14.".
-  4.0.1 accepted it and sent `null`. Fractional offsets in range (5.5, -9.5)
+  4.0.0 accepted it and sent `null`. Fractional offsets in range (5.5, -9.5)
   are still accepted.
 - `scoreEmail` and its POST variant reject a `score` that is not an integer
   within the safe range (`5.5`, `1e400`, `9007199254740993`, or a string such
-  as `"5.9"`) with a `ZBApiError` carrying status 200. 4.0.1 returned `5.5`
+  as `"5.9"`) with a `ZBApiError` carrying status 200. 4.0.0 returned `5.5`
   as the score, and `1e400` as `Infinity`.
 - A file job's answer joins a list of `message` strings with `"\n"` into the
   one string its type declares, on every send, scoring send, delete, scoring
-  delete and file-status call: `message: "File Accepted\nSecond line"`. 4.0.1
+  delete and file-status call: `message: "File Accepted\nSecond line"`. 4.0.0
   returned the array as it came, for `sendFile`, `deleteFile` and
   `getFileStatus` alike. A list holding anything but strings rejects with a
   `ZBApiError` with status 200. Failure messages are unchanged.
+- HTML detection is a whole-tag rule: a body that starts with `{` or `[` after its padding is never HTML, and `<!doctype html`, `<html`, `<head`, `<body` count only when followed by whitespace, `>` or `/` within the first 2000 characters (`<htmlfoo>`, `<bodyguard>`, `<header>` do not). A JSON error such as `{"error":"bad <html> input"}` now reports its own message; a 2xx JSON body with `<body>` in a string is no longer called an HTML page. Warmup uses the same rule and no longer looks for `<html` inside JSON error bodies.
+- File downloads (`getFile`, `getScoringFile`, Warmup seed downloads): by body alone a download is an HTML page only when it starts with `<` after its padding and passes the whole-tag rule; an HTML content type still rejects. A CSV with `<body>` or `<html>` in a later cell is the file. What remains: a CSV whose very first characters are a whole `<body>`/`<html>` tag is still taken for a page, and an HTML fragment with none of the four tags served as `text/csv` resolves as the file.
+- A list of error strings in `message`/`detail` is joined with "\n" (4.0.0 joined with "; ") in the validation client and Warmup.
+- An HTML error page's `<title>` over 1000 characters is dropped from the message (the generic HTML-error text is used); the title is found by a linear scan of the first 64 KiB, so a hostile page can no longer stall the pattern match (ReDoS).
+- A request URL (the one built for sending) is also checked for control/whitespace/invisible characters, backslash and a non-ASCII host.
+- Known limit: a body that mixes spellings character by character across layers (for example `a` next to `%62` next to `\x63` in one key) is only masked when each layer is one of the decoders applied in sequence; arbitrary per-character mixes of three or more spellings are not covered.
+- A transport failure keeps the underlying cause's code and message (masked of the key), e.g. `TypeError: fetch failed (ECONNREFUSED: connect ECONNREFUSED 127.0.0.1:9)`, instead of only `TypeError: fetch failed`.
+- The browser download in Internet Explorer (`msSaveOrOpenBlob`) returns the file name like the other browsers.
 
-## [4.0.1] - 2026-11-11
+## [4.0.1] - 2026-11-12
+
+This version was tagged (v4.0.1) but never published to npm. Its changes ship with
+the next release, together with everything under Unreleased; npm users upgrade from 4.0.0.
 
 ### Fixed
 
@@ -447,7 +517,7 @@ old silent behaviour needs a `catch` before upgrading. See **Changed** below.
 
 - `guessFormat`. Use the email-finder or domain-search methods instead.
 
-[Unreleased]: https://github.com/zerobounce/zero-bounce-javascript/compare/v4.0.1...HEAD
+[Unreleased]: https://github.com/zerobounce/zero-bounce-javascript/compare/v4.0.0...HEAD
 [4.0.1]: https://github.com/zerobounce/zero-bounce-javascript/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/zerobounce/zero-bounce-javascript/compare/v3.1.0...v4.0.0
 [3.1.0]: https://github.com/zerobounce/zero-bounce-javascript/compare/v3.0.0...v3.1.0

@@ -7,9 +7,18 @@ on:
         type: string
         description: Tag to publish (e.g. v2.1.5)
         required: true
+      skip_npm:
+        type: boolean
+        description: Skip the npm publish (GitHub release only, for example when npm refuses the push)
+        default: false
 
 permissions:
   contents: read
+
+# One publish per tag at a time; a second run waits instead of cancelling a release half way.
+concurrency:
+  group: publish-${{ github.event.inputs.tag }}
+  cancel-in-progress: false
 
 jobs:
   validate-tag:
@@ -17,6 +26,7 @@ jobs:
       tag_sha: ${{ steps.tag_sha.outputs.sha }}
     name: Validate tag
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Validate tag input
         env:
@@ -53,7 +63,13 @@ jobs:
             echo "Error: package.json version ($PKG_VERSION) does not match tag ($TAG)."
             exit 1
           fi
-          
+          LOCK_VERSION=$(node -p "require('./package-lock.json').version")
+          LOCK_ROOT_VERSION=$(node -p "require('./package-lock.json').packages[''].version")
+          if [ "$LOCK_VERSION" != "$TAG_VERSION" ] || [ "$LOCK_ROOT_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: package-lock.json version ($LOCK_VERSION, packages[''] $LOCK_ROOT_VERSION) does not match tag ($TAG)."
+            exit 1
+          fi
+
       - name: Record tag commit SHA
         id: tag_sha
         env:
@@ -64,6 +80,7 @@ jobs:
 
   test:
     name: Test
+    timeout-minutes: 30
     needs: [validate-tag]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
@@ -85,7 +102,7 @@ jobs:
           fi
 
       - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           package-manager-cache: false
@@ -108,11 +125,26 @@ jobs:
       - name: Test
         run: npm test
 
+      # The tag's own dist: build it, smoke-test it, and install the packed tarball the way a
+      # consumer would.
+      - name: Build and smoke-test the dist
+        run: |
+          npm run build
+          npm run test:smoke
+          npm pack --pack-destination "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/consumer"
+          cp tests/dist-consumer.cjs "$RUNNER_TEMP/consumer/"
+          cd "$RUNNER_TEMP/consumer"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$RUNNER_TEMP"/zerobounce-zero-bounce-sdk-*.tgz
+          node dist-consumer.cjs
+
   publish:
     name: Build and publish to npm
     needs: [validate-tag, test]
-    if: ${{ !cancelled() && !failure() }}
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && github.event.inputs.skip_npm != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: release
     permissions:
       id-token: write
@@ -135,7 +167,7 @@ jobs:
           fi
 
       - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           package-manager-cache: false
@@ -146,10 +178,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Trusted publishing (OIDC) needs npm 11.5.1 or later. Pin the major so a new npm
-      # major (npm@latest is 12) is not picked up untested in this id-token: write job.
+      # What is published is smoke-tested first (the test job checked the same tag's build).
+      - name: Smoke-test the dist
+        run: npm run test:smoke
+
+      # Trusted publishing (OIDC) needs npm 11.5.1 or later. Pin the exact version so a new npm
+      # release is not picked up untested in this id-token: write job.
       - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@11
+        run: npm install -g npm@11.19.1
 
       - name: Publish to npm
         env:
@@ -162,10 +198,11 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [validate-tag, publish]
-    if: ${{ !cancelled() && !failure() }}
+    # Needs the tag validation and the tests only: a refused npm push must not block the release.
+    needs: [validate-tag, test]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
-    environment: release
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:

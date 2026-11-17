@@ -750,7 +750,7 @@ describe("offline API", () => {
   it("does not follow redirects", async () => {
     const sdk = client("parity-key");
     await sdk.getCredits();
-    expect(fake.only().redirect).toBe("error");
+    expect(fake.only().redirect).toBe("manual");
   });
 
   it("percent-encodes query values", async () => {
@@ -949,7 +949,7 @@ describe("offline API", () => {
     const sdk = client("parity-key");
     const bodies = [
       ['{"message":null}', "ZeroBounce returned an unexpected response."],
-      ['{"message":["a","b"]}', "a; b"],
+      ['{"message":["a","b"]}', "a\nb"],
       ['{"Message":""}', "ZeroBounce returned an unexpected response."],
       ['{"Message":5}', "ZeroBounce returned an unexpected response."],
       ['{"error":""}', "ZeroBounce returned an unexpected response."],
@@ -2030,6 +2030,123 @@ describe("offline API", () => {
           expect(JSON.stringify(request.fields)).not.toContain(other.key);
         }
       }
+    }
+  });
+});
+
+describe("uploads and transport (fixer R)", () => {
+  const KEY = "dummy-upload-key";
+  let calls;
+  let reply;
+  const realFetch = global.fetch;
+
+  beforeEach(() => {
+    calls = [];
+    reply = () => ({ ok: true, status: 200, headers: { get: () => "application/json" }, text: async () => '{"success":true,"file_id":"f1","file_name":"a.csv"}' });
+    global.fetch = async (url, init = {}) => {
+      if (!/^https:\/\/(bulkapi|api)\.zerobounce\.net|^http:\/\/127\.0\.0\.1/.test(String(url))) throw new Error("blocked host");
+      calls.push({ url: String(url), init });
+      return reply(url, init);
+    };
+  });
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  function sdk(options = null) {
+    const s = new ZeroBounceSDK();
+    s.init(KEY, ZeroBounceSDK.ApiURL.DEFAULT_API_URL, options);
+    return s;
+  }
+  const args = { email_address_column: 1 };
+
+  it("refuses CR, LF and NUL in form values and file names before sending", async () => {
+    const s = sdk();
+    const blob = new Blob(["a\n"]);
+    for (const bad of ["http://x/\r\nBcc: a", "a\nb", "a\0b"]) {
+      await expect(s.sendFileStream(blob, "emails.csv", { ...args, return_url: bad })).rejects.toThrow(/line break or a NUL/);
+      await expect(s.sendScoringFileStream(blob, "emails.csv", { ...args, return_url: bad })).rejects.toThrow(/line break or a NUL/);
+      await expect(s.sendFileStream(blob, bad, args)).rejects.toThrow(/file name must not contain/);
+    }
+    await expect(s.sendFile({ file: new File(["a"], "x\ny.csv"), ...args })).rejects.toThrow(/file name must not contain/);
+    await expect(s.sendDomainSearchFileStream(blob, "d.csv", { domain_column: "a\nb" })).rejects.toThrow(/line break or a NUL/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuses a file argument that is not a Blob, File, Buffer or Uint8Array", async () => {
+    const s = sdk();
+    const { ZBApiError } = require("../src/utils.js");
+    for (const bad of ["/tmp/emails.csv", { path: "x" }, { pipe() {} }, 5, [1, 2]]) {
+      await expect(s.sendFile({ file: bad, ...args })).rejects.toBeInstanceOf(ZBApiError);
+      await expect(s.sendFileStream(bad, "e.csv", args)).rejects.toBeInstanceOf(ZBApiError);
+      await expect(s.sendScoringFile({ file: bad, ...args })).rejects.toBeInstanceOf(ZBApiError);
+      await expect(s.sendListEvaluatorFile({ file: bad, ...args })).rejects.toBeInstanceOf(ZBApiError);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("wraps a Buffer or Uint8Array into a Blob with the given file name", async () => {
+    const s = sdk();
+    await s.sendFileStream(Buffer.from("a@example.com\n"), "emails.csv", args);
+    await s.sendFileStream(new Uint8Array([97, 10]), "bytes.csv", args);
+    await s.sendFile({ file: Buffer.from("a\n"), ...args });
+    const sent = calls.map((c) => c.init.body.get("file"));
+    expect(sent.map((f) => f instanceof Blob)).toEqual([true, true, true]);
+    expect(sent[0].name).toBe("emails.csv");
+    expect(sent[1].name).toBe("bytes.csv");
+    expect(sent[2].name).toBe("file.csv");
+    expect(sent[0].size).toBe(14);
+  });
+
+  it("keeps the cause's code and message on a transport failure, masked", async () => {
+    global.fetch = async () => {
+      const error = new TypeError("fetch failed");
+      error.cause = Object.assign(new Error(`connect ECONNREFUSED 127.0.0.1:9 key=${KEY}`), { code: "ECONNREFUSED" });
+      throw error;
+    };
+    let thrown;
+    try {
+      await sdk().getCredits();
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown.message).toContain("TypeError: fetch failed");
+    expect(thrown.message).toContain("ECONNREFUSED");
+    expect(thrown.message).not.toContain(KEY);
+  });
+
+  it("reports a 3xx with its status and does not follow it", async () => {
+    reply = () => ({ ok: false, status: 302, headers: { get: () => "https://evil.example/" }, text: async () => "" });
+    let thrown;
+    try {
+      await sdk().getCredits();
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown.statusCode).toBe(302);
+    expect(thrown.message).toMatch(/redirect/);
+    expect(calls[0].init.redirect).toBe("manual");
+  });
+
+  it("sets the bulk URLs through init, checked like the others", async () => {
+    const s = sdk({ bulkBaseURL: "http://127.0.0.1:9/v2", bulkRootBaseURL: "http://127.0.0.1:9/root" });
+    await s.sendFileStream(new Blob(["a"]), "e.csv", args);
+    await s.getEmailFinderFileStatus("id1").catch(() => {});
+    expect(calls[0].url).toMatch(/^http:\/\/127\.0\.0\.1:9\/v2\/sendfile/);
+    expect(() => sdk({ bulkBaseURL: "http://example.com/v2" })).toThrow(/bulkBaseURL/);
+    expect(() => sdk({ bulkRootBaseURL: "https://u:p@example.com" })).toThrow(/bulkRootBaseURL/);
+    expect(sdk()._bulk_urls).toEqual({ v2: "https://bulkapi.zerobounce.net/v2", root: "https://bulkapi.zerobounce.net" });
+  });
+
+  it("returns the file name from the IE msSaveOrOpenBlob download branch", async () => {
+    reply = () => ({ ok: true, status: 200, headers: { get: () => "text/csv" }, text: async () => '"a"\n"b"\n' });
+    const save = jest.fn();
+    Object.defineProperty(window.navigator, "msSaveOrOpenBlob", { value: save, configurable: true });
+    try {
+      expect(await sdk().getFile("abc")).toBe("result-abc.csv");
+      expect(save).toHaveBeenCalledTimes(1);
+    } finally {
+      delete window.navigator.msSaveOrOpenBlob;
     }
   });
 });
