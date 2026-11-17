@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-17
+
 ### Breaking
 
 Compared with 4.0.0, the version on npm (4.0.1 was tagged but never published
@@ -530,7 +532,8 @@ old silent behaviour needs a `catch` before upgrading. See **Changed** below.
 
 - `guessFormat`. Use the email-finder or domain-search methods instead.
 
-[Unreleased]: https://github.com/zerobounce/zero-bounce-javascript/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/zerobounce/zero-bounce-javascript/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/zerobounce/zero-bounce-javascript/compare/v4.0.0...v5.0.0
 [4.0.1]: https://github.com/zerobounce/zero-bounce-javascript/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/zerobounce/zero-bounce-javascript/compare/v3.1.0...v4.0.0
 [3.1.0]: https://github.com/zerobounce/zero-bounce-javascript/compare/v3.0.0...v3.1.0
