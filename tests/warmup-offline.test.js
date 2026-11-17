@@ -481,9 +481,26 @@ describe("Warmup API client", () => {
     const c = new ZeroBounceWarmup(KEY);
 
     const error = await rejects(c.getSeeds());
+    expect(error.name).toBe("ZBApiError");
+    expect(error.statusCode).toBe(0);
     expect(error.message).not.toContain(KEY);
     // The original, unredacted error must not survive as the cause.
     expect(error.cause).toBeUndefined();
+  });
+
+  it("rejects a failure to read the body with ZBApiError status 0", async () => {
+    global.fetch = async () => ({
+      status: 200,
+      headers: { get: () => "application/json" },
+      text: async () => {
+        throw new TypeError("terminated");
+      },
+    });
+    const error = await rejects(new ZeroBounceWarmup(KEY).listSendingAccounts());
+    expect(error.name).toBe("ZBApiError");
+    expect(error.statusCode).toBe(0);
+    expect(error.cause).toBeUndefined();
+    expect(error.message).toContain("terminated");
   });
 
   it("sends exactly the documented request, field names included, for every public method", async () => {

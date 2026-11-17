@@ -1,6 +1,8 @@
 
 WE DO NOT RECOMMEND USING THIS SDK ON A FRONT-END ENVIRONMENT AS THE API KEY WILL BE VISIBLE
 
+For the security notes, the Node.js 18 requirement, testing, TypeScript, and publishing, see [README.md](README.md).
+
 #### INSTALLATION
 
 ```bash
@@ -247,7 +249,8 @@ try {
 } catch (error) {
   // A missing or invalid argument rejects before any request is sent. An API
   // failure rejects with a ZBApiError, whose statusCode is the HTTP status
-  // (429 when rate limited).
+  // (429 when rate limited). A network failure, including a body that cannot
+  // be read, rejects with a ZBApiError and statusCode 0.
   console.error(error);
 }
 ```

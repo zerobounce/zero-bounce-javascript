@@ -1,4 +1,4 @@
-# Contributing to Zero Bounce JavaScript SDK
+# Contributing to the ZeroBounce JavaScript SDK
 
 Thank you for your interest in contributing. This document explains how to get set up and submit changes.
 
@@ -47,7 +47,7 @@ Maintainers will review and may request changes. Once approved, your PR can be m
 
 ## Questions
 
-* [Zero Bounce API docs](https://www.zerobounce.net/docs/)
+* [ZeroBounce API docs](https://www.zerobounce.net/docs/)
 * [Project homepage](https://zerobounce.net)
 * Contact: **integrations@zerobounce.net**
 

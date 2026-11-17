@@ -16,6 +16,6 @@ We focus on the current release line for fixes. Using the latest release is reco
 
 * Don't commit API keys or `.env` files—use environment variables or a secrets manager.
 * Keep dependencies up to date and upgrade when new versions are released.
-* The client uses HTTPS by default; avoid overriding to non-HTTPS in production. `init` rejects a base URL that is not `https://`.
+* Base URLs must be `https://`. `init` and the Warmup client also refuse a username, a password, a query string, or a fragment, and that error does not include the URL. Loopback `http://` is only for tests.
 
 Thanks for helping keep things secure.

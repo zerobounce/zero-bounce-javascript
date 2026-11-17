@@ -127,7 +127,7 @@ export class ZeroBounceWarmup {
       // Raised on its own: the original can carry the key or the SMTP password.
       const name = error && error.name ? error.name : "Error";
       const message = error && error.message ? error.message : String(error);
-      throw new Error(redactSecrets(`${name}: ${message}`, all));
+      throw apiError(redactSecrets(`${name}: ${message}`, all), 0);
     }
 
     const status = typeof response.status === "number" ? response.status : 200;
@@ -146,7 +146,7 @@ export class ZeroBounceWarmup {
       // A body cut short can quote the request, so it is raised redacted, on its own.
       const name = error && error.name ? error.name : "Error";
       const message = error && error.message ? error.message : String(error);
-      throw new Error(redactSecrets(`${name}: ${message}`, all));
+      throw apiError(redactSecrets(`${name}: ${message}`, all), 0);
     }
     if (status > 299) {
       throw apiError(redactSecrets(warmupMessage(body, status), all), status);

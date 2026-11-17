@@ -89,7 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A message-only body, including `{}`, is an error with status 200 on every typed call except validate's greylist answer, the filter calls, Inbox Placement, the list-evaluator result and `getCredits`. A message beside documented fields that are all null is the same error. `{"domain":null}` with no message stays a result.
 - `getFileStatus` and `getScoringFileStatus` reject a body with no non-null known field, including `{"foo":1}` and `{"message":"m","file_id":null}`. `{"file_status":"Processing"}` and `{"success":true}` stay results.
 - `success` is a flag only for a boolean, the number 0 or 1 (including 1.0), or `true` / `false` / `0` / `1`. Only the false values fail the call.
-- A connection failure rejects with `ZBApiError` and `statusCode` 0.
+- A connection failure rejects with `ZBApiError` and `statusCode` 0. The same is true for Warmup, including a failure while reading the response body.
 - In the browser, `getFile` saves `result-<fileId>.csv` and `getScoringFile` saves `result-<fileId>-scoring.csv`.
 - A message-only answer from the email finder or domain search is an error
   whatever its values. `findEmailByDomain`, `findEmailByCompanyName`,
