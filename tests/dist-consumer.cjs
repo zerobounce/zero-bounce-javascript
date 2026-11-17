@@ -77,7 +77,7 @@ async function exercise(ZeroBounceSDK, label) {
   assert.ok(await warmup.listSendingAccounts());
 
   assert.ok(calls.every((c) => c.signal), `${label}: every request carries a timeout signal`);
-  assert.ok(calls.every((c) => c.redirect === "error"), `${label}: every request refuses redirects`);
+  assert.ok(calls.every((c) => c.redirect === "manual"), `${label}: every request reports redirects without following them`);
   console.log(`${label}: ok (${calls.length} requests)`);
 }
 
