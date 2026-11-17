@@ -628,3 +628,38 @@ describe("every boolean parameter", () => {
     });
   }
 });
+
+describe("validateEmail / validateBatch timeout must be a whole number in range", () => {
+  const BAD = ["x", "5abc", {}, [5], 4.5, "11.5", true, "", " 5", "-5", NaN, "1e1"];
+
+  it.each(BAD.map((value) => [util.inspect(value), value]))("validateEmail refuses %s before sending", async (_label, value) => {
+    respond(JSON.stringify({ address: "a@example.com", status: "valid" }));
+    const sdk = client("https://api.zerobounce.net/v2");
+    const result = await outcome(sdk.validateEmail("a@example.com", { timeout: value }));
+    expect(result.rejected).toMatch(/timeout/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each(BAD.map((value) => [util.inspect(value), value]))("validateBatch refuses %s before sending", async (_label, value) => {
+    respond(JSON.stringify({ email_batch: [], errors: [] }));
+    const sdk = client("https://api.zerobounce.net/v2");
+    const result = await outcome(sdk.validateBatch([{ email_address: "a@example.com" }], { timeout: value }));
+    expect(result.rejected).toMatch(/timeout/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("accepts integers and digit-only strings in range", async () => {
+    respond(JSON.stringify({ address: "a@example.com", status: "valid" }));
+    const sdk = client("https://api.zerobounce.net/v2");
+    for (const value of [3, 60, "3", "60", "030"]) {
+      calls.length = 0;
+      await sdk.validateEmail("a@example.com", { timeout: value });
+      expect(sent().timeout).toBe(String(Number(value)));
+    }
+    for (const value of [2, "2", 61, "61"]) {
+      calls.length = 0;
+      expect((await outcome(sdk.validateEmail("a@example.com", { timeout: value }))).rejected).toMatch(/timeout/i);
+      expect(calls).toHaveLength(0);
+    }
+  });
+});

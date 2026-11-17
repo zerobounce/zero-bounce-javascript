@@ -119,7 +119,7 @@ describe("Warmup API client", () => {
     expect(request.url).not.toContain(KEY);
     expect(request.query.api_key).toBeUndefined();
     // A redirect must never be followed: it could carry the key elsewhere.
-    expect(request.redirect).toBe("error");
+    expect(request.redirect).toBe("manual");
   });
 
   it("covers every documented endpoint with the right method and path", async () => {

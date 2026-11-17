@@ -962,7 +962,7 @@ function isBrowserEnvironment() {
   );
 }
 
-function responseStatus(response) {
+export function responseStatus(response) {
   return response && typeof response.status === "number" ? response.status : 200;
 }
 
@@ -1054,15 +1054,16 @@ export function looksLikeHtml(body) {
 /**
  * Whether a file download is an HTML page. Unlike an API answer, a CSV can
  * hold `<body>` in a cell, so by body alone a download is HTML only when it
- * starts with `<` after its padding and then passes looksLikeHtml; an HTML
- * content type is checked by the caller. A CSV whose very first characters are
- * a whole `<body>` or `<html>` tag is still taken for a page.
+ * starts with `<` after its padding (a CSV never does); an HTML content type
+ * is checked by the caller.
  */
 export function looksLikeHtmlDownload(body) {
   const text = String(body);
   const start = text.length - skipLeadingHtmlWhitespace(text, true).length;
-  return text[start] === "<" && looksLikeHtml(text);
+  return text[start] === "<";
 }
+
+export const HTML_DOWNLOAD_MESSAGE = "ZeroBounce returned an HTML page (text/html) instead of a file.";
 
 /** Whether `success` is a documented boolean flag (not coerced with parseInt). */
 export function isSuccessFlag(value) {
@@ -1116,10 +1117,11 @@ export function successFlagOfBody(body) {
     const t = token.trim().toLowerCase();
     if (t === "true" || (isString && t === "1")) return "true";
     if (t === "false" || (isString && t === "0")) return "false";
-    if (!isString && /^-?(0|1)(\.0+)?(e[+-]?0+)?$/.test(t)) {
+    // A JSON number is a flag by its value (0e5, -0 and 1.0 are, 0.4 and 2 are not).
+    if (!isString && /^-?(0|[1-9][0-9]*)(\.[0-9]+)?(e[+-]?[0-9]+)?$/.test(t)) {
       const number = Number(t);
-      if (number === 1) return "true";
-      if (number === 0) return "false";
+      if (Number.isFinite(number) && number === 1) return "true";
+      if (Number.isFinite(number) && number === 0) return "false";
     }
     return "notflag";
   };
@@ -1209,27 +1211,45 @@ function hasKnownFileStatusField(parsed) {
 const HTML_TITLE_WINDOW = 65536;
 const HTML_TITLE_MAX = 1000;
 
+/** Index of `needle` (lower-case ASCII) in `text` from `from`, comparing only A-Z case-insensitively. */
+function indexOfAsciiCaseless(text, needle, from) {
+  const first = needle.length;
+  for (let at = text.indexOf("<", from); at >= 0; at = text.indexOf("<", at + 1)) {
+    if (at + first > text.length) return -1;
+    let same = true;
+    for (let k = 1; k < first; k += 1) {
+      let code = text.charCodeAt(at + k);
+      if (code >= 65 && code <= 90) code += 32;
+      if (code !== needle.charCodeAt(k)) {
+        same = false;
+        break;
+      }
+    }
+    if (same) return at;
+  }
+  return -1;
+}
+
 /**
  * The text of the page's <title>, or "" when there is none or it is longer than
  * 1000 characters. A linear scan of the first 64 KiB (no backtracking pattern).
+ * Tags are found on the original text, comparing ASCII letters without case,
+ * and the title is cut from the original: no lower-cased copy is ever shown.
  */
 function htmlTitle(body) {
-  const text = String(body).slice(0, HTML_TITLE_WINDOW).toLowerCase();
+  const text = String(body).slice(0, HTML_TITLE_WINDOW);
   let from = 0;
   for (;;) {
-    const open = text.indexOf("<title", from);
+    const open = indexOfAsciiCaseless(text, "<title", from);
     if (open < 0) return "";
     const next = text[open + 6];
     if (next === ">" || next === "/" || next === " " || next === "\t" || next === "\n" || next === "\r" || next === "\f" || next === "\u000b") {
       const tagEnd = text.indexOf(">", open);
       if (tagEnd < 0) return "";
-      const close = text.indexOf("</title", tagEnd);
+      const close = indexOfAsciiCaseless(text, "</title", tagEnd);
       if (close < 0) return "";
       if (close - tagEnd - 1 > HTML_TITLE_MAX) return "";
-      // toLowerCase can change a length (U+0130), so read the original by the same offsets only when equal.
-      const original = String(body).slice(0, HTML_TITLE_WINDOW);
-      const source = original.length === text.length ? original : text;
-      const title = source.slice(tagEnd + 1, close).replace(/\s+/g, " ").trim();
+      const title = text.slice(tagEnd + 1, close).replace(/\s+/g, " ").trim();
       return title.length > HTML_TITLE_MAX ? "" : title;
     }
     from = open + 1;
@@ -1385,6 +1405,8 @@ function messageFromBody(body, statusCode) {
   return message || `Empty response from ZeroBounce (HTTP ${statusCode})`;
 }
 
+const TYPED_ARRAY_TAG = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), Symbol.toStringTag).get;
+
 /**
  * The upload file as FormData takes it: a Blob/File, or a Buffer/Uint8Array
  * wrapped into a Blob under the given name. Anything else (a path string, a
@@ -1394,7 +1416,8 @@ function messageFromBody(body, statusCode) {
 export function uploadFilePart(file, fileName = null, argument = "file") {
   const isBlob = typeof Blob !== "undefined" && file instanceof Blob;
   // Not instanceof: a Buffer made in another realm (jsdom, a vm) is still bytes.
-  const isBytes = file instanceof Uint8Array || Object.prototype.toString.call(file) === "[object Uint8Array]";
+  // The real typed-array tag (a getter no plain object can fake), so a Buffer from another realm counts.
+  const isBytes = ArrayBuffer.isView(file) && TYPED_ARRAY_TAG.call(file) === "Uint8Array";
   if (!isBlob && !isBytes) {
     throw apiError(
       `ZeroBounce: ${argument} must be a Blob, a File, a Buffer or a Uint8Array ` +
@@ -1435,7 +1458,7 @@ function refuseControlsInForm(body) {
  * The redacted copy is returned on its own: the original is never attached as
  * `cause`, because its message and request URL can carry the key.
  */
-function transportError(error, secrets = []) {
+export function transportError(error, secrets = []) {
   const name = error && error.name ? error.name : "Error";
   const message = error && error.message ? error.message : String(error);
   // Node's fetch reports every network failure as "TypeError: fetch failed" and
@@ -1446,9 +1469,20 @@ function transportError(error, secrets = []) {
     const code = typeof cause.code === "string" ? cause.code : "";
     const detail = typeof cause.message === "string" ? cause.message : "";
     const reason = [code, detail && detail !== code ? detail : ""].filter(Boolean).join(": ");
-    if (reason) text += ` (${reason.slice(0, 300)})`;
+    // Redact first, then cut: a key straddling the cut would otherwise leave its
+    // first characters. The cut is on a code-point boundary.
+    if (reason) text += ` (${cutAtCodePoint(redactSecrets(reason.slice(0, 20000), secrets), 300)})`;
   }
   return apiError(redactSecrets(text, secrets), 0);
+}
+
+/** The first `max` UTF-16 units of the text, never ending inside a surrogate pair. */
+function cutAtCodePoint(text, max) {
+  if (text.length <= max) return text;
+  const last = text.charCodeAt(max - 1);
+  const next = text.charCodeAt(max);
+  const split = last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
+  return text.slice(0, split ? max - 1 : max);
 }
 
 /**
@@ -1512,8 +1546,11 @@ async function readBodyText(response) {
 function processGetFileResponseBody(finalResult, response, scoring, fileId = "download") {
   const status = responseStatus(response);
   const ct = responseContentType(response);
-  if (looksLikeHtmlDownload(finalResult) || ct.includes("text/html") || status >= 400) {
-    throw apiError(messageFromBody(finalResult, status), status);
+  const htmlish = looksLikeHtmlDownload(finalResult) || ct.includes("text/html");
+  if (htmlish || status >= 400) {
+    // A page without a whole html/head/body tag, or CSV rows under text/html, get the fixed text.
+    const message = htmlish && !looksLikeHtml(finalResult) ? HTML_DOWNLOAD_MESSAGE : messageFromBody(finalResult, status);
+    throw apiError(message, status);
   }
   if (!String(finalResult).trim()) {
     throw apiError(`Empty response from ZeroBounce (HTTP ${status})`, status);
@@ -1572,6 +1609,17 @@ function buildRequestUrl({ batch, bulkBase, bulkURLs, apiBaseURL, baseURL, path,
   return `${base}${path}${query}`;
 }
 
+/** Refuses a 3xx (or a browser's opaque redirect, status 0): this client never follows one. */
+export function refuseRedirect(response) {
+  const status = responseStatus(response);
+  if (response && response.type === "opaqueredirect") {
+    throw apiError("ZeroBounce returned a redirect, which this client does not follow.", 0);
+  }
+  if (status >= 300 && status < 400) {
+    throw apiError("ZeroBounce returned a redirect, which this client does not follow.", status);
+  }
+}
+
 export async function createRequest({
   requestType,
   body = null,
@@ -1626,16 +1674,7 @@ export async function createRequest({
 
   // redirect: "manual" hands back the 3xx itself (a browser's opaque redirect
   // has status 0), so the caller sees the status instead of "fetch failed".
-  const redirectStatus = responseStatus(response);
-  if (response && response.type === "opaqueredirect") {
-    throw apiError("ZeroBounce returned a redirect, which this client does not follow.", 0);
-  }
-  if (redirectStatus >= 300 && redirectStatus < 400) {
-    throw apiError(
-      "ZeroBounce returned a redirect, which this client does not follow.",
-      redirectStatus
-    );
-  }
+  refuseRedirect(response);
 
   let finalResult;
   try {

@@ -10,6 +10,7 @@ import {
   looksLikeHtml,
   looksLikeHtmlDownload,
   successFlagOfBody,
+  uploadFilePart,
 } from "../src/utils.js";
 import { ZeroBounceWarmup } from "../src/warmup.js";
 
@@ -359,5 +360,192 @@ describe("message lists and getCredits message (audit js1 P)", () => {
     const sdk = client();
     global.fetch = async () => jsonResponse('{"message":"x"}');
     await expect(sdk.getCredits()).rejects.toMatchObject({ message: "x", statusCode: 200 });
+  });
+});
+
+// ---- audit 2, fixer U: transport, downloads, errors ----
+
+function textResponse(body, { status = 200, contentType = "text/csv", type } = {}) {
+  return {
+    status,
+    type,
+    headers: { get: (name) => (String(name).toLowerCase() === "content-type" ? contentType : null) },
+    text: async () => body,
+  };
+}
+
+async function rejection(promise) {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected a rejection");
+}
+
+describe("transport cause text is redacted before it is cut", () => {
+  const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+  it("never leaves a prefix of the key, whatever offset it straddles", async () => {
+    for (let offset = 280; offset <= 310; offset += 1) {
+      global.fetch = async () => {
+        const error = new TypeError("fetch failed");
+        error.cause = Object.assign(new Error(`${"x".repeat(offset)}${KEY} tail`), { code: "ECONNRESET" });
+        throw error;
+      };
+      const error = await rejection(client().getCredits());
+      expect(error.message).toContain("ECONNRESET");
+      expect([offset, error.message.includes(KEY.slice(0, 5))]).toEqual([offset, false]);
+    }
+  });
+
+  it("cuts on a code-point boundary", async () => {
+    for (const pad of [298, 299]) {
+      global.fetch = async () => {
+        const error = new TypeError("fetch failed");
+        error.cause = new Error(`${"x".repeat(pad)}${"\u{1F600}".repeat(10)}`);
+        throw error;
+      };
+      const error = await rejection(client().getCredits());
+      expect([pad, LONE_SURROGATE.test(error.message)]).toEqual([pad, false]);
+    }
+  });
+});
+
+describe("redirects (main client)", () => {
+  it("reports a browser's opaque redirect with status 0", async () => {
+    global.fetch = async () => textResponse("", { status: 0, type: "opaqueredirect" });
+    const error = await rejection(client().getCredits());
+    expect(error).toMatchObject({ statusCode: 0 });
+    expect(error.message).toMatch(/redirect/);
+  });
+
+  it("treats a bare 300 as a redirect, and 299 and 400 as no redirect", async () => {
+    global.fetch = async () => textResponse("", { status: 300 });
+    const error = await rejection(client().getCredits());
+    expect(error).toMatchObject({ statusCode: 300 });
+    expect(error.message).toMatch(/redirect/);
+    global.fetch = async () => textResponse("", { status: 400, contentType: "application/json" });
+    expect((await rejection(client().getCredits())).message).not.toMatch(/redirect/);
+  });
+});
+
+describe("Warmup transport matches the main client", () => {
+  const warmup = () => new ZeroBounceWarmup("warmup-fix-key");
+
+  it("sends redirect: manual and reports a 3xx and an opaque redirect", async () => {
+    let init;
+    global.fetch = async (url, options) => {
+      init = options;
+      return textResponse("", { status: 302 });
+    };
+    const error = await rejection(warmup().getSeeds());
+    expect(init.redirect).toBe("manual");
+    expect(error).toMatchObject({ statusCode: 302 });
+    global.fetch = async () => textResponse("", { status: 0, type: "opaqueredirect" });
+    const opaque = await rejection(warmup().getSeeds());
+    expect(opaque).toMatchObject({ statusCode: 0 });
+    expect(opaque.message).toMatch(/redirect/);
+    global.fetch = async () => textResponse("", { status: 300 });
+    expect(await rejection(warmup().getSeeds())).toMatchObject({ statusCode: 300 });
+  });
+
+  it("keeps the cause text of a transport failure, redacted", async () => {
+    global.fetch = async () => {
+      const error = new TypeError("fetch failed");
+      error.cause = Object.assign(new Error("connect ECONNREFUSED warmup-fix-key"), { code: "ECONNREFUSED" });
+      throw error;
+    };
+    const error = await rejection(warmup().getSeeds());
+    expect(error.message).toContain("ECONNREFUSED");
+    expect(error.message).not.toContain("warmup-fix-key");
+  });
+
+  it("rejects a status-0 response instead of resolving null", async () => {
+    global.fetch = async () => textResponse("", { status: 0, type: "error" });
+    const error = await rejection(warmup().listSendingAccounts());
+    expect(error).toMatchObject({ name: "ZBApiError", statusCode: 0 });
+  });
+});
+
+describe("file argument is real bytes", () => {
+  const args = { email_address_column: 1 };
+  it("refuses a plain object that only claims the Uint8Array tag", async () => {
+    let sent = 0;
+    global.fetch = async () => {
+      sent += 1;
+      return jsonResponse({ success: true, message: "ok", file_id: "f", file_name: "n" });
+    };
+    const fake = { [Symbol.toStringTag]: "Uint8Array", length: 1 };
+    await expect(client().sendFile({ file: fake, ...args })).rejects.toThrow(/must be a Blob/);
+    expect(sent).toBe(0);
+  });
+
+  it("accepts a Uint8Array made in another realm", async () => {
+    const foreign = require("vm").runInNewContext("new Uint8Array([97, 10])");
+    expect(foreign instanceof Uint8Array).toBe(false);
+    const [part, name] = uploadFilePart(foreign, "x.csv");
+    expect(part).toBeDefined();
+    expect(name).toBe("x.csv");
+  });
+});
+
+describe("downloads that are HTML pages", () => {
+  const HTML_TEXT = "ZeroBounce returned an HTML page (text/html) instead of a file.";
+  it("refuses a body that starts with < after padding, whatever its tags", async () => {
+    for (const body of ["<title>Access denied</title>", "  \n<p>Access denied</p>", "﻿<div>x</div>"]) {
+      global.fetch = async () => textResponse(body);
+      const error = await rejection(client().getFile(FILE_ID));
+      expect([body, error.message]).toEqual([body, HTML_TEXT]);
+    }
+    expect(looksLikeHtmlDownload("<p>x</p>")).toBe(true);
+    expect(looksLikeHtmlDownload("a,b\n<body>,1\n")).toBe(false);
+  });
+
+  it("gives the fixed text, not the rows, for text/html content", async () => {
+    global.fetch = async () => textResponse("email,status\nsecret@example.com,valid\n", { contentType: "text/html" });
+    const error = await rejection(client().getFile(FILE_ID));
+    expect(error.message).toBe(HTML_TEXT);
+    global.fetch = async () => textResponse("email,status\nsecret@example.com,valid\n", { contentType: "text/html; charset=utf-8" });
+    const seeds = await rejection(new ZeroBounceWarmup("warmup-fix-key").downloadSeeds());
+    expect(seeds.message).toBe(HTML_TEXT);
+    global.fetch = async () => textResponse("<title>Denied</title>");
+    expect((await rejection(new ZeroBounceWarmup("warmup-fix-key").downloadSeeds())).message).toBe(HTML_TEXT);
+  });
+
+  it("still returns a CSV", async () => {
+    global.fetch = async () => textResponse("email,status\na@example.com,valid\n");
+    await expect(client().getFile(FILE_ID)).resolves.toMatch(/\.csv$|^email,status/);
+  });
+});
+
+describe("successFlagOfBody reads JSON numbers by value", () => {
+  it("classifies flags and non-flags", () => {
+    const flag = (token) => successFlagOfBody(`{"success":${token}}`);
+    for (const token of ["0e5", "-0", "0.0", "0E0", "-0.0e-3"]) expect([token, flag(token)]).toEqual([token, "false"]);
+    for (const token of ["1.0", "1e0", "1E+0", "1.0000000000000000001", "10e-1"]) expect([token, flag(token)]).toEqual([token, "true"]);
+    for (const token of ["0.4", "2", "1e400", "-1", "01", "0x1", "1.5"]) expect([token, flag(token)]).toEqual([token, "notflag"]);
+  });
+});
+
+describe("HTML titles are cut from the original text", () => {
+  it("finds tags in any case and never shows lower-cased text", async () => {
+    const page = "<HTML><HEAD>İİİ<TITLE>İstanbul Access Denied</TITLE></HEAD></HTML>";
+    global.fetch = async () => textResponse(page, { status: 403, contentType: "text/html" });
+    const error = await rejection(client().getCredits());
+    expect(error.message).toContain('("İstanbul Access Denied")');
+    expect(error.message).not.toContain("istanbul");
+  });
+});
+
+describe("transport URL guards, each on its own", () => {
+  const { requireHttpsUrl } = require("../src/utils.js");
+  const detail = /a non-ASCII character or a "%" in the host/;
+  it("refuses a host the parser rewrites to another address", () => {
+    for (const url of ["https://127.1/v2", "https://2130706433/v2", "https://0x7f.0.0.1/v2", "https://0177.0.0.1/v2"]) {
+      expect(() => requireHttpsUrl(url)).toThrow(detail);
+    }
+  });
+  it("refuses a % in the host with the long message, not as a parse failure", () => {
+    expect(() => requireHttpsUrl("https://exa%zzmple.com/v2")).toThrow(detail);
   });
 });

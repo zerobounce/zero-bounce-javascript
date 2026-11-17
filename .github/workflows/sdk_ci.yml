@@ -14,10 +14,10 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch or pull request replaces the run in progress.
+# A newer push to a pull request replaces the run in progress; runs on main and on a schedule finish.
 concurrency:
   group: sdk-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:

@@ -304,7 +304,7 @@ try {
 ```javascript
 // Parameters
 // ----------
-// file: File
+// file: Blob | File | Buffer | Uint8Array (a path or a stream is refused)
 //     The csv or txt file to be submitted.
 // email_address_column: number
 //     The column index of the email address in the file. Index starts from 1.
@@ -356,7 +356,7 @@ Bulk validation uses `https://bulkapi.zerobounce.net/v2`. See [v2 send file](htt
 ```javascript
 // Parameters
 // ----------
-// file: File
+// file: Blob | File | Buffer | Uint8Array (a path or a stream is refused)
 //     The csv or txt file to be submitted.
 // email_address_column: number
 //     The column index of the email address in the file. Index starts from 1.

@@ -126,21 +126,30 @@ jobs:
         run: npm test
 
       # The tag's own dist: build it, smoke-test it, and install the packed tarball the way a
-      # consumer would.
+      # consumer would. This tarball is the one the publish job uploads to npm, unchanged.
       - name: Build and smoke-test the dist
         run: |
           npm run build
           npm run test:smoke
-          npm pack --pack-destination "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/pack"
+          npm pack --pack-destination "$RUNNER_TEMP/pack"
           mkdir "$RUNNER_TEMP/consumer"
           cp tests/dist-consumer.cjs "$RUNNER_TEMP/consumer/"
           cd "$RUNNER_TEMP/consumer"
           npm init -y > /dev/null
-          npm install --no-audit --no-fund "$RUNNER_TEMP"/zerobounce-zero-bounce-sdk-*.tgz
+          npm install --no-audit --no-fund "$RUNNER_TEMP"/pack/zerobounce-zero-bounce-sdk-*.tgz
           node dist-consumer.cjs
 
+      - name: Upload the tested tarball
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-tarball
+          path: ${{ runner.temp }}/pack/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
-    name: Build and publish to npm
+    name: Publish to npm
     needs: [validate-tag, test]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && github.event.inputs.skip_npm != 'true' }}
     runs-on: ubuntu-latest
@@ -150,37 +159,36 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - name: Checkout tag
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # No checkout, no install and no build: what is published is the tarball the test job built,
+      # smoke-tested and installed. (prepublishOnly does not run when a tarball is published.)
+      - name: Download the tested tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          ref: refs/tags/${{ github.event.inputs.tag }}
-          persist-credentials: false
+          name: npm-tarball
+          path: ${{ runner.temp }}/tarball
 
-      - name: Verify checkout matches validated SHA
+      - name: Verify the tarball is the tag's version
         env:
-          TAG_SHA: ${{ needs.validate-tag.outputs.tag_sha }}
+          TAG: ${{ github.event.inputs.tag }}
         run: |
-          HEAD_SHA=$(git rev-parse HEAD)
-          if [ -z "$TAG_SHA" ] || [ "$HEAD_SHA" != "$TAG_SHA" ]; then
-            echo "Error: checked-out commit ($HEAD_SHA) does not match the validated tag commit ($TAG_SHA)."
+          set -eu
+          cd "$RUNNER_TEMP/tarball"
+          [ "$(ls -1 | wc -l)" = "1" ] || { echo "Error: expected exactly one tarball."; ls -l; exit 1; }
+          FILE=$(ls -1 *.tgz)
+          NAME=$(tar -xzOf "$FILE" package/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).name")
+          VERSION=$(tar -xzOf "$FILE" package/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+          if [ "$NAME" != "@zerobounce/zero-bounce-sdk" ] || [ "$VERSION" != "${TAG#v}" ]; then
+            echo "Error: the tarball is $NAME@$VERSION, not @zerobounce/zero-bounce-sdk@${TAG#v}."
             exit 1
           fi
+          tar -tzf "$FILE" | grep -qx 'package/dist/zeroBounceSDK.js' || { echo "Error: the tarball has no dist/zeroBounceSDK.js."; exit 1; }
+          sha256sum "$FILE"
 
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           package-manager-cache: false
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      # What is published is smoke-tested first (the test job checked the same tag's build).
-      - name: Smoke-test the dist
-        run: npm run test:smoke
 
       # Trusted publishing (OIDC) needs npm 11.5.1 or later. Pin the exact version so a new npm
       # release is not picked up untested in this id-token: write job.
@@ -194,7 +202,7 @@ jobs:
           if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
             npm config set //registry.npmjs.org/:_authToken "$NODE_AUTH_TOKEN"
           fi
-          npm publish --access public
+          npm publish "$RUNNER_TEMP"/tarball/*.tgz --access public --provenance
 
   release:
     name: Create GitHub Release

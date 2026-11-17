@@ -23,9 +23,10 @@ there, see below). Callers should expect a rejection, or a refused `init`, where
   `ZeroBounceWarmup`'s): one that carries a username, a password, a query or a
   fragment; one with a control, whitespace, invisible, bidirectional or
   backslash character, a lone surrogate, or a non-ASCII or `%` host; and one
-  that is not `https://` followed by a host (`http://` stays allowed for
-  `127.0.0.1`, `localhost` and `[::1]` only). The error does not include the
-  URL.
+  that is not `https://` followed by a host, apart from `http://` for
+  `127.0.0.1`, `localhost` and `[::1]`, which is new (4.0.0 refused every
+  `http://` URL); and one whose path has a dot segment (`.` or `..`) or an
+  encoded slash (`%2f`, `%5c`). The error does not include the URL.
 - A `success` flag decides failure on every JSON call: a body whose `success`
   is `false`, `"false"` or `0` in any of its duplicate top-level keys rejects
   with status 200. A `success` that is not a flag (`null`, `2`, `"yes"`, `0.4`,
@@ -44,6 +45,13 @@ there, see below). Callers should expect a rejection, or a refused `init`, where
   that is not a safe integer, and a list of `message` values holding anything
   but strings all reject with a `ZBApiError` with status 200 (a list of
   strings is joined with `"\n"` into one string).
+- `getFileStatus` and `getScoringFileStatus` reject a body with no non-null
+  known field, including `{"foo":1}` and `{"message":"m","file_id":null}`
+  (4.0.0 returned them); `{"file_status":"Processing"}` and `{"success":true}`
+  stay results.
+- `ZeroBounceWarmup` rejects a 2xx answer served as `text/html` (a proxy or
+  challenge page) with a `ZBApiError`, even when its body parses as JSON;
+  4.0.0 returned such a body as the result.
 - `getCredits` returns `Credits` as a string: `{"Credits":2375323}` resolves
   to `{ Credits: "2375323" }`; `{"Credits":null}` and `{}` reject.
 - The four bulk downloads and `ZeroBounceWarmup.downloadSeeds` and
@@ -57,9 +65,9 @@ there, see below). Callers should expect a rejection, or a refused `init`, where
   `activityData` or `verifyPlus` (the 4.0.1 change, for 4.0.0 callers).
 - The API key is no longer a property of the client (`_api_key`); code that
   read it that way gets `undefined`.
-- **Behaviour change:** `sendFile`, `sendScoringFile`, `sendListEvaluatorFile`, `sendEmailFinderFile`, `sendDomainSearchFile` and every `…FileStream` sender accept only a `Blob`/`File`, or a `Buffer`/`Uint8Array` (wrapped into a Blob under the given file name, `file.csv` when none is given). A file path string, a stream or any other object is refused with `ZBApiError` before anything is sent; before, such a value was sent as a text field ("[object Object]") or failed inside fetch with a raw `TypeError`.
+- **Behaviour change:** `sendFile`, `sendScoringFile`, `sendListEvaluatorFile`, `sendEmailFinderFile`, `sendDomainSearchFile` and every `…FileStream` sender accept only a `Blob`/`File`, or a `Buffer`/`Uint8Array` (wrapped into a Blob under the given file name, `file.csv` when none is given). A file path string, a stream or any other object is refused with `ZBApiError` before anything is sent; before, a `Buffer` or `Uint8Array` passed to a `send…File` method was sent as a text field holding its content, another object as a text field ("[object Object]"), and a `Buffer` passed to a `…FileStream` sender threw a `TypeError` from `FormData.append`.
 - **Behaviour change:** a form value (`return_url`, column fields, ...) or a file name containing CR, LF or NUL is refused with `ZBApiError` ("the form field "return_url" must not contain a line break or a NUL character.") before the request is sent.
-- **Behaviour change:** a 3xx answer is reported with its own status ("ZeroBounce returned a redirect, which this client does not follow."); requests use `redirect: "manual"` and still never follow it. Before, it surfaced as `TypeError: fetch failed` with status 0.
+- **Behaviour change:** a 3xx answer is reported with its own status ("ZeroBounce returned a redirect, which this client does not follow."); requests use `redirect: "manual"` and still never follow it. Before, requests used `redirect: "error"` and a redirect rejected with a plain `Error` ("TypeError: fetch failed") that had no `statusCode`.
 
 ### Security
 
@@ -110,7 +118,6 @@ there, see below). Callers should expect a rejection, or a refused `init`, where
 - `ZeroBounceWarmup` JSON methods reject a 2xx answer served as `text/html`
   (a proxy or challenge page) with a `ZBApiError`, even when its body parses
   as JSON. 4.0.0 and earlier returned such a body as the result.
-
 - The API key is held in a private field of `ZeroBounceSDK` and
   `ZeroBounceWarmup`, not in a property. `console.log("%o", client)`,
   `util.inspect(client, { showHidden: true })` and every walk of the object's
@@ -121,6 +128,7 @@ there, see below). Callers should expect a rejection, or a refused `init`, where
 - Redaction decodes `\UXXXX` (capital U, four hex digits) and `\UXXXXXXXX`, as well as `\u{...}`/`\U{...}`; 4.0.0 returned a key echoed as `\U007a\U0062...` verbatim. A surrogate pair may be written with `\u` or `\U` for either half.
 - Redaction reads runs of `\xHH` and octal byte escapes as UTF-8 (`\xc3\xa9` is "é"), and `%XX` runs as Latin-1 as well (`%E9` is "é"): a non-ASCII key echoed by byte is no longer returned.
 - Redaction works on at most 64 KiB (UTF-8) of text; longer text is replaced by `ZeroBounce: the text was omitted because it is too long to show.` (adversarial 1 MB text took seconds, synchronously).
+- A transport failure's cause text is now redacted before it is cut to 300 characters (it was cut first, so a key straddling the cut left its first characters), and the cut never splits a surrogate pair.
 
 ### Added
 
@@ -140,12 +148,14 @@ there, see below). Callers should expect a rejection, or a refused `init`, where
   `{ Credits: "2375323" }`. 4.0.0 returned the number as it came, although
   `GetCreditsResponse.Credits` is typed `string`. The string form the API
   sends (`"12345"`, `"-1"`) is returned unchanged.
+- `zeroBounceSDK.d.ts` declares the runtime statics `ZeroBounceSDK.ZeroBounceWarmup`, `ZeroBounceSDK.ZBApiError`, `ZeroBounceSDK.ZeroBounceSDK` and `ZeroBounceSDK.default` (`Warmup` was already declared); `ZeroBounceSDK.ZBApiError` is the only route to the error class from the `<script>` build.
+- Test suite only: the offline network guard (`tests/jest.setup.js`) now also refuses `http`/`https` requests whose options name another host, `net.connect`, `net.createConnection`, `tls.connect`, `Socket.prototype.connect` and `http.ClientRequest`, and guards `fetch` however it is defined (new tests in `tests/network-guard.test.js`).
 
 ### Fixed
 
 - `getFile` and the other downloads reject an HTML page that is spaces, tabs, a BOM or U+00A0 and then `<html`. A file that really begins with spaces is saved unchanged.
-- A message-only body, including `{}`, is an error with status 200 on every typed call except validate's greylist answer, the filter calls, Inbox Placement, the list-evaluator result and `getCredits`. A message beside documented fields that are all null is the same error. `{"domain":null}` with no message stays a result.
-- `getFileStatus` and `getScoringFileStatus` reject a body with no non-null known field, including `{"foo":1}` and `{"message":"m","file_id":null}`. `{"file_status":"Processing"}` and `{"success":true}` stay results.
+- A message-only body, including `{}`, is an error with status 200 on every typed call except validate's greylist answer, the filter calls, Inbox Placement and the list-evaluator result. A message beside documented fields that are all null is the same error. `{"domain":null}` with no message stays a result.
+- `getFileStatus` and `getScoringFileStatus` reject a body with no non-null known field (see Breaking).
 - `success` is a flag only for a boolean, the number 0 or 1 (including 1.0), or `true` / `false` / `0` / `1`. Only the false values fail the call.
 - A connection failure rejects with `ZBApiError` and `statusCode` 0. The same is true for Warmup, including a failure while reading the response body.
 - In the browser, `getFile` saves `result-<fileId>.csv` and `getScoringFile` saves `result-<fileId>-scoring.csv`.
@@ -248,8 +258,14 @@ there, see below). Callers should expect a rejection, or a refused `init`, where
 - Known limit: a body that mixes spellings character by character across layers (for example `a` next to `%62` next to `\x63` in one key) is only masked when each layer is one of the decoders applied in sequence; arbitrary per-character mixes of three or more spellings are not covered.
 - A transport failure keeps the underlying cause's code and message (masked of the key), e.g. `TypeError: fetch failed (ECONNREFUSED: connect ECONNREFUSED 127.0.0.1:9)`, instead of only `TypeError: fetch failed`.
 - The browser download in Internet Explorer (`msSaveOrOpenBlob`) returns the file name like the other browsers.
+- **Behaviour change:** `ZeroBounceWarmup` handles redirects and transport failures like the main client: it sends `redirect: "manual"`, so a 3xx rejects with its status and a browser's opaque redirect with status 0 and "ZeroBounce returned a redirect, which this client does not follow." (it was a "fetch failed" with status 0 and no cause). A failure keeps its cause text (the code and message, redacted), also when the body is cut short. A response with status 0 rejects as a transport failure instead of resolving `null`.
+- **Behaviour change:** a file download (`getFile`, `getScoringFile`, the finder and domain-search files, Warmup `downloadSeeds`) whose content starts with `<` after its padding is an HTML page and rejects, whatever its tags (`<title>Access denied</title>` served as `text/csv` used to resolve as CSV). A download served as `text/html` rejects with "ZeroBounce returned an HTML page (text/html) instead of a file." instead of showing its rows or its text as the message.
+- A `success` flag written as a JSON number is read by its value: `0e5`, `-0` and `0.0` are `false`, `1.0`, `1e0` and `1.0000000000000000001` are `true`; `0.4`, `2` and `1e400` are not flags (`0e5` was returned as a result).
+- The title of an HTML error page is found without regard to the case of the tag and is cut from the original text; it is never taken from a lower-cased copy (a `İ` in the page used to change the shown title to "i̇stanbul…").
+- A `file` argument is accepted as bytes only when it is a real typed `Uint8Array` or `Buffer` (also one from another realm); a plain object with `Symbol.toStringTag` "Uint8Array" is refused before sending.
+- `validateEmail` and `validateBatch` check `timeout` by type as well as range: only a whole number (or a string of digits only) inside the range (3-60 for `validateEmail`, 10-120 for `validateBatch`) is sent. "x", "5abc", `{}`, `[5]`, 4.5, "11.5" and `true` are now refused with a `ZBApiError` before anything is sent. **Behaviour change:** v4.0.0 only compared the value with the range, so those values (for example "5abc" or 4.5) were sent to the API.
 
-## [4.0.1] - 2026-11-12
+## [4.0.1] - 2026-11-11
 
 This version was tagged (v4.0.1) but never published to npm. Its changes ship with
 the next release, together with everything under Unreleased; npm users upgrade from 4.0.0.
@@ -273,7 +289,7 @@ the next release, together with everything under Unreleased; npm users upgrade f
   `getCredits`) passed it through in the rejection message. `ZeroBounceWarmup`
   already redacted its key.
 
-## [4.0.0] - 2026-11-12
+## [4.0.0] - 2026-11-11
 
 ### Breaking
 

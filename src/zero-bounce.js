@@ -139,6 +139,13 @@ const FILTER_LIST_RESULT = ["FilterListItem[]", "FilterMessageResponse"];
 const FILTER_RULES = ["allow", "block"];
 const FILTER_TARGETS = ["email", "domain", "mx", "tld"];
 
+/** An integer given as a number or a digit-only string, else null (never a guess: "5abc", 4.5, {}, [5], true all refuse). */
+function wholeSeconds(value) {
+  if (typeof value === "number") return Number.isInteger(value) ? value : null;
+  if (typeof value === "string" && /^[0-9]{1,9}$/.test(value)) return Number(value);
+  return null;
+}
+
 export class ZeroBounceSDK {
   static ApiURL = Object.freeze({
     DEFAULT_API_URL: "https://api.zerobounce.net/v2",
@@ -311,9 +318,12 @@ export class ZeroBounceSDK {
       callbackUrl = options.callbackUrl;
     }
 
-    if (timeout != null && (timeout < 3 || timeout > 60)) {
-      parameterIsInvalid("timeout", "Must be between 3 and 60 seconds.");
-      return;
+    if (timeout != null) {
+      timeout = wholeSeconds(timeout);
+      if (timeout == null || timeout < 3 || timeout > 60) {
+        parameterIsInvalid("timeout", "Must be a whole number between 3 and 60 seconds.");
+        return;
+      }
     }
 
     const flags = {};
@@ -423,9 +433,12 @@ export class ZeroBounceSDK {
       verifyPlus = options.verifyPlus;
     }
 
-    if (timeout != null && (timeout < 10 || timeout > 120)) {
-      parameterIsInvalid("timeout", "Must be between 10 and 120 seconds.");
-      return;
+    if (timeout != null) {
+      timeout = wholeSeconds(timeout);
+      if (timeout == null || timeout < 10 || timeout > 120) {
+        parameterIsInvalid("timeout", "Must be a whole number between 10 and 120 seconds.");
+        return;
+      }
     }
 
     const body = {

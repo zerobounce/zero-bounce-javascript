@@ -14,6 +14,7 @@ import {
   apiError,
   checkApiKey,
   isJsonContentType,
+  HTML_DOWNLOAD_MESSAGE,
   looksLikeHtml,
   looksLikeHtmlDownload,
   looksLikeJson,
@@ -21,8 +22,11 @@ import {
   pathSegment,
   readJsonBodyText,
   redactSecrets,
+  refuseRedirect,
+  responseStatus,
   requireHttpsUrl,
   strictBoolean,
+  transportError,
   trimTrailingSlashes,
   ZBApiError,
 } from "./utils.js";
@@ -122,22 +126,17 @@ export class ZeroBounceWarmup {
         headers,
         body: jsonBody != null ? JSON.stringify(jsonBody) : undefined,
         signal: fetchTimeoutSignal(),
-        redirect: "error",
+        redirect: "manual",
       });
     } catch (error) {
-      // Raised on its own: the original can carry the key or the SMTP password.
-      const name = error && error.name ? error.name : "Error";
-      const message = error && error.message ? error.message : String(error);
-      throw apiError(redactSecrets(`${name}: ${message}`, all), 0);
+      // Raised on its own, with the cause text: the original can carry the key or the SMTP password.
+      throw transportError(error, all);
     }
 
-    const status = typeof response.status === "number" ? response.status : 200;
-    if (status >= 300 && status < 400) {
-      throw apiError(
-        "ZeroBounce returned a redirect, which this client does not follow.",
-        status
-      );
-    }
+    refuseRedirect(response);
+    const status = responseStatus(response);
+    // Status 0 is no HTTP answer (an opaque or failed response), a transport failure.
+    if (status === 0) throw transportError(new TypeError("the response has no HTTP status"), all);
     let body = "";
     try {
       // A JSON answer is read with any byte order mark kept, so it is rejected (E7).
@@ -145,9 +144,7 @@ export class ZeroBounceWarmup {
       else if (typeof response.text === "function") body = await response.text();
     } catch (error) {
       // A body cut short can quote the request, so it is raised redacted, on its own.
-      const name = error && error.name ? error.name : "Error";
-      const message = error && error.message ? error.message : String(error);
-      throw apiError(redactSecrets(`${name}: ${message}`, all), 0);
+      throw transportError(error, all);
     }
     if (status > 299) {
       throw apiError(redactSecrets(warmupMessage(body, status), all), status);
@@ -185,13 +182,11 @@ export class ZeroBounceWarmup {
     const contentType = contentTypeOf(response);
     // A JSON answer (by content type, or a JSON object or array under any
     // type) or an HTML page (a proxy or challenge page) is never the CSV.
-    if (
-      !String(body).trim() ||
-      isJsonContentType(contentType) ||
-      looksLikeJson(body) ||
-      contentType.includes("text/html") ||
-      looksLikeHtmlDownload(body)
-    ) {
+    const htmlish = contentType.includes("text/html") || looksLikeHtmlDownload(body);
+    if (htmlish && !looksLikeHtml(body) && String(body).trim() && !looksLikeJson(body)) {
+      throw apiError(HTML_DOWNLOAD_MESSAGE, status);
+    }
+    if (!String(body).trim() || isJsonContentType(contentType) || looksLikeJson(body) || htmlish) {
       throw apiError(redactSecrets(warmupMessage(body, status), [this.#apiKey]), status);
     }
     return body;

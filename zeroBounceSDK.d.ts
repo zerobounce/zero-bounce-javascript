@@ -701,6 +701,14 @@ export class ZeroBounceSDK {
    * from the browser `<script>` build, which has only the global ZeroBounceSDK.
    */
   static Warmup: typeof ZeroBounceWarmup;
+  /** Same class as `Warmup`. */
+  static ZeroBounceWarmup: typeof ZeroBounceWarmup;
+  /** The error class every rejection is an instance of. */
+  static ZBApiError: typeof ZBApiError;
+  /** This class itself (for CommonJS consumers). */
+  static ZeroBounceSDK: typeof ZeroBounceSDK;
+  /** This class itself (for CommonJS consumers without esModuleInterop). */
+  static default: typeof ZeroBounceSDK;
 
   /**
    * Initialize the SDK with your API key and optional base URL.

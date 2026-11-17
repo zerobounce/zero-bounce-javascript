@@ -2,13 +2,30 @@
 // SDK's own request helpers); anything that would really send fails loudly here.
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
-function hostOf(target) {
+function hostOfString(text) {
   try {
-    const url = typeof target === "string" || target instanceof URL ? new URL(String(target)) : new URL(target.url || target.href);
-    return url.hostname;
+    return new URL(text).hostname;
   } catch {
-    return String(target);
+    return text;
   }
+}
+
+// Every host a fetch target can mean. fetch() reads String(input) for anything
+// that is not a Request, a Request has .url, and a URL-like has .href: a guard
+// that read only one of them can be fooled by an object whose toString() says
+// another host than its .url.
+function hostsOf(target) {
+  if (typeof target === "string") return [hostOfString(target)];
+  if (target instanceof URL) return [target.hostname];
+  const hosts = [];
+  if (target && typeof target === "object") {
+    if (target.url != null) hosts.push(hostOfString(String(target.url)));
+    if (target.href != null) hosts.push(hostOfString(String(target.href)));
+    const text = String(target);
+    if (!text.startsWith("[object ")) hosts.push(hostOfString(text));
+    if (hosts.length) return hosts;
+  }
+  return [String(target)];
 }
 
 function refuse(host, how) {
@@ -19,17 +36,41 @@ function guardHost(host, how) {
   if (!LOOPBACK.has(String(host).toLowerCase())) refuse(host, how);
 }
 
-// fetch (Node's own, or whatwg-fetch installed later by a test, which uses XMLHttpRequest).
-if (typeof globalThis.fetch === "function") {
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = function guardedFetch(input, init) {
+// fetch: Node's own (guarded), or a stub/polyfill a test assigns later (left
+// alone unless it is native code). It is an accessor on globalThis so that it
+// is covered whether fetch exists at setup time or is defined afterwards
+// (jsdom has none; a test or a polyfill may install one).
+function guardFetch(real) {
+  return function guardedFetch(input, init) {
     try {
-      guardHost(hostOf(input), "fetch");
+      for (const host of hostsOf(input)) guardHost(host, "fetch");
     } catch (error) {
       return Promise.reject(error);
     }
-    return realFetch.call(this, input, init);
+    return real.call(this, input, init);
   };
+}
+
+{
+  const original = globalThis.fetch;
+  const isNative = (fn) => typeof fn === "function" && /\{\s*\[native code\]\s*\}\s*$/.test(Function.prototype.toString.call(fn));
+  const worthGuarding = (fn) => typeof fn === "function" && fn.name !== "guardedFetch" && (fn === original || isNative(fn));
+  const asData = (value) =>
+    Object.defineProperty(globalThis, "fetch", { value, writable: true, configurable: true, enumerable: true });
+  let wrapper = worthGuarding(original) ? guardFetch(original) : original;
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return wrapper;
+    },
+    // The first assignment turns it into an ordinary data property, which is
+    // what jest.spyOn and the tests' own stubs expect; a real fetch assigned
+    // is guarded, a stub is left alone.
+    set(value) {
+      asData(worthGuarding(value) ? guardFetch(value) : value);
+    },
+  });
 }
 
 // XMLHttpRequest (jsdom): checked when the request is opened.
@@ -48,20 +89,82 @@ if (typeof XMLHttpRequest !== "undefined") {
   };
 }
 
-// Node http / https.
+// Every host a Node http(s) request can mean: the URL or options object in
+// front, and the options object that may follow a URL and override its host.
+function httpHosts(args) {
+  const hosts = [];
+  const first = args[0];
+  if (typeof first === "string" || first instanceof URL) hosts.push(hostOfString(String(first)));
+  for (const item of args) {
+    if (item && typeof item === "object" && !(item instanceof URL)) {
+      for (const key of ["hostname", "host"]) {
+        if (item[key] != null) hosts.push(String(item[key]).replace(/:\d+$/, ""));
+      }
+      if (item.href != null) hosts.push(hostOfString(String(item.href)));
+    }
+  }
+  if (!hosts.length) hosts.push("localhost");
+  return hosts;
+}
+
 for (const name of ["http", "https"]) {
   const mod = require(name);
   for (const fn of ["request", "get"]) {
     const real = mod[fn];
     mod[fn] = function guarded(...args) {
-      const first = args[0];
-      let host;
-      if (typeof first === "string" || first instanceof URL) host = hostOf(first);
-      else host = (first && (first.hostname || first.host)) || "localhost";
-      guardHost(String(host).replace(/:\d+$/, ""), `${name}.${fn}`);
+      for (const host of httpHosts(args)) guardHost(host, `${name}.${fn}`);
       return real.apply(this, args);
     };
   }
+}
+{
+  const http = require("http");
+  const RealClientRequest = http.ClientRequest;
+  http.ClientRequest = class GuardedClientRequest extends RealClientRequest {
+    constructor(...args) {
+      for (const host of httpHosts(args)) guardHost(host, "http.ClientRequest");
+      super(...args);
+    }
+  };
+}
+
+// Sockets: net.connect / createConnection / Socket.prototype.connect (what
+// http, https and tls end in) and tls.connect. A unix socket path is local.
+function socketHost(args) {
+  let first = args[0];
+  if (Array.isArray(first)) first = first[0];
+  if (first && typeof first === "object") {
+    if (first.path != null && first.host == null && first.hostname == null) return null;
+    return String(first.host ?? first.hostname ?? "localhost");
+  }
+  if (typeof first === "number" || (typeof first === "string" && /^\d+$/.test(first))) {
+    return typeof args[1] === "string" ? args[1] : "localhost";
+  }
+  if (typeof first === "string") return null;
+  return "localhost";
+}
+
+{
+  const net = require("net");
+  const tls = require("tls");
+  for (const [mod, fn, how] of [
+    [net, "connect", "net.connect"],
+    [net, "createConnection", "net.createConnection"],
+    [tls, "connect", "tls.connect"],
+  ]) {
+    const real = mod[fn];
+    mod[fn] = function guarded(...args) {
+      const host = socketHost(args);
+      if (host !== null) guardHost(host, how);
+      return real.apply(this, args);
+    };
+  }
+  const realConnect = net.Socket.prototype.connect;
+  net.Socket.prototype.connect = function guardedConnect(...args) {
+    const host = socketHost(args);
+    if (host !== null) guardHost(host, "Socket.connect");
+    return realConnect.apply(this, args);
+  };
 }
 
 if (typeof window !== "undefined" && window.URL) {

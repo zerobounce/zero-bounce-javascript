@@ -1,6 +1,10 @@
 # ZeroBounce JavaScript SDK – test image (Node 24 LTS, as CI)
-# Pinned by digest (docker image inspect node:24-alpine); update tag and digest together.
-FROM node:24-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8
+# Pinned by the digest of the multi-platform image index, read from the registry: a token from
+# auth.docker.io (scope repository:library/node:pull), then a HEAD on
+# registry-1.docker.io/v2/library/node/manifests/24-alpine with Accept:
+# application/vnd.oci.image.index.v1+json; the Docker-Content-Digest header is the digest.
+# (Not `docker image inspect`: that shows a local, single-platform id.) Update tag and digest together.
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
 
 WORKDIR /app
 

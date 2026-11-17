@@ -28,9 +28,10 @@ permissions:
   actions: read
   contents: read
 
+# A newer push to a pull request replaces the run in progress; runs on main and the schedule finish.
 concurrency:
   group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analyze:
