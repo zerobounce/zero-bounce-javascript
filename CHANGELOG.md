@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `validateEmail` returned a message-only body (`{"message": "bad"}`, one beside
+  a `success` that is no flag, or one beside `address` and `status` both null) as
+  a result; it now rejects with `ZBApiError`, status 200, carrying the message,
+  as the other calls do. The only message-only answer still returned is the
+  greylist one, a body whose only key is `Message`.
+
 ## [5.0.0] - 2026-11-17
 
 ### Breaking

@@ -1356,6 +1356,15 @@ function objectWithoutSuccess(parsed, successState) {
   return rest;
 }
 
+/**
+ * validate's one message-only exemption: the greylist answer, a body whose only
+ * key is "Message" (capital M) holding a text. Any other message-only body is an error.
+ */
+function isGreylistAnswer(object) {
+  const keys = Object.keys(object);
+  return keys.length === 1 && keys[0] === "Message" && typeof object.Message === "string" && object.Message.trim() !== "";
+}
+
 const MESSAGE_KEYS = new Set(["error", "message", "error_message", "Message", "Error", "detail"]);
 
 /**
@@ -1747,7 +1756,7 @@ export async function createRequest({
     parsed !== null &&
     typeof parsed === "object" &&
     !Array.isArray(parsed) &&
-    isGreylistMessage(parsed);
+    isGreylistAnswer(parsed);
   // {"success": false, ...} on an HTTP 200 is still a failure, whichever of
   // duplicate "success" keys says so. A "success" that is no flag is read as absent.
   if (successState === "false") {

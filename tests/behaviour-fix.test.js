@@ -600,3 +600,39 @@ describe("transport URL guards, each on its own", () => {
     expect(() => requireHttpsUrl("https://exa%zzmple.com/v2")).toThrow(detail);
   });
 });
+
+describe("validateEmail treats message-only bodies as errors, except the greylist answer", () => {
+  const bodies = [
+    { message: "bad" },
+    { success: null, message: "bad" },
+    { success: "maybe", message: "bad" },
+    { success: 0.4, message: "bad" },
+    { success: {}, message: "bad" },
+    { success: "", message: "bad" },
+    { success: [], message: "bad" },
+    { message: "bad", address: null, status: null },
+  ];
+  for (const method of ["GET", "POST"]) {
+    it(`rejects with ZBApiError 200 and the message (${method})`, async () => {
+      for (const body of bodies) {
+        global.fetch = async () => jsonResponse(body);
+        const error = await rejection(client().validateEmail("a@example.com", { method }));
+        expect([JSON.stringify(body), error.name, error.statusCode, error.message]).toEqual([
+          JSON.stringify(body),
+          "ZBApiError",
+          200,
+          "bad",
+        ]);
+      }
+    });
+    it(`still returns the greylist answer, and results with null or extra fields (${method})`, async () => {
+      global.fetch = async () => jsonResponse({ Message: "Greylist validation still in progress..." });
+      const grey = await client().validateEmail("a@example.com", { method });
+      expect(grey.message).toBe("Greylist validation still in progress...");
+      global.fetch = async () => jsonResponse({ address: "a@example.com", status: "valid", sub_status: null });
+      await expect(client().validateEmail("a@example.com", { method })).resolves.toMatchObject({ status: "valid" });
+      global.fetch = async () => jsonResponse({ Message: "note", address: "a@example.com", status: "valid" });
+      await expect(client().validateEmail("a@example.com", { method })).resolves.toMatchObject({ status: "valid" });
+    });
+  }
+});
