@@ -134,6 +134,8 @@ try {
 }
 ```
 
+`timeout` (an option of `validateEmail` and `validateBatch`) is a whole number of seconds: 3-60 for `validateEmail`, 10-120 for `validateBatch`. A string of digits only is accepted too; any other value is refused with a `ZBApiError` before a request is sent.
+
 - ##### S3 and SFTP/FTP bulk jobs
 
 ```javascript

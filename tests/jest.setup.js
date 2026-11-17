@@ -167,6 +167,96 @@ function socketHost(args) {
   };
 }
 
+// Other ways out of the process. A child process or a worker thread starts a
+// fresh Node whose fetch is not guarded, so each one is launched with the dead
+// proxy (and NODE_USE_ENV_PROXY=1, which makes Node's fetch honour it) and
+// loopback in NO_PROXY: only loopback can be reached from there. UDP sockets
+// and DNS lookups of a non-loopback name are refused outright.
+const DEAD_PROXY_ENV = {
+  NODE_USE_ENV_PROXY: "1",
+  HTTP_PROXY: "http://127.0.0.1:9",
+  HTTPS_PROXY: "http://127.0.0.1:9",
+  ALL_PROXY: "http://127.0.0.1:9",
+  http_proxy: "http://127.0.0.1:9",
+  https_proxy: "http://127.0.0.1:9",
+  all_proxy: "http://127.0.0.1:9",
+  NO_PROXY: "127.0.0.1,localhost,::1",
+  no_proxy: "127.0.0.1,localhost,::1",
+};
+
+{
+  const cp = require("child_process");
+  // [name, index of the options argument when no args array precedes it]
+  const launchers = {
+    spawn: 1, spawnSync: 1, execFile: 1, execFileSync: 1, fork: 1, exec: 1, execSync: 1,
+  };
+  for (const [fn, at] of Object.entries(launchers)) {
+    const real = cp[fn];
+    if (typeof real !== "function" || real.__offlineGuard) continue;
+    const wrapped = function guardedLaunch(...args) {
+      let index = at;
+      if (fn !== "exec" && fn !== "execSync" && Array.isArray(args[1])) index = 2;
+      const given = args[index];
+      if (given == null || typeof given === "function") {
+        args.splice(index, 0, { env: { ...process.env, ...DEAD_PROXY_ENV } });
+      } else if (typeof given === "object") {
+        args[index] = { ...given, env: { ...(given.env || process.env), ...DEAD_PROXY_ENV } };
+      }
+      return real.apply(this, args);
+    };
+    wrapped.__offlineGuard = true;
+    cp[fn] = wrapped;
+  }
+}
+
+{
+  const wt = require("worker_threads");
+  const RealWorker = wt.Worker;
+  if (!RealWorker.__offlineGuard) {
+    class GuardedWorker extends RealWorker {
+      constructor(file, options = {}) {
+        const given = options && typeof options === "object" ? options : {};
+        // SHARE_ENV is the parent's own environment: nothing to add there.
+        const env = given.env === wt.SHARE_ENV ? given.env : { ...(given.env || process.env), ...DEAD_PROXY_ENV };
+        super(file, { ...given, env });
+      }
+    }
+    GuardedWorker.__offlineGuard = true;
+    wt.Worker = GuardedWorker;
+  }
+}
+
+{
+  const dgram = require("dgram");
+  if (!dgram.createSocket.__offlineGuard) {
+    const refused = function guardedCreateSocket() {
+      refuse("(any)", "dgram.createSocket");
+    };
+    refused.__offlineGuard = true;
+    dgram.createSocket = refused;
+  }
+}
+
+{
+  const dns = require("dns");
+  const names = [
+    "lookup", "resolve", "resolve4", "resolve6", "resolveAny", "resolveCaa", "resolveCname",
+    "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr", "resolveSoa", "resolveSrv", "resolveTxt",
+  ];
+  for (const target of [dns, dns.promises]) {
+    for (const fn of names) {
+      const real = target[fn];
+      if (typeof real !== "function" || real.__offlineGuard) continue;
+      const wrapped = function guardedDns(host, ...rest) {
+        if (host != null && host !== "") guardHost(host, `dns.${fn}`);
+        return real.call(this, host, ...rest);
+      };
+      wrapped.__offlineGuard = true;
+      target[fn] = wrapped;
+    }
+  }
+}
+
 if (typeof window !== "undefined" && window.URL) {
   if (!window.URL.createObjectURL) {
     window.URL.createObjectURL = () => "blob:mock";

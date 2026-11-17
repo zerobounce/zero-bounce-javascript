@@ -14,7 +14,7 @@ import {
   apiError,
   checkApiKey,
   isJsonContentType,
-  HTML_DOWNLOAD_MESSAGE,
+  htmlDownloadMessage,
   looksLikeHtml,
   looksLikeHtmlDownload,
   looksLikeJson,
@@ -136,7 +136,7 @@ export class ZeroBounceWarmup {
     refuseRedirect(response);
     const status = responseStatus(response);
     // Status 0 is no HTTP answer (an opaque or failed response), a transport failure.
-    if (status === 0) throw transportError(new TypeError("the response has no HTTP status"), all);
+    if (status === 0) throw transportError(new TypeError("the response has no HTTP status"), []);
     let body = "";
     try {
       // A JSON answer is read with any byte order mark kept, so it is rejected (E7).
@@ -147,7 +147,7 @@ export class ZeroBounceWarmup {
       throw transportError(error, all);
     }
     if (status > 299) {
-      throw apiError(redactSecrets(warmupMessage(body, status), all), status);
+      throw apiError(warmupMessage(body, status, all), status);
     }
     return { status, body, response };
   }
@@ -160,19 +160,13 @@ export class ZeroBounceWarmup {
     // An HTML page (a proxy or challenge page) is never the API's answer, even
     // when its body happens to parse as JSON.
     if (contentTypeOf(response).includes("text/html")) {
-      throw apiError(
-        redactSecrets(warmupMessage(body, status), [this.#apiKey, ...(options.secrets || [])]),
-        status
-      );
+      throw apiError(warmupMessage(body, status, [this.#apiKey, ...(options.secrets || [])]), status);
     }
     try {
       return parseJsonBody(body);
     } catch (error) {
       if (error instanceof ZBApiError) throw apiError(error.message, status);
-      throw apiError(
-        redactSecrets(warmupMessage(body, status), [this.#apiKey, ...(options.secrets || [])]),
-        status
-      );
+      throw apiError(warmupMessage(body, status, [this.#apiKey, ...(options.secrets || [])]), status);
     }
   }
 
@@ -183,11 +177,10 @@ export class ZeroBounceWarmup {
     // A JSON answer (by content type, or a JSON object or array under any
     // type) or an HTML page (a proxy or challenge page) is never the CSV.
     const htmlish = contentType.includes("text/html") || looksLikeHtmlDownload(body);
-    if (htmlish && !looksLikeHtml(body) && String(body).trim() && !looksLikeJson(body)) {
-      throw apiError(HTML_DOWNLOAD_MESSAGE, status);
-    }
+    const fixed = htmlish ? htmlDownloadMessage(body, contentType, status) : null;
+    if (fixed) throw apiError(fixed, status);
     if (!String(body).trim() || isJsonContentType(contentType) || looksLikeJson(body) || htmlish) {
-      throw apiError(redactSecrets(warmupMessage(body, status), [this.#apiKey]), status);
+      throw apiError(warmupMessage(body, status, [this.#apiKey]), status);
     }
     return body;
   }
@@ -521,8 +514,13 @@ function contentTypeOf(response) {
     : "";
 }
 
-/** A Warmup error body as a short message. Mirrors the validation client's rules. */
-function warmupMessage(body, status) {
+/**
+ * A Warmup error body as a short message. Mirrors the validation client's rules.
+ * Only the text taken from the body is redacted; the SDK's own fixed sentences
+ * are never masked (a short SMTP username would otherwise cut letters out of them).
+ */
+function warmupMessage(body, status, secrets = []) {
+  const shown = (text) => redactSecrets(text, secrets);
   const trimmed = String(body || "").trim();
   if (!trimmed) return `Empty response from ZeroBounce (HTTP ${status})`;
   if (looksLikeHtml(body)) {
@@ -537,18 +535,18 @@ function warmupMessage(body, status) {
     }
     if (Array.isArray(parsed)) {
       const first = parsed.find((item) => typeof item === "string" && item.trim());
-      if (first) return first.trim();
+      if (first) return shown(first.trim());
     } else if (parsed && typeof parsed === "object") {
       for (const key of ["message", "error", "error_message", "detail"]) {
         const value = parsed[key];
-        if (typeof value === "string" && value.trim()) return value.trim();
+        if (typeof value === "string" && value.trim()) return shown(value.trim());
         if (Array.isArray(value) && value.length) {
           const strings = value.filter((item) => typeof item === "string" && item.trim());
-          if (strings.length) return strings.join("\n");
+          if (strings.length) return shown(strings.join("\n"));
           const firstItem = value[0];
           if (firstItem && typeof firstItem === "object" && firstItem.msg) {
             const loc = Array.isArray(firstItem.loc) ? firstItem.loc.slice(1).join(".") : "";
-            return loc ? `${loc}: ${firstItem.msg}` : String(firstItem.msg);
+            return shown(loc ? `${loc}: ${firstItem.msg}` : String(firstItem.msg));
           }
         }
       }
@@ -556,7 +554,7 @@ function warmupMessage(body, status) {
     return `ZeroBounce returned an error (HTTP ${status}).`;
   }
   if (trimmed.length > 1000) return "ZeroBounce returned a response that is not valid JSON.";
-  return trimmed;
+  return shown(trimmed);
 }
 
 export default ZeroBounceWarmup;

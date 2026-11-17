@@ -383,7 +383,7 @@ async function rejection(promise) {
   throw new Error("expected a rejection");
 }
 
-describe("transport cause text is redacted before it is cut", () => {
+describe("transport cause text is redacted, and omitted when it is long", () => {
   const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
   it("never leaves a prefix of the key, whatever offset it straddles", async () => {
     for (let offset = 280; offset <= 310; offset += 1) {
@@ -398,8 +398,8 @@ describe("transport cause text is redacted before it is cut", () => {
     }
   });
 
-  it("cuts on a code-point boundary", async () => {
-    for (const pad of [298, 299]) {
+  it("shows no cut tail: a redacted cause over 300 characters is omitted", async () => {
+    for (const pad of [298, 299, 300, 301]) {
       global.fetch = async () => {
         const error = new TypeError("fetch failed");
         error.cause = new Error(`${"x".repeat(pad)}${"\u{1F600}".repeat(10)}`);
@@ -407,7 +407,33 @@ describe("transport cause text is redacted before it is cut", () => {
       };
       const error = await rejection(client().getCredits());
       expect([pad, LONE_SURROGATE.test(error.message)]).toEqual([pad, false]);
+      expect(error.message).toContain("(details omitted: too long)");
     }
+  });
+
+  it("leaves no start of a long secret that is repeated many times", () => {
+    const { transportError } = require("../src/utils.js");
+    const secret = "P" + "abcdefghijklmnopqrstuvwxyz".repeat(9).slice(0, 221);
+    const error = new TypeError("fetch failed");
+    error.cause = { code: "ECONNRESET", message: `${secret.repeat(91)}${secret}` }; // 20,424 characters: past a pre-cut at 20,000
+    const message = transportError(error, [secret]).message;
+    expect(message).not.toContain(secret.slice(0, 4));
+    expect(message).toMatch(/^TypeError: fetch failed \(ECONNRESET: \*+\)$/);
+    error.cause = { code: "ECONNRESET", message: secret.repeat(130) };
+    expect(transportError(error, [secret]).message).toBe("TypeError: fetch failed (ECONNRESET: details omitted: too long)");
+    // Without the omission the cut text carried the start of the secret.
+    const half = new TypeError("fetch failed");
+    half.cause = { code: "E", message: `${"y".repeat(299)}${secret.slice(0, 15)}` };
+    expect(transportError(half, [secret]).message).not.toContain(secret.slice(0, 8));
+  });
+
+  it("does not mask the SDK's own words with a one-letter secret", () => {
+    const { transportError } = require("../src/utils.js");
+    const error = new TypeError("fetch failed");
+    error.cause = { code: "E", message: "x".repeat(400) };
+    expect(transportError(error, ["o"]).message).toContain("(E: details omitted: too long)");
+    const status = transportError(new TypeError("the response has no HTTP status"), []).message;
+    expect(status).toBe("TypeError: the response has no HTTP status");
   });
 });
 
@@ -491,11 +517,12 @@ describe("file argument is real bytes", () => {
 
 describe("downloads that are HTML pages", () => {
   const HTML_TEXT = "ZeroBounce returned an HTML page (text/html) instead of a file.";
+  const PAGE_TEXT = "ZeroBounce returned an HTML page instead of a file.";
   it("refuses a body that starts with < after padding, whatever its tags", async () => {
     for (const body of ["<title>Access denied</title>", "  \n<p>Access denied</p>", "﻿<div>x</div>"]) {
       global.fetch = async () => textResponse(body);
       const error = await rejection(client().getFile(FILE_ID));
-      expect([body, error.message]).toEqual([body, HTML_TEXT]);
+      expect([body, error.message]).toEqual([body, PAGE_TEXT]);
     }
     expect(looksLikeHtmlDownload("<p>x</p>")).toBe(true);
     expect(looksLikeHtmlDownload("a,b\n<body>,1\n")).toBe(false);
@@ -509,7 +536,31 @@ describe("downloads that are HTML pages", () => {
     const seeds = await rejection(new ZeroBounceWarmup("warmup-fix-key").downloadSeeds());
     expect(seeds.message).toBe(HTML_TEXT);
     global.fetch = async () => textResponse("<title>Denied</title>");
-    expect((await rejection(new ZeroBounceWarmup("warmup-fix-key").downloadSeeds())).message).toBe(HTML_TEXT);
+    expect((await rejection(new ZeroBounceWarmup("warmup-fix-key").downloadSeeds())).message).toBe(PAGE_TEXT);
+  });
+
+  it("names text/html only when the content type is text/html", async () => {
+    global.fetch = async () => textResponse("<p>x</p>", { contentType: "text/csv" });
+    expect((await rejection(client().getFile(FILE_ID))).message).toBe(PAGE_TEXT);
+    global.fetch = async () => textResponse("<p>x</p>", { contentType: "text/html" });
+    expect((await rejection(client().getFile(FILE_ID))).message).toBe(HTML_TEXT);
+  });
+
+  it("keeps the API message of a JSON or plain-text error served as text/html", async () => {
+    const json = '{"success":false,"message":"File not found"}';
+    for (const status of [200, 400]) {
+      global.fetch = async () => textResponse(json, { status, contentType: "text/html" });
+      const error = await rejection(client().getFile(FILE_ID));
+      expect([status, error.message, error.statusCode]).toEqual([status, "File not found", status]);
+      global.fetch = async () => textResponse(json, { status, contentType: "text/html" });
+      const warm = await rejection(new ZeroBounceWarmup("warmup-fix-key").downloadSeeds());
+      expect([status, warm.message]).toEqual([status, "File not found"]);
+    }
+    global.fetch = async () => textResponse("Internal error: quota exceeded", { status: 500, contentType: "text/html" });
+    expect((await rejection(client().getFile(FILE_ID))).message).toBe("Internal error: quota exceeded");
+    // CSV rows under text/html on a 200 are still no file.
+    global.fetch = async () => textResponse("email,status\na@example.com,valid\n", { contentType: "text/html" });
+    expect((await rejection(client().getFile(FILE_ID))).message).toBe(HTML_TEXT);
   });
 
   it("still returns a CSV", async () => {

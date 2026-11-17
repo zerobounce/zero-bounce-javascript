@@ -280,8 +280,11 @@ export interface GetCreditsResponse {
 export interface ValidateEmailOptions {
   /** IP address the email signed up from (optional). */
   ip_address?: string;
-  /** Validation timeout in seconds, 3–60. If exceeded, API may return unknown/greylisted. */
-  timeout?: number;
+  /**
+   * Validation timeout: a whole number of seconds, 3–60 (a string of digits only is accepted too).
+   * Anything else is refused before a request is sent. If exceeded, API may return unknown/greylisted.
+   */
+  timeout?: number | string;
   /** Maps to `activity_data` on GET /validate. */
   activityData?: boolean;
   /** Maps to `verify_plus` on GET /validate. */
@@ -304,8 +307,11 @@ export interface ValidateBatchEmailItem {
 
 /** Options for validateBatch (timeout, activity_data, verify_plus). */
 export interface ValidateBatchOptions {
-  /** Validation timeout in seconds, 10–120 for the whole batch. */
-  timeout?: number;
+  /**
+   * Validation timeout for the whole batch: a whole number of seconds, 10–120
+   * (a string of digits only is accepted too). Anything else is refused before a request is sent.
+   */
+  timeout?: number | string;
   /** Maps to `activity_data` on POST /validatebatch. */
   activityData?: boolean;
   /** Maps to `verify_plus` on POST /validatebatch. */
@@ -742,7 +748,7 @@ export class ZeroBounceSDK {
   /**
    * Validate a single email address.
    * @param email - Email to validate
-   * @param options - Optional ip_address, timeout (3–60), activityData, verifyPlus, or ip_address string for backwards compatibility
+   * @param options - Optional ip_address, timeout (whole seconds, 3–60), activityData, verifyPlus, or ip_address string for backwards compatibility
    */
   validateEmail(
     email: string,
@@ -762,7 +768,7 @@ export class ZeroBounceSDK {
   /**
    * Validate a batch of emails.
    * @param emailBatch - Array of objects with email_address (and optional ip_address)
-   * @param options - Optional timeout (10–120), activityData, verifyPlus
+   * @param options - Optional timeout (whole seconds, 10–120), activityData, verifyPlus
    */
   validateBatch(
     emailBatch: ValidateBatchEmailItem[],

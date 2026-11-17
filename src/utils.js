@@ -1064,6 +1064,22 @@ export function looksLikeHtmlDownload(body) {
 }
 
 export const HTML_DOWNLOAD_MESSAGE = "ZeroBounce returned an HTML page (text/html) instead of a file.";
+export const HTML_PAGE_DOWNLOAD_MESSAGE = "ZeroBounce returned an HTML page instead of a file.";
+
+/**
+ * The fixed text for a download that is not a file because it looks like HTML
+ * (it starts with `<`, or is served as text/html), or null when the body
+ * should speak for itself: an HTML page (its title is shown), a JSON body (its
+ * message) or, on an error status, a plain-text message. The content type is
+ * named only when it really is text/html.
+ */
+export function htmlDownloadMessage(body, contentType, status) {
+  const text = String(body);
+  if (!text.trim() || looksLikeHtml(text) || looksLikeJson(text)) return null;
+  const start = text.length - skipLeadingHtmlWhitespace(text, true).length;
+  if (status >= 400 && text[start] !== "<") return null;
+  return String(contentType).includes("text/html") ? HTML_DOWNLOAD_MESSAGE : HTML_PAGE_DOWNLOAD_MESSAGE;
+}
 
 /** Whether `success` is a documented boolean flag (not coerced with parseInt). */
 export function isSuccessFlag(value) {
@@ -1463,27 +1479,31 @@ export function transportError(error, secrets = []) {
   const message = error && error.message ? error.message : String(error);
   // Node's fetch reports every network failure as "TypeError: fetch failed" and
   // keeps the reason (ECONNREFUSED, ENOTFOUND, a TLS error) in `cause`.
-  let text = `${name}: ${message}`;
+  // Only the error's own text is redacted: the fixed words around it are the SDK's.
+  let text = redactSecrets(`${name}: ${message}`, secrets);
   const cause = error && typeof error === "object" ? error.cause : null;
   if (cause && typeof cause === "object") {
     const code = typeof cause.code === "string" ? cause.code : "";
     const detail = typeof cause.message === "string" ? cause.message : "";
     const reason = [code, detail && detail !== code ? detail : ""].filter(Boolean).join(": ");
-    // Redact first, then cut: a key straddling the cut would otherwise leave its
-    // first characters. The cut is on a code-point boundary.
-    if (reason) text += ` (${cutAtCodePoint(redactSecrets(reason.slice(0, 20000), secrets), 300)})`;
+    // Redact the whole reason (never a pre-cut piece of it: a cut inside a secret
+    // would leave its start); a redacted text over 300 characters is not cut
+    // (a long secret repeated would leave its start at the cut) but omitted.
+    if (reason) {
+      const redacted = redactSecrets(reason, secrets);
+      if (redacted.length <= 300) {
+        text += ` (${redacted})`;
+      } else {
+        // The short error code (ECONNRESET) is still worth showing.
+        const shownCode = code && code.length <= 40 ? `${redactSecrets(code, secrets)}: ` : "";
+        text += ` (${shownCode}${TRANSPORT_DETAILS_OMITTED})`;
+      }
+    }
   }
-  return apiError(redactSecrets(text, secrets), 0);
+  return apiError(text, 0);
 }
 
-/** The first `max` UTF-16 units of the text, never ending inside a surrogate pair. */
-function cutAtCodePoint(text, max) {
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  const next = text.charCodeAt(max);
-  const split = last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
-  return text.slice(0, split ? max - 1 : max);
-}
+const TRANSPORT_DETAILS_OMITTED = "details omitted: too long";
 
 /**
  * ZeroBounce documents no regional bulk host, so an EU or US base URL still
@@ -1548,9 +1568,10 @@ function processGetFileResponseBody(finalResult, response, scoring, fileId = "do
   const ct = responseContentType(response);
   const htmlish = looksLikeHtmlDownload(finalResult) || ct.includes("text/html");
   if (htmlish || status >= 400) {
-    // A page without a whole html/head/body tag, or CSV rows under text/html, get the fixed text.
-    const message = htmlish && !looksLikeHtml(finalResult) ? HTML_DOWNLOAD_MESSAGE : messageFromBody(finalResult, status);
-    throw apiError(message, status);
+    // A page without a whole html/head/body tag, or CSV rows under text/html, get the fixed
+    // text; an HTML page, a JSON body or a plain error message speak for themselves.
+    const fixed = htmlish ? htmlDownloadMessage(finalResult, ct, status) : null;
+    throw apiError(fixed || messageFromBody(finalResult, status), status);
   }
   if (!String(finalResult).trim()) {
     throw apiError(`Empty response from ZeroBounce (HTTP ${status})`, status);

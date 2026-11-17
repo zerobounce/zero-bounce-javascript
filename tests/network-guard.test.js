@@ -9,6 +9,10 @@ import http from "http";
 import https from "https";
 import net from "net";
 import tls from "tls";
+import cp from "child_process";
+import dgram from "dgram";
+import dns from "dns";
+import { Worker } from "worker_threads";
 
 const OTHER = "guard-target.example.invalid";
 
@@ -96,5 +100,69 @@ describe("network guard", () => {
     } finally {
       await new Promise((resolve) => server.close(resolve));
     }
+  });
+
+  describe("processes, threads, UDP and DNS", () => {
+    const PROBE = "process.stdout.write(JSON.stringify([process.env.NODE_USE_ENV_PROXY, process.env.HTTPS_PROXY, process.env.NO_PROXY]))";
+    const EXPECTED = ["1", "http://127.0.0.1:9", "127.0.0.1,localhost,::1"];
+
+    it("starts every child process with the dead proxy and loopback in NO_PROXY", async () => {
+      const dirty = { ...process.env, HTTPS_PROXY: "http://proxy.example.invalid:1", NODE_USE_ENV_PROXY: "0" };
+      // spawnSync, with and without args and options
+      expect(JSON.parse(cp.spawnSync(process.execPath, ["-e", PROBE]).stdout)).toEqual(EXPECTED);
+      expect(JSON.parse(cp.spawnSync(process.execPath, ["-e", PROBE], { env: dirty }).stdout)).toEqual(EXPECTED);
+      expect(JSON.parse(cp.execFileSync(process.execPath, ["-e", PROBE]))).toEqual(EXPECTED);
+      expect(JSON.parse(cp.execSync(`"${process.execPath}" -e '${PROBE}'`))).toEqual(EXPECTED);
+      // the async launchers
+      const viaExecFile = await new Promise((resolve, reject) =>
+        cp.execFile(process.execPath, ["-e", PROBE], (error, out) => (error ? reject(error) : resolve(out)))
+      );
+      expect(JSON.parse(viaExecFile)).toEqual(EXPECTED);
+      const viaExec = await new Promise((resolve, reject) =>
+        cp.exec(`"${process.execPath}" -e '${PROBE}'`, { env: dirty }, (error, out) => (error ? reject(error) : resolve(out)))
+      );
+      expect(JSON.parse(viaExec)).toEqual(EXPECTED);
+      const viaSpawn = await new Promise((resolve, reject) => {
+        let out = "";
+        const child = cp.spawn(process.execPath, ["-e", PROBE]);
+        child.stdout.on("data", (chunk) => (out += chunk));
+        child.on("error", reject);
+        child.on("close", () => resolve(out));
+      });
+      expect(JSON.parse(viaSpawn)).toEqual(EXPECTED);
+      const viaFork = await new Promise((resolve, reject) => {
+        const child = cp.fork(require.resolve("./fixtures/guard-fork-child.cjs"), [], { silent: true });
+        child.on("message", resolve);
+        child.on("error", reject);
+      });
+      expect(viaFork).toEqual(EXPECTED);
+    });
+
+    it("starts a worker thread with the dead proxy and loopback in NO_PROXY", async () => {
+      const code =
+        "require('worker_threads').parentPort.postMessage([process.env.NODE_USE_ENV_PROXY, process.env.HTTPS_PROXY, process.env.NO_PROXY])";
+      for (const options of [{ eval: true }, { eval: true, env: { HTTPS_PROXY: "http://proxy.example.invalid:1" } }]) {
+        const seen = await new Promise((resolve, reject) => {
+          const worker = new Worker(code, options);
+          worker.on("message", resolve);
+          worker.on("error", reject);
+        });
+        expect(seen).toEqual(EXPECTED);
+      }
+    });
+
+    it("refuses UDP sockets", () => {
+      expect(() => dgram.createSocket("udp4")).toThrow(/Network guard/);
+    });
+
+    it("refuses DNS lookups of another host, callback and promise forms, and allows loopback", async () => {
+      expect(() => dns.lookup(OTHER, () => {})).toThrow(/Network guard/);
+      expect(() => dns.resolve4(OTHER, () => {})).toThrow(/Network guard/);
+      expect(() => dns.resolveTxt(OTHER, () => {})).toThrow(/Network guard/);
+      expect(() => dns.promises.lookup(OTHER)).toThrow(/Network guard/);
+      expect(() => dns.promises.resolve(OTHER)).toThrow(/Network guard/);
+      const local = await dns.promises.lookup("127.0.0.1");
+      expect(local.address).toBe("127.0.0.1");
+    });
   });
 });

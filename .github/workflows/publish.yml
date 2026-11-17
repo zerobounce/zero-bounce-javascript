@@ -147,6 +147,7 @@ jobs:
           path: ${{ runner.temp }}/pack/*.tgz
           if-no-files-found: error
           retention-days: 7
+          overwrite: true
 
   publish:
     name: Publish to npm

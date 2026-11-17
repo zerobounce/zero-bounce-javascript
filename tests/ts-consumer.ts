@@ -77,6 +77,9 @@ const batchOpts: ValidateBatchOptions = {
   verifyPlus: true,
 };
 
+const timeoutAsDigits: ValidateEmailOptions = { timeout: "10" };
+const batchTimeoutAsDigits: ValidateBatchOptions = { timeout: "30" };
+
 const batchItems: ValidateBatchEmailItem[] = [
   { email_address: "a@example.com" },
   { email_address: "b@example.com" },

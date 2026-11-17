@@ -992,3 +992,33 @@ describe("Warmup API client", () => {
     expect(error.message).toContain("redirect");
   });
 });
+
+describe("short SMTP credentials do not mask the SDK's own sentences", () => {
+  const smtp = () =>
+    new ZeroBounceWarmup(KEY).testSmtpConfiguration({
+      fromAddress: "a@example.com",
+      username: "u",
+      password: "p-secret-9",
+      server: "smtp.example.com",
+      port: 587,
+    });
+
+  it("keeps the fixed text of a status 0 answer and of an HTML or JSON failure whole", async () => {
+    global.fetch = async () => ({ status: 0, ok: false, headers: { get: () => null }, text: async () => "" });
+    let error = await smtp().catch((e) => e);
+    expect(error.message).toBe("TypeError: the response has no HTTP status");
+    global.fetch = async () => httpResponse(500, "<html><body>x</body></html>", "text/html");
+    error = await smtp().catch((e) => e);
+    expect(error.message).toBe("ZeroBounce returned an HTML error page instead of an API response.");
+    global.fetch = async () => httpResponse(400, '{"x":1}');
+    error = await smtp().catch((e) => e);
+    expect(error.message).toBe("ZeroBounce returned an error (HTTP 400).");
+  });
+
+  it("still masks the secret inside the API's own message", async () => {
+    global.fetch = async () => httpResponse(400, '{"message":"bad login u with p-secret-9"}');
+    const error = await smtp().catch((e) => e);
+    expect(error.message).not.toContain("p-secret-9");
+    expect(error.message).toContain("***");
+  });
+});
