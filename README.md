@@ -638,14 +638,8 @@ After checking out the repo run tests
 npm test
 ```
 
-You should see an output like this
-
-```bash
-Test Suites: 5 passed, 5 total
-Tests:       157 passed, 157 total
-Snapshots:   0 total
-Ran all test suites.
-```
+Jest runs every test file under `tests/` and prints a summary when all suites
+finish (`Test Suites: … passed`, `Tests: … passed`, `Ran all test suites.`).
 
 ## Publish
 

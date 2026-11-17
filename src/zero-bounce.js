@@ -258,6 +258,7 @@ export class ZeroBounceSDK {
       path: "/getcredits",
       apiBaseURL: this._api_base_url,
       fields: "GetCreditsResponse",
+      messageOnlyExempt: true,
     });
     // The API sends Credits as a string ("12345"); zerobounce.net's example
     // sends an integer (2375323). Either way the caller gets the declared string.
@@ -751,6 +752,7 @@ export class ZeroBounceSDK {
       apiBaseURL: this._api_base_url,
       baseURL,
       fields,
+      requireFileStatusKnownField: true,
     });
   }
 
@@ -773,14 +775,14 @@ export class ZeroBounceSDK {
   }
 
   /**
-   * @param fileId - the id of a previously submmitted and accepted file
+   * @param fileId - the id of a previously submitted and accepted file
    * */
   async getFileStatus(fileId) {
     return this._getStatusUtil(fileId, "/filestatus");
   }
 
   /**
-   * @param fileId - the id of a previously submmitted and accepted file
+   * @param fileId - the id of a previously submitted and accepted file
    * */
   async getScoringFileStatus(fileId) {
     return this._getStatusUtil(fileId, "/scoring/filestatus", { fields: "ScoringFileStatusResponse" });
@@ -821,7 +823,7 @@ export class ZeroBounceSDK {
   }
 
   /**
-   * @param fileId - the id of a previously submmitted and accepted file
+   * @param fileId - the id of a previously submitted and accepted file
    * @param getFileOptions - optional {@code downloadType} ({@link ZBDownloadType} values) and {@code activityData} (validation only)
    * */
   async getFile(fileId, getFileOptions = null) {
@@ -829,7 +831,7 @@ export class ZeroBounceSDK {
   }
 
   /**
-   * @param fileId - the id of a previously submmitted and accepted file
+   * @param fileId - the id of a previously submitted and accepted file
    * @param getFileOptions - optional {@code downloadType}; {@code activityData} is not sent for scoring getfile
    * */
   async getScoringFile(fileId, getFileOptions = null) {
@@ -888,14 +890,14 @@ export class ZeroBounceSDK {
   }
 
   /**
-   * @param fileId - the id of a previously submmitted and accepted file
+   * @param fileId - the id of a previously submitted and accepted file
    * */
   async deleteFile(fileId) {
     return this._deleteFileUtil(fileId, "/deletefile");
   }
 
   /**
-   * @param fileId - the id of a previously submmitted and accepted file
+   * @param fileId - the id of a previously submitted and accepted file
    * */
   async deleteScoringFile(fileId) {
     return this._deleteFileUtil(fileId, "/scoring/deletefile", true);
@@ -1152,6 +1154,7 @@ export class ZeroBounceSDK {
       path: `/${encodeURIComponent(fileId)}/`,
       fields: "ListEvaluatorResultResponse",
       apiBaseURL: this._list_evaluator_base_url,
+      messageOnlyExempt: true,
     });
   }
 
@@ -1227,6 +1230,7 @@ export class ZeroBounceSDK {
       body: new URLSearchParams(params),
       params: {},
       apiBaseURL: this._api_base_url,
+      messageOnlyExempt: true,
     });
   }
 
@@ -1247,6 +1251,7 @@ export class ZeroBounceSDK {
         params: {},
         apiBaseURL: this._api_base_url,
         shape: "objectOrArray",
+        messageOnlyExempt: true,
       });
     }
     return createRequest({
@@ -1256,6 +1261,7 @@ export class ZeroBounceSDK {
       fields: FILTER_LIST_RESULT,
       apiBaseURL: this._api_base_url,
       shape: "objectOrArray",
+      messageOnlyExempt: true,
     });
   }
 
@@ -1292,6 +1298,7 @@ export class ZeroBounceSDK {
       body: new URLSearchParams(params),
       params: {},
       apiBaseURL: this._api_base_url,
+      messageOnlyExempt: true,
     });
   }
 
@@ -1475,6 +1482,7 @@ export class ZeroBounceSDK {
       apiBaseURL: this._api_base_url,
       baseURL: this._inbox_placement_base_url,
       regionalWarningState: this._regional_warning,
+      messageOnlyExempt: true,
     });
   }
 
@@ -1733,8 +1741,6 @@ export class ZeroBounceSDK {
       path: "/guessformat",
       fields: "EmailFinderResponse",
       apiBaseURL: this._api_base_url,
-      // The finder's result is never a bare message: see messageOnlyBody.
-      messageOnlyIsFailure: true,
     });
   }
 
@@ -1792,8 +1798,6 @@ export class ZeroBounceSDK {
       path: "/guessformat",
       fields: "DomainFormatResponse",
       apiBaseURL: this._api_base_url,
-      // The finder's result is never a bare message: see messageOnlyBody.
-      messageOnlyIsFailure: true,
     });
   }
 
@@ -1834,8 +1838,6 @@ export class ZeroBounceSDK {
       path: "/guessformat",
       fields: ["EmailFinderResponse", "DomainFormatResponse"],
       apiBaseURL: this._api_base_url,
-      // The finder's result is never a bare message: see messageOnlyBody.
-      messageOnlyIsFailure: true,
     });
   }
 }

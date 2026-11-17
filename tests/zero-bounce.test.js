@@ -682,7 +682,7 @@ describe("ZeroBounceSDK", () => {
         capturedBody = init.body;
         return Promise.resolve({
           json: () => Promise.resolve({ success: true }),
-          text: () => Promise.resolve("{}"),
+          text: () => Promise.resolve(JSON.stringify({ success: true })),
         });
       });
       zeroBounceSDK.init("valid-api-key", ZeroBounceSDK.ApiURL.DEFAULT_API_URL);
@@ -953,7 +953,7 @@ describe("ZeroBounceSDK", () => {
 
       const response = await zeroBounceSDK.getFile(fileId);
 
-      expect(response).toBe("result.csv");
+      expect(response).toBe(`result-${fileId}.csv`);
       expect(clickSpy).toHaveBeenCalled();
     });
   });

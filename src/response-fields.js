@@ -210,7 +210,7 @@ export const UNEXPECTED_FIELD_TYPE_MESSAGE =
 
 const isPlainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
-function isGreylistMessage(object) {
+export function isGreylistMessage(object) {
   return (
     object.address == null &&
     object.status == null &&

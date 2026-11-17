@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- A base URL with a username, a password, a query or a fragment is refused before any request. The error does not include the URL: `ZeroBounce: apiBaseURL must not contain a username or password.` or `ZeroBounce: apiBaseURL must not contain a query string or a fragment ("?" or "#").`
+- An API key with a Unicode space, a control character, an invisible character (including U+00A0, U+202E, U+200B and U+180B) or made only of combining marks is refused. An ordinary space in the middle of the key is still allowed.
+- Redaction also decodes `\u{27}`, `\047`, `\x27`, `\U{27}`, `\'`, `&apos;` and `&#39`, and folds case with Unicode full case folding after canonical decomposition. `%u0027` is not decoded. When a decoded view still contains a secret, the message is `ZeroBounce: the response text was omitted because it contained a credential.`
+
 - Redaction is closed under encoding. After the known spellings of every
   secret (the API key, the Warmup key, the SMTP username and password) are
   replaced with `***`, the rest of the message is decoded up to four layers
@@ -81,6 +85,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `getFile` and the other downloads reject an HTML page that is spaces, tabs, a BOM or U+00A0 and then `<html`. A file that really begins with spaces is saved unchanged.
+- A message-only body, including `{}`, is an error with status 200 on every typed call except validate's greylist answer, the filter calls, Inbox Placement, the list-evaluator result and `getCredits`. A message beside documented fields that are all null is the same error. `{"domain":null}` with no message stays a result.
+- `getFileStatus` and `getScoringFileStatus` reject a body with no non-null known field, including `{"foo":1}` and `{"message":"m","file_id":null}`. `{"file_status":"Processing"}` and `{"success":true}` stay results.
+- `success` is a flag only for a boolean, the number 0 or 1 (including 1.0), or `true` / `false` / `0` / `1`. Only the false values fail the call.
+- A connection failure rejects with `ZBApiError` and `statusCode` 0.
+- In the browser, `getFile` saves `result-<fileId>.csv` and `getScoringFile` saves `result-<fileId>-scoring.csv`.
 - A message-only answer from the email finder or domain search is an error
   whatever its values. `findEmailByDomain`, `findEmailByCompanyName`,
   `findEmailFormatByDomain`, `findEmailFormatByCompanyName` and `guessFormat`
@@ -155,10 +165,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strictly, like every other boolean: `true` / `false`, `"true"` / `"false"`
   (any case) or `1` / `0`, sent as a JSON boolean. 4.0.1 sent the value as
   given, so `"false"` reached the API as a string; anything else now rejects
-  with "weekdays_only parameter is invalid. Must be true or false." before a
-  request is sent.
+  with "ZeroBounce: weekdays_only parameter is invalid. Must be true or false."
+  before a request is sent.
 - `ZeroBounceWarmup.addSendingAccount` rejects a `managedSending.timezone_offset`
-  of `NaN` with "timezone_offset parameter is invalid. Must be -11 to 14.".
+  of `NaN` with "ZeroBounce: timezone_offset parameter is invalid. Must be -11 to 14.".
   4.0.1 accepted it and sent `null`. Fractional offsets in range (5.5, -9.5)
   are still accepted.
 - `scoreEmail` and its POST variant reject a `score` that is not an integer
@@ -180,8 +190,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already did for every other boolean option: `true` / `false`, `"true"` /
   `"false"` (any case) or `1` / `0`, sent as JSON booleans. 4.0.0 sent the
   value as given, so `"false"`, `"no"` or `0` reached the API unchanged;
-  anything else now rejects with "parameter is invalid. Must be true or
-  false." before a request is sent.
+  anything else now rejects with "ZeroBounce: activityData parameter is
+  invalid. Must be true or false." or the same sentence with `verifyPlus`,
+  matching the option that was invalid, before a request is sent.
 
 ### Security
 
@@ -218,8 +229,9 @@ body or a non-boolean option used to resolve or be sent; see below.
   `getCredits` still resolves `{"Credits": "-1"}`.
 - Every boolean option is parsed strictly, as the S3 / SFTP jobs' have been
   since 3.1.0: `true` / `false`, `"true"` / `"false"` (any case) or `1` / `0`,
-  and anything else rejects with "parameter is invalid. Must be true or
-  false." before a request is sent. This covers `validateEmail`'s
+  and anything else rejects with "ZeroBounce: <option> parameter is invalid.
+  Must be true or false.", using that option's name, before a request is sent.
+  This covers `validateEmail`'s
   `activityData`, `verifyPlus`, `domainInfo` and `greylistProcessing`;
   `has_header_row`, `remove_duplicate` and `allowPhase2` on `sendFile`,
   `sendFileStream`, `sendScoringFile` and `sendScoringFileStream`;

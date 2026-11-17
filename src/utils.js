@@ -1,4 +1,10 @@
-import { joinFileJobMessage, responseFieldMismatch, UNEXPECTED_FIELD_TYPE_MESSAGE } from "./response-fields.js";
+import {
+  joinFileJobMessage,
+  isGreylistMessage,
+  RESPONSE_FIELDS,
+  responseFieldMismatch,
+  UNEXPECTED_FIELD_TYPE_MESSAGE,
+} from "./response-fields.js";
 
 // Constants
 export const API_BULK_BASE_URL = "https://bulkapi.zerobounce.net/v2";
@@ -26,15 +32,55 @@ export function apiError(message, statusCode = 0) {
   return new ZBApiError(message, statusCode);
 }
 
-/**
- * Every request carries a key: refuse to send one anywhere but https.
- * Covers each overridable base URL, not just the main one.
- */
-export function requireHttpsUrl(url, name = "apiBaseURL") {
-  if (typeof url !== "string" || !/^https:\/\//i.test(url)) {
+/** Whether the authority, as written, contains `@` (catches `https://@host`). */
+function hasUserinfoMarker(url) {
+  const cleaned = url.replace(/[\t\n\r]/g, "");
+  const afterScheme = cleaned.trim().split(":").slice(1).join(":") || "";
+  const authority = afterScheme.replace(/^[/\\]+/, "").split(/[/\\?#]/)[0] || "";
+  return authority.includes("@");
+}
+
+/** Loopback http is allowed only for offline tests. */
+function isLoopbackHttp(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:") return false;
+    const host = parsed.hostname;
+    return host === "127.0.0.1" || host === "localhost" || host === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+function refuseBadTransportUrl(url, name, refuseQueryAndFragment) {
+  if (typeof url !== "string") {
     throw new Error(`ZeroBounce: ${name} must be an https:// URL`);
   }
-  return url;
+  if (refuseQueryAndFragment && (url.includes("?") || url.includes("#"))) {
+    throw new Error(`ZeroBounce: ${name} must not contain a query string or a fragment ("?" or "#").`);
+  }
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`ZeroBounce: ${name} must be an https:// URL`);
+  }
+  if (parsed.username || parsed.password || hasUserinfoMarker(url)) {
+    throw new Error(`ZeroBounce: ${name} must not contain a username or password.`);
+  }
+  if (parsed.protocol === "https:" || isLoopbackHttp(url)) {
+    return url;
+  }
+  throw new Error(`ZeroBounce: ${name} must be an https:// URL`);
+}
+
+/**
+ * Every request carries a key: refuse to send one anywhere but https.
+ * Covers each overridable base URL, not just the main one. Userinfo, query
+ * and fragment are refused with fixed messages that never quote the URL.
+ */
+export function requireHttpsUrl(url, name = "apiBaseURL") {
+  return refuseBadTransportUrl(url, name, name !== "request URL");
 }
 
 /**
@@ -69,16 +115,72 @@ export function strictBoolean(value, name) {
   throw new Error(`ZeroBounce: ${name} parameter is invalid. Must be true or false.`);
 }
 
+/** Invisible characters that are not the ordinary ASCII space (U+0020). */
+function isInvisibleChar(code) {
+  return (
+    (code >= 0x00ad && code <= 0x00ad) ||
+    (code >= 0x034f && code <= 0x034f) ||
+    (code >= 0x0600 && code <= 0x0605) ||
+    code === 0x0890 ||
+    code === 0x0891 ||
+    code === 0x061c ||
+    code === 0x06dd ||
+    code === 0x070f ||
+    code === 0x08e2 ||
+    code === 0x115f ||
+    code === 0x1160 ||
+    code === 0x17b4 ||
+    code === 0x17b5 ||
+    (code >= 0x180b && code <= 0x180f) ||
+    (code >= 0x200b && code <= 0x200f) ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2060 && code <= 0x2065) ||
+    (code >= 0x2066 && code <= 0x206f) ||
+    code === 0x2800 ||
+    code === 0x3164 ||
+    (code >= 0xfe00 && code <= 0xfe0f) ||
+    code === 0xfeff ||
+    code === 0xffa0 ||
+    (code >= 0xfff0 && code <= 0xfff8) ||
+    (code >= 0xfff9 && code <= 0xfffb) ||
+    code === 0x110bd ||
+    code === 0x110cd ||
+    (code >= 0x13430 && code <= 0x1343f) ||
+    (code >= 0x1bca0 && code <= 0x1bca3) ||
+    (code >= 0x1d173 && code <= 0x1d17a) ||
+    (code >= 0xe0000 && code <= 0xe0fff)
+  );
+}
+
+function isCombiningMark(code) {
+  const ch = String.fromCodePoint(code);
+  return /\p{M}/u.test(ch);
+}
+
 /**
- * Reject a key with surrounding whitespace or control characters — for example
- * one read from a file with its trailing newline. `fetch` would otherwise
- * reject it as a header value and quote it, unredacted, in its own error.
+ * Reject a key with surrounding whitespace, control characters, Unicode
+ * whitespace other than U+0020 in the middle, invisible format characters,
+ * or a mark-only key. An ordinary space in the middle stays allowed.
  */
 export function checkApiKey(apiKey, name = "api key") {
   if (typeof apiKey !== "string" || !apiKey.trim()) {
     throw new Error(`ZeroBounce: ${name} parameter is missing.`);
   }
-  if (apiKey !== apiKey.trim() || /[\u0000-\u001f\u007f]/.test(apiKey)) {
+  const invalid =
+    apiKey !== apiKey.trim() ||
+    [...apiKey].some((char) => {
+      const code = char.codePointAt(0);
+      if (code <= 0x1f || code === 0x7f) return true;
+      if (char !== " " && /\s/u.test(char)) return true;
+      if (isInvisibleChar(code)) return true;
+      return false;
+    });
+  if (invalid) {
+    throw new Error(
+      `ZeroBounce: ${name} has surrounding whitespace or control characters.`
+    );
+  }
+  if ([...apiKey].every((char) => isCombiningMark(char.codePointAt(0)))) {
     throw new Error(
       `ZeroBounce: ${name} has surrounding whitespace or control characters.`
     );
@@ -189,20 +291,411 @@ function percentDecoded(text) {
   });
 }
 
-const JSON_UNESCAPES = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" };
+const JSON_UNESCAPES = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", "'": "'" };
 
-/** Each JSON string escape (\" \\ \/ \b \f \n \r \t \uXXXX) decoded, in one left-to-right pass. */
+function hexDigit(char) {
+  const d = parseInt(char, 16);
+  return Number.isNaN(d) ? -1 : d;
+}
+
+function codePointText(code) {
+  if (code < 0 || code > 0x10ffff) return "\uFFFD";
+  return String.fromCodePoint(code);
+}
+
+/** JSON and other backslash escapes, including `\u{27}`, `\047`, `\U{27}` and `\x27`. */
 function jsonUnescaped(text) {
-  return text.replace(/\\(?:u([0-9A-Fa-f]{4})|(["\\/bfnrt]))/g, (_, hex, simple) =>
-    hex ? String.fromCharCode(parseInt(hex, 16)) : JSON_UNESCAPES[simple]
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== "\\" || i + 1 >= text.length) {
+      out += text[i];
+      i += 1;
+      continue;
+    }
+    const next = text[i + 1];
+    if (next in JSON_UNESCAPES) {
+      out += JSON_UNESCAPES[next];
+      i += 2;
+      continue;
+    }
+    if ((next === "u" || next === "U") && text[i + 2] === "{") {
+      let j = i + 3;
+      let digits = "";
+      while (j < text.length && digits.length < 8 && hexDigit(text[j]) >= 0) {
+        digits += text[j];
+        j += 1;
+      }
+      if (digits && text[j] === "}") {
+        out += codePointText(parseInt(digits, 16));
+        i = j + 1;
+        continue;
+      }
+    }
+    if (next === "u" || next === "U") {
+      const isCap = next === "U";
+      let hex = text.slice(i + 2, i + 2 + (isCap ? 8 : 4));
+      if (isCap && hex.length === 8 && /^[0-9A-Fa-f]{8}$/.test(hex)) {
+        const code = parseInt(hex, 16);
+        if (code <= 0x10ffff) {
+          out += codePointText(code);
+          i += 10;
+          continue;
+        }
+        hex = text.slice(i + 2, i + 6);
+      }
+      if (/^[0-9A-Fa-f]{4}$/.test(hex)) {
+        let code = parseInt(hex, 16);
+        if (code >= 0xd800 && code <= 0xdbff && text[i + 6] === "\\" && text[i + 7] === "u") {
+          const low = text.slice(i + 8, i + 12);
+          if (/^[0-9A-Fa-f]{4}$/.test(low)) {
+            const lowCode = parseInt(low, 16);
+            if (lowCode >= 0xdc00 && lowCode <= 0xdfff) {
+              code = 0x10000 + ((code - 0xd800) << 10) + (lowCode - 0xdc00);
+              out += codePointText(code);
+              i += 12;
+              continue;
+            }
+          }
+        }
+        out += codePointText(code);
+        i += 6;
+        continue;
+      }
+    }
+    if (next === "x") {
+      if (text[i + 2] === "{") {
+        let j = i + 3;
+        let digits = "";
+        while (j < text.length && digits.length < 6 && hexDigit(text[j]) >= 0) {
+          digits += text[j];
+          j += 1;
+        }
+        if (digits && text[j] === "}") {
+          out += codePointText(parseInt(digits, 16));
+          i = j + 1;
+          continue;
+        }
+      }
+      if (hexDigit(text[i + 2]) >= 0 && hexDigit(text[i + 3]) >= 0) {
+        out += String.fromCharCode(hexDigit(text[i + 2]) * 16 + hexDigit(text[i + 3]));
+        i += 4;
+        continue;
+      }
+    }
+    if (next >= "0" && next <= "7") {
+      let value = next.charCodeAt(0) - 48;
+      let len = 2;
+      if (next <= "3" && text[i + 2] >= "0" && text[i + 2] <= "7") {
+        value = value * 8 + (text[i + 2].charCodeAt(0) - 48);
+        len = 3;
+        if (text[i + 3] >= "0" && text[i + 3] <= "7") {
+          value = value * 8 + (text[i + 3].charCodeAt(0) - 48);
+          len = 4;
+        }
+      } else if (text[i + 2] >= "0" && text[i + 2] <= "7") {
+        value = value * 8 + (text[i + 2].charCodeAt(0) - 48);
+        len = 3;
+      }
+      out += String.fromCharCode(value);
+      i += len;
+      continue;
+    }
+    out += text[i];
+    i += 1;
+  }
+  return out;
+}
+
+function htmlEntity(name) {
+  switch (name.toLowerCase()) {
+    case "amp":
+      return "&";
+    case "lt":
+      return "<";
+    case "gt":
+      return ">";
+    case "quot":
+      return '"';
+    case "apos":
+      return "'";
+    case "nbsp":
+      return "\u00a0";
+    default:
+      return null;
+  }
+}
+
+/** Named and numeric HTML entities (`&#39`, `&APOS;`, …). `%u0027` is not decoded. */
+function htmlUnescaped(text) {
+  if (!text.includes("&")) return text;
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== "&") {
+      out += text[i];
+      i += 1;
+      continue;
+    }
+    if (text[i + 1] === "#") {
+      let radix = 10;
+      let at = i + 2;
+      if (text[at] === "x" || text[at] === "X") {
+        radix = 16;
+        at += 1;
+      }
+      let digits = "";
+      while (at < text.length && (radix === 10 ? text[at] >= "0" && text[at] <= "9" : hexDigit(text[at]) >= 0)) {
+        digits += text[at];
+        at += 1;
+      }
+      if (digits) {
+        let end = at;
+        if (text[at] === ";") end = at + 1;
+        out += codePointText(parseInt(digits, radix));
+        i = end;
+        continue;
+      }
+    }
+  const nameMatch = text.slice(i + 1).match(/^[A-Za-z][A-Za-z0-9]*/);
+    if (nameMatch) {
+      const name = nameMatch[0];
+      const decoded = htmlEntity(name);
+      if (decoded != null) {
+        const semi = text[i + 1 + name.length] === ";";
+        out += decoded;
+        i += 1 + name.length + (semi ? 1 : 0);
+        continue;
+      }
+    }
+    out += "&";
+    i += 1;
+  }
+  return out;
+}
+
+/** `\xHH` byte escapes outside JSON's decoder. */
+function hexByteEscapesDecoded(text) {
+  if (!text.includes("\\x") && !text.includes("\\X")) return text;
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    if (
+      text[i] === "\\" &&
+      (text[i + 1] === "x" || text[i + 1] === "X") &&
+      hexDigit(text[i + 2]) >= 0 &&
+      hexDigit(text[i + 3]) >= 0
+    ) {
+      out += String.fromCharCode(hexDigit(text[i + 2]) * 16 + hexDigit(text[i + 3]));
+      i += 4;
+    } else {
+      out += text[i];
+      i += 1;
+    }
+  }
+  return out;
+}
+
+/** Backslash-quote and HTML entities not covered by `jsonUnescaped`. */
+function quoteDecoded(text) {
+  return htmlUnescaped(hexByteEscapesDecoded(text.replace(/\\'/g, "'")));
+}
+
+/** Full case fold of one scalar via default Unicode mappings (no locale). */
+function foldedScalars(scalar) {
+  let current = [scalar];
+  for (let round = 0; round < 3; round += 1) {
+    const next = [];
+    for (const item of current) {
+      for (const upper of item.toUpperCase()) {
+        for (const lower of upper.toLowerCase()) {
+          next.push(lower);
+        }
+      }
+    }
+    if (next.join("") === current.join("")) break;
+    current = next;
+  }
+  return current;
+}
+
+function foldedCharacter(character) {
+  const scalars = [...character];
+  const plain = scalars.every((s) => {
+    const value = s.codePointAt(0);
+    return value >= 0x4e00 && value <= 0x9fff;
+  });
+  let out = plain ? scalars : [...character.normalize("NFD")];
+  let folded = [];
+  for (const scalar of out) {
+    folded.push(...foldedScalars(scalar));
+  }
+  if (!plain) {
+    folded = [...folded.join("").normalize("NFD")];
+  }
+  const droppable = folded.map(
+    (scalar, index) => scalar.codePointAt(0) === 0x307 && index > 0 && folded[index - 1] === "i"
   );
+  return { folded, droppable };
+}
+
+/** Folded text with byte offsets into the original string for masking. */
+function buildFoldedText(text) {
+  if (/^[\x00-\x7F]*$/.test(text)) {
+    const scalars = [...text].map((c) => c.toLowerCase());
+    const starts = scalars.map((_, index) => index);
+    const ends = starts.map((start) => start + 1);
+    return { scalars, starts, ends, droppable: scalars.map(() => false) };
+  }
+  const scalars = [];
+  const starts = [];
+  const ends = [];
+  const droppable = [];
+  let offset = 0;
+  for (const character of text) {
+    const width = [...character].length;
+    const { folded, droppable: drops } = foldedCharacter(character);
+    for (let index = 0; index < folded.length; index += 1) {
+      scalars.push(folded[index]);
+      starts.push(offset);
+      ends.push(offset + width);
+      droppable.push(drops[index]);
+    }
+    offset += width;
+  }
+  return { scalars, starts, ends, droppable };
+}
+
+function foldedSpelling(text) {
+  const view = buildFoldedText(text);
+  return view.scalars.filter((_, index) => !view.droppable[index]).join("");
+}
+
+function markScalar(scalar) {
+  return /\p{M}/u.test(scalar);
+}
+
+function secretOccurrences(needle, haystack) {
+  const text = haystack.scalars;
+  if (!needle.length || text.length < needle.length) return [];
+  let baseIndex = needle.length - 1;
+  while (baseIndex >= 0 && markScalar(needle[baseIndex])) baseIndex -= 1;
+  const found = [];
+  for (let start = 0; start < text.length; start += 1) {
+    if (text[start] !== needle[0]) continue;
+    let matches = true;
+    let position = start + 1;
+    let offset = 1;
+    while (offset <= baseIndex) {
+      while (position < text.length && haystack.droppable[position] && text[position] !== needle[offset]) {
+        position += 1;
+      }
+      if (position >= text.length || text[position] !== needle[offset]) {
+        matches = false;
+        break;
+      }
+      position += 1;
+      offset += 1;
+    }
+    let last = position - 1;
+    if (matches && baseIndex < needle.length - 1) {
+      const span = haystack.starts[last];
+      let next = last + 1;
+      for (let mi = baseIndex + 1; mi < needle.length; mi += 1) {
+        const mark = needle[mi];
+        let seen = false;
+        while (next < text.length && haystack.starts[next] === span) {
+          const hit = !haystack.droppable[next] && text[next] === mark;
+          next += 1;
+          if (hit) {
+            seen = true;
+            last = next - 1;
+            break;
+          }
+        }
+        if (!seen) {
+          matches = false;
+          break;
+        }
+      }
+    }
+    if (matches) found.push([haystack.starts[start], haystack.ends[last]]);
+  }
+  return found;
+}
+
+/** NFD, full Unicode case fold, then drop U+0307 after `i` (lesson 111). */
+function simpleFoldSpelling(text) {
+  let folded = [];
+  for (const scalar of [...String(text).normalize("NFD")]) {
+    folded.push(...foldedScalars(scalar));
+  }
+  folded = [...folded.join("").normalize("NFD")];
+  return folded
+    .filter((scalar, index) => !(scalar.codePointAt(0) === 0x307 && index > 0 && folded[index - 1] === "i"))
+    .join("");
+}
+
+function revealsInFoldedText(text, secrets) {
+  const hay = simpleFoldSpelling(text);
+  return secrets.filter(Boolean).some((secret) => {
+    const needle = simpleFoldSpelling(String(secret));
+    return needle.length > 0 && hay.includes(needle);
+  });
+}
+
+function maskFolded(text, secrets) {
+  const forms = [];
+  for (const secret of secrets) {
+    if (!secret) continue;
+    forms.push(String(secret), ...secretForms(String(secret)));
+  }
+  const needles = [...new Set(forms.map((form) => foldedSpelling(form)).filter(Boolean))].map((spelling) => [...spelling]);
+  if (!needles.length || !text) return text;
+  const view = buildFoldedText(text);
+  const ranges = [];
+  for (const needle of needles) {
+    for (const [start, end] of secretOccurrences(needle, view)) {
+      const span = text.slice(start, end);
+      if (span.includes("%") || span.includes("\\") || span.includes("&")) continue;
+      ranges.push([start, end]);
+    }
+  }
+  if (!ranges.length) return text;
+  ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const merged = [];
+  for (const range of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && range[0] < last[1]) last[1] = Math.max(last[1], range[1]);
+    else merged.push([...range]);
+  }
+  let out = "";
+  let index = 0;
+  let next = 0;
+  for (const character of text) {
+    const width = character.length;
+    if (next < merged.length && index === merged[next][0]) out += "***";
+    if (next < merged.length && index >= merged[next][0] && index < merged[next][1]) {
+      index += width;
+      if (index === merged[next][1]) next += 1;
+      continue;
+    }
+    out += character;
+    index += width;
+  }
+  return out;
 }
 
 /**
  * The decoders a body's encodings are undone with: URL (%XX), form ("+" as a
- * space, then %XX, so a form-encoded layer takes one step) and JSON.
+ * space, then %XX, so a form-encoded layer takes one step), JSON, quotes and HTML.
  */
-const DECODERS = [percentDecoded, (text) => percentDecoded(text.split("+").join(" ")), jsonUnescaped];
+const DECODERS = [
+  percentDecoded,
+  (text) => percentDecoded(text.split("+").join(" ")),
+  jsonUnescaped,
+  quoteDecoded,
+];
 /** The SDK's own request encoding plus three echo layers (standard.md §3). */
 const DECODE_LAYERS = 4;
 
@@ -232,6 +725,7 @@ export function holdsSecret(text, secrets = []) {
   if (!present.length) return false;
   for (const view of decodedViews(String(text))) {
     if (present.some((secret) => view.includes(secret))) return true;
+    if (revealsInFoldedText(view, present)) return true;
   }
   return false;
 }
@@ -250,6 +744,7 @@ export function redactSecrets(text, secrets = []) {
       value = value.split(form).join("***");
     }
   }
+  value = maskFolded(value, secrets);
   value = value.replace(/([?&](?:api_key|API-Key)=)[^&\s"']+/gi, "$1***");
   return holdsSecret(value, secrets) ? CREDENTIAL_OMITTED_MESSAGE : value;
 }
@@ -331,10 +826,9 @@ function nonEmptyStringField(o, key) {
  */
 export function getFileJsonIndicatesFailure(o) {
   if (!o || typeof o !== "object" || Array.isArray(o)) return false;
-  if (Object.prototype.hasOwnProperty.call(o, "success") && o.success != null) {
-    if (o.success === false || o.success === "False" || o.success === "false") {
-      return true;
-    }
+  if (Object.prototype.hasOwnProperty.call(o, "success")) {
+    const flag = o.success;
+    if (isSuccessFlag(flag) && isSuccessFailure(flag)) return true;
   }
   return (
     nonEmptyStringField(o, "message") ||
@@ -372,14 +866,104 @@ export function looksLikeJson(body) {
   return trimmed.startsWith("{") || trimmed.startsWith("[");
 }
 
+const FILE_STATUS_KNOWN_FIELDS = new Set([
+  "file_status",
+  "file_id",
+  "file_name",
+  "upload_date",
+  "file_phase_2_status",
+  "complete_percentage",
+  "error_reason",
+  "return_url",
+]);
+
+/** Spaces, tabs, CR, LF, VT, FF, a UTF-8 BOM and NBSP before HTML sniffing. */
+function skipLeadingHtmlWhitespace(body) {
+  const text = String(body);
+  let i = 0;
+  if (text.charCodeAt(0) === 0xfeff) i = 1;
+  while (i < text.length) {
+    const code = text.charCodeAt(i);
+    if (code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0d || code === 0x0b || code === 0x0c) {
+      i += 1;
+      continue;
+    }
+    if (code === 0xa0) {
+      i += 1;
+      continue;
+    }
+    break;
+  }
+  return text.slice(i, i + 2000);
+}
+
 export function looksLikeHtml(body) {
-  const head = String(body).slice(0, 2000).toLowerCase();
+  const head = skipLeadingHtmlWhitespace(body).toLowerCase();
   return (
     head.includes("<!doctype html") ||
     head.includes("<html") ||
     head.includes("<head") ||
     head.includes("<body")
   );
+}
+
+/** Whether `success` is a documented boolean flag (not coerced with parseInt). */
+export function isSuccessFlag(value) {
+  if (typeof value === "boolean") return true;
+  if (value === 0 || value === 1) return true;
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase();
+    if (text === "true" || text === "false" || text === "0" || text === "1") return true;
+  }
+  return false;
+}
+
+/** The false values of a real `success` flag. */
+export function isSuccessFailure(value) {
+  if (value === false || value === 0) return true;
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase();
+    if (text === "false" || text === "0") return true;
+  }
+  return false;
+}
+
+/**
+ * JSON numbers 0 and 1 are real flags but file-status types declare `success`
+ * as boolean or string; normalize only documented numeric flags for field check.
+ */
+function normalizeSuccessFlag(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return parsed;
+  if (!Object.prototype.hasOwnProperty.call(parsed, "success")) return parsed;
+  const flag = parsed.success;
+  if (flag === true || !isSuccessFlag(flag) || isSuccessFailure(flag)) return parsed;
+  return { ...parsed, success: true };
+}
+
+function declaredResponseFieldNames(fieldTypes) {
+  const keys = new Set();
+  for (const name of [].concat(fieldTypes ?? [])) {
+    const spec = RESPONSE_FIELDS[name];
+    if (!spec) continue;
+    for (const key of Object.keys(spec)) keys.add(key);
+  }
+  return keys;
+}
+
+function hasKnownFileStatusField(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  if (Object.prototype.hasOwnProperty.call(parsed, "success")) {
+    const flag = parsed.success;
+    if (isSuccessFlag(flag) && !isSuccessFailure(flag)) return true;
+  }
+  for (const key of FILE_STATUS_KNOWN_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(parsed, key)) continue;
+    const value = parsed[key];
+    if (value == null) continue;
+    if (typeof value === "string" && value.trim() === "") continue;
+    return true;
+  }
+  return false;
 }
 
 function htmlTitle(body) {
@@ -468,20 +1052,30 @@ function objectWithoutSuccess(parsed) {
 const MESSAGE_KEYS = new Set(["error", "message", "error_message", "Message", "Error", "detail"]);
 
 /**
- * Whether a body is nothing but a message: an object with no "success" field
- * whose keys are all message keys. The keys decide, whatever the values (null,
- * a list, an empty string), so the error text falls back to a generic message.
- * Only for the email finder and domain search, whose result is never a bare
- * message. LIVE: guessformat answers an invalid or drained key with an HTTP 200 and
- * {"Message": "Invalid API key or your account ran out of credits"}. Not for
- * validate: a repeated greylist_processing request answers
- * {"Message": "Greylist validation still in progress..."}, which is a result.
+ * A message beside documented fields that are all null — the same failure as a
+ * message-only body on typed calls (standard.md §3).
  */
-function messageOnlyBody(parsed) {
+function messageBesideNullDocumentedFields(object, fieldTypes) {
+  const declared = declaredResponseFieldNames(fieldTypes);
+  if (!declared.size) return false;
+  const keys = Object.keys(object);
+  if (!keys.some((key) => MESSAGE_KEYS.has(key))) return false;
+  return keys.every((key) => MESSAGE_KEYS.has(key) || (declared.has(key) && object[key] == null));
+}
+
+/**
+ * Whether a body is nothing but a message: an empty object, an object with no
+ * "success" field whose keys are all message keys, or a message key beside
+ * documented fields that are all null. The keys decide, whatever the values.
+ * Not for validate's greylist answer or the other message-only exemptions.
+ */
+function messageOnlyBody(parsed, fieldTypes = null) {
   const object = objectWithoutSuccess(parsed);
   if (!object) return false;
   const keys = Object.keys(object);
-  return keys.length > 0 && keys.every((key) => MESSAGE_KEYS.has(key));
+  if (keys.length === 0) return true;
+  if (keys.every((key) => MESSAGE_KEYS.has(key))) return true;
+  return messageBesideNullDocumentedFields(object, fieldTypes);
 }
 
 function cloudflareTitle(parsed) {
@@ -529,7 +1123,7 @@ function messageFromBody(body, statusCode) {
 function transportError(error, secrets = []) {
   const name = error && error.name ? error.name : "Error";
   const message = error && error.message ? error.message : String(error);
-  return new Error(redactSecrets(`${name}: ${message}`, secrets));
+  return apiError(redactSecrets(`${name}: ${message}`, secrets), 0);
 }
 
 /**
@@ -590,7 +1184,7 @@ async function readBodyText(response) {
   return "";
 }
 
-function processGetFileResponseBody(finalResult, response, scoring) {
+function processGetFileResponseBody(finalResult, response, scoring, fileId = "download") {
   const status = responseStatus(response);
   const ct = responseContentType(response);
   if (looksLikeHtml(finalResult) || ct.includes("text/html") || status >= 400) {
@@ -612,8 +1206,9 @@ function processGetFileResponseBody(finalResult, response, scoring) {
     return finalResult;
   }
 
+  const id = String(fileId);
   const blob = new Blob([finalResult], { type: "text/csv" });
-  return saveFile(blob, `result${scoring ? "-scoring" : ""}.csv`);
+  return saveFile(blob, `result-${id}${scoring ? "-scoring" : ""}.csv`);
 }
 
 function bulkApiBase(bulkBase, bulkURLs) {
@@ -669,7 +1264,8 @@ export async function createRequest({
   extraHeaders = null,
   secrets = [],
   regionalWarningState = null,
-  messageOnlyIsFailure = false,
+  messageOnlyExempt = false,
+  requireFileStatusKnownField = false,
   emptyIsSuccess = false,
   shape = "object",
   fields = null,
@@ -718,7 +1314,8 @@ export async function createRequest({
 
   if (returnText) {
     try {
-      return processGetFileResponseBody(finalResult, response, scoring);
+      const fileId = params && params.file_id != null ? params.file_id : "download";
+      return processGetFileResponseBody(finalResult, response, scoring, fileId);
     } catch (error) {
       if (error instanceof ZBApiError) throw apiError(redactSecrets(error.message, secrets), error.statusCode);
       throw error;
@@ -751,25 +1348,46 @@ export async function createRequest({
   }
   const account = accountLevelMessage(parsed);
   if (account) throw apiError(redactSecrets(account, secrets), status);
-  if (messageOnlyIsFailure && messageOnlyBody(parsed)) {
-    throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
-  }
+  const greylistExempt =
+    fields != null &&
+    [].concat(fields).includes("EmailValidationResult") &&
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    isGreylistMessage(parsed);
   // {"success": false, ...} on an HTTP 200 is still a failure.
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    const failed = parsed.success === false || parsed.success === "False" || parsed.success === "false";
-    if (failed) {
-      throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
+    if (Object.prototype.hasOwnProperty.call(parsed, "success")) {
+      const flag = parsed.success;
+      if (isSuccessFlag(flag) && isSuccessFailure(flag)) {
+        throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
+      }
     }
   }
   if (!hasShape(parsed, shape)) throw apiError(UNEXPECTED_SHAPE_MESSAGE, status);
   // A field of the declared result type that arrives with another JSON type
   // (standard.md: field types are part of the shape).
   if (fields != null) {
+    parsed = normalizeSuccessFlag(parsed);
     parsed = joinFileJobMessage(parsed, fields);
     const field = responseFieldMismatch(parsed, fields);
     if (field !== null) {
       throw apiError(field ? `${UNEXPECTED_FIELD_TYPE_MESSAGE} (${field}).` : `${UNEXPECTED_FIELD_TYPE_MESSAGE}.`, status);
     }
+  }
+  // A wrong type is reported first. A body whose fields fit, but that is only a
+  // message or a file status with no known field, is still not a result.
+  if (fields != null && !messageOnlyExempt && !greylistExempt && messageOnlyBody(parsed, fields)) {
+    throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
+  }
+  if (
+    requireFileStatusKnownField &&
+    parsed &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    !hasKnownFileStatusField(parsed)
+  ) {
+    throw apiError(redactSecrets(messageFromBody(finalResult, status), secrets), status);
   }
   return parsed;
 }
@@ -800,12 +1418,12 @@ export function notInitialized() {
   throw new Error("ZeroBounce: Call init function first with a valid api key.");
 }
 
-export function parameterIsMissing(parameter, aditionalInfo = "") {
-  const extra = aditionalInfo ? ` ${aditionalInfo}` : "";
+export function parameterIsMissing(parameter, additionalInfo = "") {
+  const extra = additionalInfo ? ` ${additionalInfo}` : "";
   throw new Error(`ZeroBounce: ${parameter} parameter is missing.${extra}`);
 }
 
-export function parameterIsInvalid(parameter, aditionalInfo = "") {
-  const extra = aditionalInfo ? ` ${aditionalInfo}` : "";
+export function parameterIsInvalid(parameter, additionalInfo = "") {
+  const extra = additionalInfo ? ` ${additionalInfo}` : "";
   throw new Error(`ZeroBounce: ${parameter} parameter is invalid.${extra}`);
 }

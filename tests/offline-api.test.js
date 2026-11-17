@@ -509,6 +509,14 @@ describe("offline API", () => {
             // A field of the wrong type, or a required field missing ({} on
             // getCredits): parsed, then refused (field-types.test.js).
             if (outcome === "rejected" && isFieldTypeError(error)) outcome = "parsed";
+            // Valid JSON refused by message-only or the file-status known-field rule.
+            if (
+              verdict === "ACCEPT" &&
+              outcome === "rejected" &&
+              error.message === "ZeroBounce returned an unexpected response."
+            ) {
+              outcome = "parsed";
+            }
           }
           // E8: an empty 2xx (no bytes at all) is the documented success of
           // deleteInboxPlacementTest. A whitespace-only body is not empty.
@@ -563,6 +571,7 @@ describe("offline API", () => {
           outcome = error.message === UNEXPECTED_SHAPE_MESSAGE ? `wrong shape ${error.statusCode}` : `threw ${error}`;
           // The shape fits; a required field is missing (field-types.test.js).
           if (isFieldTypeError(error) && error.statusCode === 200) outcome = "resolved";
+          if (error.message === "ZeroBounce returned an unexpected response." && error.statusCode === 200) outcome = "resolved";
         }
         const expected = fits.includes(shape) ? "resolved" : "wrong shape 200";
         if (outcome !== expected) wrong.push(`${name} (${shape}) ${body}: ${outcome}`);
@@ -601,7 +610,13 @@ describe("offline API", () => {
       // the wrong shape); brackets inside strings do not count.
       for (const body of [nested(MAX_JSON_DEPTH), `{"a":"${"[".repeat(deep)}"}`]) {
         global.fetch = async () => fetchLikeResponse(body);
-        const outcome = await run().then(() => "resolved", (error) => (isFieldTypeError(error) ? "resolved" : error.message));
+        const outcome = await run().then(
+          () => "resolved",
+          (error) =>
+            isFieldTypeError(error) || error.message === "ZeroBounce returned an unexpected response."
+              ? "resolved"
+              : error.message
+        );
         if (outcome !== "resolved" && outcome !== UNEXPECTED_SHAPE_MESSAGE) wrong.push(`${name} within the limit: ${outcome}`);
       }
     }
@@ -628,11 +643,19 @@ describe("offline API", () => {
       "HTTP 400 error": (detail) => [400, "application/json", JSON.stringify({ error: `rejected ${detail}` })],
       "HTTP 400 text": (detail) => [400, "text/plain", `Bad Request: GET /v2/x?api_key=${key} ${detail}`],
     };
-    // A message-only body is a result everywhere but email finder and domain
-    // search (validate's greylist answer), so only those must reject on it.
-    const mustReject = (failure, name) => failure !== "message only" || /^(findEmail|guessFormat)/.test(name);
-    const finderNames = callAll(sdk).map(([name]) => name).filter((name) => mustReject("message only", name));
-    expect(finderNames.length).toBeGreaterThanOrEqual(5);
+    // Message-only is an error on every typed call except getCredits, filters,
+    // inbox placement, list-evaluator result, and validate's greylist answer.
+    const messageOnlyExempt = (name) =>
+      name === "getCredits" ||
+      name === "getListEvaluatorResult" ||
+      /^addFilter$|^deleteFilter$|^listFilters$/.test(name) ||
+      /^getInboxPlacement|^createInboxPlacement|^deleteInboxPlacement|^setInboxPlacement|^listInboxPlacement/.test(
+        name
+      );
+    const mustReject = (failure, name) =>
+      failure !== "message only" || (!messageOnlyExempt(name) && name !== "validateEmail");
+    const rejectNames = callAll(sdk).map(([name]) => name).filter((name) => mustReject("message only", name));
+    expect(rejectNames.length).toBeGreaterThanOrEqual(30);
     for (const failure of ["fetch", "body", ...Object.keys(echoes)]) {
       for (const [name, run] of callAll(sdk)) {
         // Some fetch implementations and polyfills quote the request URL, or
@@ -911,6 +934,13 @@ describe("offline API", () => {
     for (const [name, run] of finderCalls) {
       expect({ name, result: await run() }).toEqual({ name, result });
     }
+  });
+
+  it("rejects sendFile on an empty JSON body with status 200", async () => {
+    const sdk = client("parity-key");
+    global.fetch = async () => httpResponse(200, "{}", "application/json");
+    const error = await expectRejected(sdk.sendFile({ file, email_address_column: 1 }));
+    expect([error.name, error.statusCode]).toEqual(["ZBApiError", 200]);
   });
 
   it("rejects a finder or domain search message-only body whatever its values, with status 200", async () => {
@@ -1467,7 +1497,7 @@ describe("offline API", () => {
     fake = installFakeFetch();
     const csvSdk = client("parity-key");
     jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    await expect(csvSdk.getFile("file-1")).resolves.toBe("result.csv");
+    await expect(csvSdk.getFile("file-1")).resolves.toBe("result-file-1.csv");
   });
 
   it("rejects a JSON, HTML or empty download on every getfile method, with status 200", async () => {
