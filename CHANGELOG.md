@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.2] - 2026-11-18
+
+### Changed
+
+- Documentation only, no code changes: the README and `documentation.md` link the
+  README and LICENSE by full GitHub URL, so the links work on npmjs.com and on
+  the zerobounce.net documentation page that renders `documentation.md`.
+
 ## [5.0.1] - 2026-11-18
 
 ### Fixed
@@ -542,7 +550,8 @@ old silent behaviour needs a `catch` before upgrading. See **Changed** below.
 
 - `guessFormat`. Use the email-finder or domain-search methods instead.
 
-[Unreleased]: https://github.com/zerobounce/zero-bounce-javascript/compare/v5.0.1...HEAD
+[Unreleased]: https://github.com/zerobounce/zero-bounce-javascript/compare/v5.0.2...HEAD
+[5.0.2]: https://github.com/zerobounce/zero-bounce-javascript/compare/v5.0.1...v5.0.2
 [5.0.1]: https://github.com/zerobounce/zero-bounce-javascript/compare/v5.0.0...v5.0.1
 [5.0.0]: https://github.com/zerobounce/zero-bounce-javascript/compare/v4.0.0...v5.0.0
 [4.0.1]: https://github.com/zerobounce/zero-bounce-javascript/compare/v4.0.0...v4.0.1
