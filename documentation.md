@@ -1,7 +1,7 @@
 
 WE DO NOT RECOMMEND USING THIS SDK ON A FRONT-END ENVIRONMENT AS THE API KEY WILL BE VISIBLE
 
-For the security notes, the Node.js 18 requirement, testing, TypeScript, and publishing, see [README.md](README.md).
+For the security notes, the Node.js 18 requirement, testing, TypeScript, and publishing, see [README.md](https://github.com/zerobounce/zero-bounce-javascript/blob/main/README.md).
 
 #### INSTALLATION
 

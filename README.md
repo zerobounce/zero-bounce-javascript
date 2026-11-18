@@ -661,4 +661,4 @@ Registry: [@zerobounce/zero-bounce-sdk on npm](https://www.npmjs.com/package/@ze
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/zerobounce/zero-bounce-javascript/blob/main/LICENSE).
